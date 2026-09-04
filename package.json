@@ -15,6 +15,7 @@
     "check:a11y": "node scripts/check-a11y.mjs",
     "check:contrast": "node scripts/check-contrast.mjs",
     "check:perf": "node scripts/check-perf.mjs",
+    "probe:served": "node scripts/probe-served-bytes.mjs",
     "sync": "node scripts/sync-feeds.mjs",
     "sync:dry": "node scripts/sync-feeds.mjs --dry-run",
     "verify": "node scripts/verify-sources.mjs",

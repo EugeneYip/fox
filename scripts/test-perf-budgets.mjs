@@ -325,46 +325,46 @@ console.log('─'.repeat(64));
 }
 
 /*
- * ── 「讀者實際下載」那一行說的是最好的情況 ──────────
+ * ── 「讀者實際下載」那個數字要帶著怎麼重量 ──────────
  *
- * 這支腳本用 level 9（壓到最小）。第 2 輪（第二十六圈）拿 GitHub Pages
- * 真的送出去的 `content-length` 比對過：伺服器大約壓到 level 4–6，不是 9。
+ * 這支腳本用 level 9。伺服器實際送幾個位元組，只有打真的網路才知道。
  *
- * 所以報告要同時印出「伺服器比較像的那個等級」的數字 ——
- * 否則一個下界會被當成事實，而**沒有任何東西會去跟真的伺服器對**。
+ * 第 2 輪（第二十六圈）拿**別人的站**代打，推論「伺服器約 level 4–6」，
+ * 於是報告印「比上面多 2.3%」。第 2 輪（第二十七圈）站上線之後量自己的站，
+ * **方向是反的**：Pages 送出的比本機 level 9 還少 0.4–1.7%。
+ *
+ * 教訓不是「那個數字錯了」，是**那個數字沒有附上重量的方法**，
+ * 所以真的東西出現時沒有人回去對。這一格守的就是那個方法還在：
+ * 那一行必須同時有**實測的百分比**與**重量的指令**。
+ *
+ * 這裡不驗百分比是多少 —— 那要打網路，而這套測試不打網路
+ * （`npm run probe:served` 才打）。驗的是那一行沒有退化成一句空話。
  */
 {
   const dir = await mkdtemp(join(tmpdir(), 'perf-level-'));
   await writeFile(join(dir, 'index.html'), page({ body: `<p>${noise(20_000)}</p>` }), 'utf8');
   const out = await check(dir);
-  const line = out.split('\n').find((l) => l.includes('壓得沒那麼用力')) ?? '';
-  const nums = [...line.matchAll(/([\d.]+) KB/g)].map((m) => Number(m[1]));
+  const line = out.split('\n').find((l) => l.includes('這個 gzip 數字是')) ?? '';
   const worst = Number(/讀者實際下載 ([\d.]+) KB/.exec(out)?.[1] ?? 0);
-  const ok1 = line !== '' && nums.length > 0 && worst > 0;
+  const ok1 = line !== '' && worst > 0;
   if (!ok1) failed++;
-  console.log(`  ${ok1 ? '✓' : 'X'} 印得出「伺服器壓得沒那麼用力」那一行`);
+  console.log(`  ${ok1 ? '✓' : 'X'} 印得出「這個 gzip 數字是上界」那一行`);
   if (!ok1) console.log('        ' + (line || '（那一行完全沒印）'));
 
-  /*
-   * 那一行講的等級必須**比 9 小**，否則它等於什麼都沒說。
-   *
-   * 第一版是比「那個數字要比 level 9 的大」，結果紅了 —— 而那是**語料的錯**：
-   * 測試用的 `noise()` 是隨機 base64，壓不動，level 4 跟 9 一樣大；
-   * 換成高度重複的文字也一樣（兩邊都壓到極限）。
-   * 真實頁面才分得開（實測首頁 10.50 vs 10.75 KB）。
-   * 所以這裡守的是**判準的形狀**，不是某一份語料的數字。
-   */
-  /*
-   * 抓的是「level N **是**」那一個，不是同一行裡「實測 Pages 約 level 4–6」
-   * 那個**說明**。第一版寫 `/level (\d+)/`，配到的是說明裡的 4 ——
-   * 於是把 SERVER_LEVEL 改成 9 這個突變照樣綠。
-   * 這個 repo 第十次踩到「解釋一件事，就會需要寫出它要比對的東西」。
-   */
-  const level = Number(/level (\d+) 是/.exec(line)?.[1] ?? 9);
-  const ok2 = level < 9;
+  /* 有日期、有實測範圍：不然它就只是一句沒有出處的宣稱 */
+  const ok2 = /\d{4}-\d{2}-\d{2}/.test(line) && /少 [\d.]+%～[\d.]+%/.test(line);
   if (!ok2) failed++;
-  console.log(`  ${ok2 ? '✓' : 'X'} 那一行講的等級比 9 小（不然等於沒說）`);
-  if (!ok2) console.log(`        那一行說的是 level ${level}`);
+  console.log(`  ${ok2 ? '✓' : 'X'} 那一行有量測日期與實測範圍`);
+  if (!ok2) console.log('        ' + line);
+
+  /*
+   * 有重量的指令。這一條是這一輪的核心 ——
+   * 上一版之所以錯了兩圈沒人發現，就是因為沒有人知道怎麼重量。
+   */
+  const ok3 = line.includes('probe:served');
+  if (!ok3) failed++;
+  console.log(`  ${ok3 ? '✓' : 'X'} 那一行講了怎麼重量（probe:served）`);
+  if (!ok3) console.log('        ' + line);
   await rm(dir, { recursive: true, force: true });
 }
 

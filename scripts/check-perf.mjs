@@ -715,30 +715,39 @@ console.log(
 /*
  * ── 上面那個數字是 level 9，而伺服器不是 ──────────────
  *
- * 這支腳本用 `gzipSync(buf, { level: 9 })`，也就是**壓到最小**。
- * 第 2 輪（第二十六圈）實測 GitHub Pages 真的送出去的大小 ——
- * 拿它們回應的 `content-length` 跟本機各個等級比對：
+ * 這支腳本用 `gzipSync(buf, { level: 9 })`，也就是本機壓得最小的等級。
  *
- *     pages.github.com/           送 3844　最接近 level 4（3873）／level 6（3797）
- *     pages.github.com/versions/  送 2089　最接近 level 4（2093）
- *     squidfunk.github.io/        送 19242 落在 level 4 與 6 之間
+ * ## 這一段的結論被推翻過一次，值得留著
  *
- * 也就是說伺服器大約壓到 **level 4–6**，不是 9。
- * 上面那句「讀者實際下載」因此是**最好的情況**：這個站量出來差 0.8–3.4%。
+ * 第 2 輪（第二十六圈）問「伺服器實際送幾個位元組」，那時
+ * `bellafoxy.com` 還沒上線，只能拿**別人的站**（`pages.github.com`、
+ * `squidfunk.github.io`）代打，推論出「伺服器大約壓到 level 4–6，不是 9」，
+ * 於是這裡開始印「實際的伺服器壓得沒那麼用力⋯⋯比上面多 2.3%」。
  *
- * 為什麼不乾脆改成 level 4：那也只是換一個猜測，而 level 9 至少是一個
- * 定義清楚的下界。改成印出來 —— 這樣哪天差距變大，報告裡看得到，
- * 而不是繼續把一個下界說成「讀者實際下載」。
+ * 第 2 輪（第二十七圈）站上線之後量自己的站，**方向是反的**：
  *
- * （這一圈問的是「壞了誰會告訴我們」。這一項本來的答案是「沒有人」：
- * 報告把 level 9 的數字說成事實，而沒有任何東西會去跟真的伺服器對。）
+ *     level 4   11005
+ *     level 9   10754
+ *     實際送出  10655   ← 比本機最高等級還少 99 bytes（0.9%）
+ *
+ * 五頁量下來差 −0.4% ～ −1.7%，內容 md5 逐頁核對過。
+ * GitHub Pages 壓得**比 Node 的 zlib 最高等級還用力**。
+ *
+ * 所以 level 9 不是「最好的情況」，是一個安全的**上界** ——
+ * 而預算要守的正是上界，這比原本的說法更站得住。
+ *
+ * 代打量出來的結論，沒有人在真的東西出現時回頭重量。
+ * `npm run probe:served` 就是為了讓「回頭重量」變成一個指令。
  */
-const SERVER_LEVEL = 4;
-const worstServer = gzipSync(worstPage.buf, { level: SERVER_LEVEL }).length;
+/*
+ * 這幾個數字是量出來的，不是猜的，所以要說清楚**什麼時候量的、怎麼重量**。
+ * 上一版把一個從別人的站推論出來的等級寫成事實，而且方向還是反的。
+ */
+const MEASURED = { date: '2026-09-04', lo: -1.7, hi: -0.4, pages: 4, cmd: 'npm run probe:served' };
 console.log(
-  `  　　　　　實際的伺服器壓得沒那麼用力（實測 Pages 約 level 4–6）：` +
-    `level ${SERVER_LEVEL} 是 ${kb(worstServer)}，比上面多 ${((worstServer / worstPage.gzip - 1) * 100).toFixed(1)}%` +
-    `　—— 預算量的是 level 9，也就是最好的情況`,
+  `  　　　　　這個 gzip 數字是**上界**：${MEASURED.date} 實測 GitHub Pages 對這個站送出的，` +
+    `比它少 ${Math.abs(MEASURED.hi)}%～${Math.abs(MEASURED.lo)}%（${MEASURED.pages} 頁，內容 md5 逐頁核對）` +
+    `　—— 要重量：${MEASURED.cmd}`,
 );
 
 /*
