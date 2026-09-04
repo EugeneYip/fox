@@ -479,6 +479,71 @@ for (const [name, { hit, miss, expect, coFires }] of Object.entries(CASES)) {
     console.log(`  ${freshOk ? '✓' : 'X'} dist 是新的：不說那句話，照樣指出處`);
   }
 
+  /*
+   * ── 有幾個介面字串從來沒被算繪出來 ──
+   *
+   * 第 6 輪（第六圈）量到 36／160，寫在註解裡，之後沒有人重量過。
+   * 第 6 輪（第二十六圈）把它搬到報告上：那些字第一個看到的人會是她。
+   *
+   * 判準比對的是**原始 HTML**，不是可見文字 —— 第一版接可見文字，
+   * 量出 44%，而例子裡有 `Menu`、`切換深淺色` 這些每頁都在的字：
+   * 它們活在 `aria-label` 屬性裡，被 `toVisibleText()` 連標籤一起剝掉了。
+   */
+  {
+    const dir = await mkdtemp(join(tmpdir(), 'copy-unrendered-'));
+    await mkdir(join(dir, 'dist'), { recursive: true });
+    await mkdir(join(dir, 'src/i18n'), { recursive: true });
+    await writeFile(
+      join(dir, 'src/i18n/ui.ts'),
+      "export const ui = { 'a': { 'zh-TW': '這句在屬性裡' }, 'b': { 'zh-TW': '這句從未出現' } };\n",
+      'utf8',
+    );
+    /*
+     * 「這句在屬性裡」放在 aria-label —— 屬性也算「進到產出」了。
+     * 兩個字串刻意**不互相包含**：第一版用「有畫出來的字」與「沒有畫出來的字」，
+     * 後者包含前者，於是「例如那一行不該提到它」這個斷言永遠是假的。
+     */
+    await writeFile(
+      join(dir, 'dist/index.html'),
+      '<!DOCTYPE html><html lang="zh-Hant-TW"><head><title>x</title></head>' +
+        '<body><button aria-label="這句在屬性裡">x</button></body></html>',
+      'utf8',
+    );
+    const out = await check(dir);
+    const ok = /1 個（?\d*%?）?/.test(out) && /從來沒有被算繪出來/.test(out) && /這句從未出現/.test(out);
+    if (!ok) failed++;
+    console.log(`  ${ok ? '✓' : 'X'} 數得出「幾個介面字串從來沒被算繪出來」`);
+    if (!ok) console.log('        ' + out.split('\n').filter((l) => l.includes('算繪')).join('\n        ') || '        （那一段完全沒印）');
+
+    /*
+     * 直接看「例如：」那一行有沒有把它列進去 —— 比對可見文字的話
+     * `aria-label` 裡的字會被當成沒算繪出來，那一行就會出現它。
+     */
+    const egLine = out.split('\n').find((l) => l.includes('例如：')) ?? '';
+    const ok2 = egLine !== '' && !egLine.includes('這句在屬性裡');
+    if (!ok2) failed++;
+    console.log(`  ${ok2 ? '✓' : 'X'} 出現在屬性裡的字不算「沒被算繪」（反向案例）`);
+    await rm(dir, { recursive: true, force: true });
+  }
+
+  {
+    /* 全部都畫出來了就不說那句話 */
+    const dir = await mkdtemp(join(tmpdir(), 'copy-allrendered-'));
+    await mkdir(join(dir, 'dist'), { recursive: true });
+    await mkdir(join(dir, 'src/i18n'), { recursive: true });
+    await writeFile(join(dir, 'src/i18n/ui.ts'), "export const ui = { 'a': { 'zh-TW': '有畫出來的字' } };\n", 'utf8');
+    await writeFile(
+      join(dir, 'dist/index.html'),
+      '<!DOCTYPE html><html lang="zh-Hant-TW"><head><title>x</title></head><body><p>有畫出來的字</p></body></html>',
+      'utf8',
+    );
+    const out = await check(dir);
+    const ok = !/從來沒有被算繪出來/.test(out);
+    if (!ok) failed++;
+    console.log(`  ${ok ? '✓' : 'X'} 全部都畫出來了就不說那句話（反向案例）`);
+    await rm(dir, { recursive: true, force: true });
+  }
+
   const empty = await mkdtemp(join(tmpdir(), 'copy-empty-'));
   await mkdir(join(empty, 'dist'), { recursive: true });
   /*

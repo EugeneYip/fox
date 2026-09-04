@@ -239,6 +239,16 @@ const toVisibleText = (html) =>
 
 const DIST = resolve(ROOT, 'dist');
 
+/** 不算問題、但必須說出口的事（說了不擋） */
+/** @type {string[]} */
+const notes = [];
+
+/** 所有頁面的原始 HTML —— 底下要問「哪些介面字串從來沒進到產出」 */
+let renderedHtml = '';
+/** ui.ts／site.ts 裡的固定字串（不含帶佔位符的與單字元的） */
+/** @type {{ rel: string, value: string }[]} */
+const uiStrings = [];
+
 /*
  * ── 產出比原始檔舊的話，先說 ────────────────────────
  *
@@ -286,6 +296,15 @@ for await (const f of walk(DIST)) {
   newestBuilt = Math.max(newestBuilt, (await stat(f)).mtimeMs);
   const html = await readFile(f, 'utf8');
   const visible = toVisibleText(html);
+  /*
+   * 這裡累積的是**原始 HTML**，不是可見文字。
+   *
+   * 第一版接的是 `visible`，量出來 84／191（44%）—— 而例子裡有
+   * `Menu`、`切換深淺色`、`上下篇`，那些每一頁都在。原因是它們活在
+   * `aria-label` 屬性裡，而 `toVisibleText()` 把標籤連同屬性一起剝掉了。
+   * 「有沒有被算繪出來」要問的是「有沒有進到產出」，不是「看不看得見」。
+   */
+  renderedHtml += html + '\n';
   const rel = relative(ROOT, f);
   scan(rel, visible, { realLines: false });
 
@@ -376,6 +395,16 @@ for (const rel of ['src/i18n/ui.ts', 'src/config/site.ts']) {
     else placed.push(v);
   }
   scan(rel, placed.join('\n'));
+
+  /*
+   * 順便記下來，底下要問「這些字有幾個從來沒有出現在任何一頁上」。
+   *
+   * 跳過兩種：帶 `{佔位符}` 的（算繪之後長得不一樣，比不到）、
+   * 只有一個字的（那種一定比得到，比了也沒有意義）。
+   */
+  for (const v of values) {
+    if (v.length > 1 && !v.includes('{')) uiStrings.push({ rel, value: v });
+  }
 }
 
 /*
@@ -477,7 +506,53 @@ for (const f of await readdir(resolve(ROOT, '.github/workflows')).catch(() => []
   scan(`.github/workflows/${f}`, names.join('\n'));
 }
 
+/*
+ * ── 有幾個介面字串，從來沒有被算繪出來 ──────────────
+ *
+ * 這一段的註解（上面收集 ui 字串的那裡）寫著第 6 輪（第六圈）量到
+ * 「160 個字串裡有 36 個從未出現在任何一頁」，並且註明「之後沒有重量過」。
+ *
+ * 第 6 輪（第二十六圈）問「壞了誰會告訴我們」，這一項的答案很具體：
+ * **她**。空狀態、分頁、VideoFacade 的字 —— 那些字第一個看到的人，
+ * 會是第一個寫出那種內容的人，也就是她。
+ *
+ * 所以把那個數字從註解裡搬到報告上：每次跑都重量，不用有人記得回來對。
+ * **不擋** —— 那些字是為了還沒發生的狀態寫的，本來就不該出現在產出裡。
+ */
+{
+  const rendered = renderedHtml;
+  if (uiStrings.length === 0 || rendered === '') {
+    notes.push(
+      '介面字串的算繪情況沒有檢查：' +
+        (uiStrings.length === 0 ? '一個介面字串都沒收到。' : 'dist/ 裡沒有可讀的文字。'),
+    );
+  } else {
+    const never = uiStrings.filter((u) => !rendered.includes(u.value));
+    if (never.length > 0) {
+      const pct = Math.round((never.length / uiStrings.length) * 100);
+      const sample = never.slice(0, 6).map((u) => u.value.slice(0, 14)).join('、');
+      notes.push(
+        `${uiStrings.length} 個介面字串裡，**${never.length} 個（${pct}%）從來沒有被算繪出來**。\n` +
+          `    例如：${sample}${never.length > 6 ? '⋯' : ''}\n` +
+          '    它們是為了還沒發生的狀態寫的（空狀態、分頁、影片預覽卡⋯）。\n' +
+          '    慣例檢查掃得到它們，但**沒有人看過它們長在頁面上的樣子** ——\n' +
+          '    第一個看到的人，會是第一個寫出那種內容的人。',
+      );
+    }
+  }
+}
+
 console.log('\n文案慣例檢查\n' + '─'.repeat(56));
+
+/*
+ * 筆記印在**問題之前**，而且在兩條路上都會印。
+ *
+ * 第一版寫在「沒有發現問題」那一段裡，於是有違規的時候整段消失 ——
+ * 而那正是這個 repo 記過的錯誤位置（第 5 輪〔第二十三圈〕：
+ * 區塊插在 findings 被分割之後，主體數印得出來、發現卻印不出來）。
+ * 一則「有 N 個字沒有人看過」的筆記，不該因為別的地方有錯就不見。
+ */
+for (const n of notes) console.log(`\n  · ${n}`);
 console.log(
   `掃了 ${scanned.files} 個檔案、${scanned.lines} 行` +
     `（其中含漢字的 ${scanned.cjkLines} 行）。`,
