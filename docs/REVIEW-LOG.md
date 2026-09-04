@@ -36516,3 +36516,121 @@ git push
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
 **下一輪：4 — 平臺 feed 實測**
+
+---
+
+### 2026-09-04 — 第 4 輪（第二十七圈）：平臺 feed 實測
+
+**第二十七圈問：這件事，換一個人來做，做得到嗎？**
+
+這一輪的新條件：workflow 今天第一次真的在 GitHub 上跑過。
+而第一次跑就死在一個只在 CI 上成立的路徑（`.npmrc` 裡的 `/Volumes/⋯`）——
+本機六道關卡全綠、七條靜態規則也全綠。
+
+#### 1. 跑過的只有一支
+
+| workflow | GitHub 上跑過幾次 | 為什麼 |
+|---|---|---|
+| `deploy.yml` | 6（3 紅 3 綠） | push 觸發 |
+| `check.yml` | **0** | 只在 PR 上跑，而還沒有 PR —— 這是對的，不是問題 |
+| `sync-feeds.yml` | **0** | cron `0 0,12 * * *`，repo 今天 17:20 UTC 才推上去 |
+
+也就是說：握有 secrets、會 commit 到 main、會觸發部署的那一支，
+**一次都沒有被執行過**，而今晚 00:00 UTC 就要第一次跑。
+
+#### 2. 先實測同步本身
+
+```
+▸ 狐說八道（YouTube）
+   · GET https://www.youtube.com/feeds/videos.xml?channel_id=UC⋯
+   ✓ 抓到 9 筆
+總計 9 筆（新增 0、更新 0、來源失敗 0）
+```
+
+寫進 `syndication.json` 的只有兩個時間戳（`generatedAt`、`lastSuccessAt`）——
+跟設計一致：內容沒變、但上次那個時間戳已經是**前一個臺北日**，所以會寫。
+一天一筆 commit，不是一天兩筆。
+
+#### 3. 找的是靜態檢查抓不到的那一種
+
+`test-workflow-shell.mjs` 已經**真的執行過**那兩段 shell（11 格，
+連 `git push` 都推到本機的 bare repo）。所以缺口不在 shell 本身，
+在**跨檔案的相依**：
+
+**一、`gh workflow run deploy.yml` 只在 `deploy.yml` 宣告了
+`workflow_dispatch` 時才成立。**
+用 GITHUB_TOKEN 做的 push 不會觸發別的 workflow（那支自己的註解花了
+八行解釋這件事），所以同步只能用 `gh workflow run` 明確叫一次。
+有人把 `deploy.yml` 的 `workflow_dispatch:` 拿掉 ——
+那是個看起來很合理的整理（「反正 push 就會部署」）——
+六道關卡、兩套測試、七條靜態規則**全部照樣綠**。
+
+**二、`if: steps.commit.outputs.changed == 'true'` 是安靜的那一種。**
+`id: commit` 被改名、或那段 shell 不再寫 `changed=` 進 `$GITHUB_OUTPUT`，
+GitHub **不會報錯** —— 讀不到的 output 是空字串，條件為假，那一步跳過。
+同步成功、commit 進去了、workflow **整支綠燈**，而網站永遠不更新。
+連紅燈都沒有。
+
+量到的：`grep workflow_dispatch scripts/*.mjs` 回空。兩個都沒人在看。
+
+#### 4. 第一次跑就報了一個誤報，而那個誤報值得留成案例
+
+新規則第一次跑，報了 `deploy.yml:100` 讀
+`steps.deployment.outputs.page_url` 卻沒人寫進 `$GITHUB_OUTPUT`。
+
+那是 `actions/deploy-pages` **自己宣告的 output** ——
+action 的 output 不會出現在 workflow 檔案裡，拿「有沒有 echo 進
+`$GITHUB_OUTPUT`」去要求它是必然的誤報。
+
+所以：**id 存不存在對兩種都問，output 寫沒寫只對 `run:` 的步驟問。**
+這個誤報寫成了一格反向案例 —— 少了它，把那一行拿掉會靜靜通過。
+
+#### 5. 突變掃描抓到一個測試層級的缺口
+
+| 突變 | 結果 |
+|---|---|
+| 目標沒宣告 `workflow_dispatch` 也放行 | 紅 ✓ |
+| 目標檔案不存在也放行 | **全綠** ← |
+| step id 不存在也放行 | 紅 ✓ |
+| action 的 output 也照要求 | 紅 ✓（反向案例接住） |
+
+第二個是真的缺口，但不在規則裡，在**測試的判準**：
+拿掉「檔案不存在」那條分支，執行會掉到下一個判斷，
+拿 `undefined` 去比對正則，**結果還是報同一條規則**，只是訊息變成
+「沒有宣告 workflow_dispatch」。而測試只比對規則 id。
+
+對讀訊息的人來說那是兩回事：一個要去建檔案，一個要去改 `on:`。
+補了一格**比對訊息**而不是比對 id 的案例，那個突變就紅了。
+
+**同一條規則的不同分支，要用訊息分辨，不能只看它有沒有響。**
+
+### 這一輪改了什麼
+
+| 項目 | 之前 | 之後 |
+|---|---|---|
+| `gh workflow run X.yml` 的目標 | 沒人看 | `dispatch-target-missing`：檔案要在、而且要宣告 `workflow_dispatch` |
+| `steps.<id>.outputs.<名>` | 沒人看 | `step-output-unset`：id 要在；是 shell 的話那個名字要真的被寫過 |
+| action 的 output | —— | 明確排除（那是誤報，寫成反向案例） |
+| 靜態規則數 | 7 | 9 |
+| `test-workflow-rules` | 18 格 | 23 格（含 1 格比對訊息、1 格反向） |
+| `check-workflows.mjs` 檔頭 | 「三個 workflow 一次都沒跑過」 | 改成今天的事實：跑過的只有 `deploy.yml` |
+
+### 待辦（不屬於這一輪）
+
+- **`sync-feeds.yml` 今晚 00:00 UTC 第一次跑。** 靜態與 shell 層都驗過了，
+  但 `actions/checkout` → `npm ci` → `git push` → `gh workflow run`
+  這一整條在真的 runner 上還沒走過一次。明天早上要去看那次的結果
+  （→ 4 平臺 feed 實測，或站主）
+- 上一輪的都還在（日常發文誰來推站主還沒決定、`probe:served` 沒有自己的測試、
+  雜湊資源只有 `max-age=600`、真的開一次螢幕閱讀器聽）
+- 更早幾輪的都還在（`test-a11y-rules` 用 `.find()` 只驗第一處、
+  16／26 條 a11y 規則沒有反向案例、`check:contrast` 讀不到檔案時丟原始堆疊、
+  `test-content-rules` 的改法檢查只看第一處、`check:copy` 的「bad 一律命中」
+  掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  `sync-feeds` 的離開碼沒人量過、workflow 不在 `check:copy` 範圍、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設、`UNWIRED_SWITCHES` 空陣列、
+  `--patterns` 仍自己套樣板、`related` 是單向的、斷點 34rem 寫九次、
+  `ci:sim` 只涵蓋十步裡的四步）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：5 — 隱私**

@@ -12,8 +12,13 @@
  * 而 GitHub 那邊很可能直接拒絕整個 workflow。
  * 也就是說：部署流程壞掉了，而且要等到真的 push 上去才會知道。
  *
- * 這個專案的三個 workflow 到現在**一次都沒有在 GitHub 上跑過**，
- * 所以「push 之後就會發現」不是一個安全的假設。
+ * 2026-09-04 之前，這個專案的三個 workflow **一次都沒有在 GitHub 上跑過**。
+ * 那天推上去，`deploy.yml` 第一次跑就死在一個只在 CI 上成立的路徑
+ * （`.npmrc` 裡的 `/Volumes/⋯`）—— 本機六道關卡全綠，靜態檢查也全綠。
+ *
+ * 到現在（2026-09-04）跑過的仍然只有 `deploy.yml`：
+ * `check.yml` 只在 PR 上跑而還沒有 PR，`sync-feeds.yml` 的 cron 還沒到。
+ * 所以「push 之後就會發現」對後兩支仍然不是一個安全的假設。
  *
  * ## 為什麼不用 YAML 剖析器
  *
@@ -57,6 +62,8 @@ const RULE_IDS = [
   'needs-dist-before-build',
   'test-file-not-run',
   'machine-path-in-config',
+  'dispatch-target-missing',
+  'step-output-unset',
 ];
 
 if (process.argv.includes('--list-rules')) {
@@ -90,6 +97,18 @@ const add = (file, line, id, msg) => {
 };
 
 const files = (await readdir(DIR)).filter((f) => /\.ya?ml$/.test(f));
+
+/**
+ * 每一份 workflow 抹掉註解之後的內容。
+ *
+ * 新加的兩條規則要**跨檔案**看（A 呼叫 B，B 有沒有讓自己被呼叫的入口），
+ * 所以先全部讀進來，不能邊讀邊判斷。
+ * @type {Map<string, string>}
+ */
+const bareTexts = new Map();
+for (const n of files) {
+  bareTexts.set(n, withoutComments(await readFile(resolve(DIR, n), 'utf8')));
+}
 
 /** package.json 裡真的存在的 script 名稱 */
 const scripts = new Set(
@@ -178,6 +197,130 @@ for (const name of files) {
           `package.json 裡沒有 "${m[1]}" 這個 script。` +
             '　改法：對照 package.json 的 scripts 把名字打對；' +
             '如果那個 script 是被改名或刪掉的，這一步也要跟著改。',
+        );
+      }
+    }
+  }
+
+  /*
+   * ── gh workflow run X.yml：X 讓不讓人這樣叫 ──────────
+   *
+   * `sync-feeds.yml` 的最後一步是 `gh workflow run deploy.yml`。
+   * 那一步**不能省**：用 GITHUB_TOKEN 做的 push 不會觸發別的 workflow，
+   * 所以同步抓回來的新影片只會躺在 repo 裡（那個 workflow 自己的註解
+   * 花了八行在解釋這件事）。
+   *
+   * 而 `gh workflow run` 只在目標 workflow 宣告了 `workflow_dispatch` 時
+   * 才成立。有人把 deploy.yml 的 `workflow_dispatch:` 拿掉
+   * （「反正 push 就會部署，留這個做什麼」）——
+   * 六道關卡、兩套測試、七條靜態規則**全部照樣綠**，
+   * 而網站從此不會因為同步而更新。
+   *
+   * 第 4 輪（第二十七圈）加。那天量到：`sync-feeds.yml` 到當時為止
+   * 在 GitHub 上跑過 **0 次**，所以這個相依從來沒有被真的執行驗證過。
+   */
+  for (const [idx, raw] of bare.entries()) {
+    for (const m of raw.matchAll(/gh workflow run\s+([\w.-]+\.ya?ml)/g)) {
+      saw('dispatch-target-missing', 1);
+      const target = m[1];
+      const targetText = bareTexts.get(target);
+      if (targetText === undefined) {
+        add(
+          rel,
+          idx + 1,
+          'dispatch-target-missing',
+          `這一步要叫 ${target}，但 .github/workflows/ 底下沒有這個檔案。` +
+            '　改法：把檔名打對，或者那支 workflow 被刪掉的話這一步也要跟著處理。',
+        );
+        continue;
+      }
+      if (!/^\s*workflow_dispatch:/m.test(targetText)) {
+        add(
+          rel,
+          idx + 1,
+          'dispatch-target-missing',
+          `${target} 沒有宣告 workflow_dispatch，gh workflow run 叫不動它。` +
+            '　改法：在 ' + target + ' 的 on: 底下加回 workflow_dispatch:，' +
+            '或者改用別的方式觸發（但 GITHUB_TOKEN 的 push 不會觸發 workflow）。',
+        );
+      }
+    }
+  }
+
+  /*
+   * ── if: steps.<id>.outputs.<名字> 指得到東西嗎 ──────────
+   *
+   * 這一條守的是**安靜的**那一種壞法。
+   *
+   * `sync-feeds.yml` 的「觸發部署」是 `if: steps.commit.outputs.changed == 'true'`。
+   * 上一步的 `id: commit` 被改名、或者那段 shell 不再寫 `changed=` 進
+   * `$GITHUB_OUTPUT` —— GitHub **不會報錯**，它把讀不到的 output 當成空字串，
+   * 條件為假，那一步直接跳過。
+   *
+   * 結果：同步成功、commit 進去了、workflow 整支**綠燈**，
+   * 而網站永遠不更新。連紅燈都沒有。
+   */
+  /*
+   * 每個有 id 的 step，是 shell（`run:`）還是現成的 action（`uses:`）。
+   *
+   * 這個分別是第一版漏掉的：`deploy.yml` 讀
+   * `steps.deployment.outputs.page_url`，而那是 `actions/deploy-pages`
+   * **自己宣告的 output** —— action 的 output 不會出現在 workflow 檔案裡，
+   * 拿「有沒有 echo 進 $GITHUB_OUTPUT」去要求它，是必然的誤報。
+   * 第一次跑就報了那一個，關卡當場擋下來。
+   *
+   * 所以：id 存不存在對兩種都問，output 寫沒寫只對 shell 問。
+   * @type {Map<string, { hasRun: boolean }>}
+   */
+  const stepInfo = new Map();
+  {
+    /** @type {{ id: string | null, hasRun: boolean } | null} */
+    let cur = null;
+    const flush = () => {
+      if (cur?.id) stepInfo.set(cur.id, { hasRun: cur.hasRun });
+    };
+    for (const raw of bare) {
+      if (/^\s*-\s+\S/.test(raw)) {
+        flush();
+        cur = { id: null, hasRun: false };
+      }
+      if (!cur) continue;
+      const idm = raw.match(/^\s*-?\s*id:\s*([\w-]+)\s*$/);
+      if (idm) cur.id = idm[1];
+      if (/^\s*-?\s*run:\s*/.test(raw)) cur.hasRun = true;
+    }
+    flush();
+  }
+  for (const [idx, raw] of bare.entries()) {
+    for (const m of raw.matchAll(/steps\.([\w-]+)\.outputs\.([\w-]+)/g)) {
+      saw('step-output-unset', 1);
+      const [, stepId, output] = m;
+      const info = stepInfo.get(stepId);
+      if (!info) {
+        add(
+          rel,
+          idx + 1,
+          'step-output-unset',
+          `這裡讀 steps.${stepId}.outputs.${output}，但這份 workflow 裡沒有 id: ${stepId} 的 step。` +
+            '　改法：把 id 打對。讀不到的 output 是空字串，條件會靜靜地變成假，不會報錯。',
+        );
+        continue;
+      }
+      /* action 的 output 是它自己宣告的，workflow 檔案裡看不到，不能要求 */
+      if (!info.hasRun) continue;
+      /*
+       * 有那個 id、而且是 shell，再問那段 shell 到底寫不寫這個名字。
+       * 只看 `名字=` 出現在同一份文字裡就算 —— 精確追到「哪一個 step 寫的」
+       * 需要真的剖 YAML，而這裡要抓的是「整份檔案裡根本沒人寫過它」那一種。
+       */
+      if (!new RegExp(`${output}=[^\\s]*"?\\s*>>\\s*"?\\$GITHUB_OUTPUT`).test(bare.join('\n'))) {
+        add(
+          rel,
+          idx + 1,
+          'step-output-unset',
+          `這裡讀 steps.${stepId}.outputs.${output}，但這份 workflow 裡沒有任何一行把 ${output}= 寫進 $GITHUB_OUTPUT。` +
+            '　改法：在那個 step 的 shell 裡 echo "' + output + '=…" >> "$GITHUB_OUTPUT"。' +
+            '讀不到的 output 是空字串，條件會靜靜地變成假，整支 workflow 還是綠的。',
         );
       }
     }

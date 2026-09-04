@@ -291,6 +291,101 @@ const CASES = {
   },
 
   /*
+   * ── gh workflow run 叫的那支，讓不讓人這樣叫 ──
+   *
+   * 用 GITHUB_TOKEN 做的 push **不會**觸發別的 workflow，所以同步那支
+   * 只能用 `gh workflow run deploy.yml` 明確叫一次。而那只在目標宣告了
+   * `workflow_dispatch` 時才成立。
+   *
+   * 把 deploy.yml 的 workflow_dispatch 拿掉是一個看起來很合理的整理
+   * （「反正 push 就會部署」）—— 而它會讓網站從此不因同步而更新。
+   */
+  'dispatch-target-missing': {
+    '.github/workflows/deploy.yml': [
+      'name: Deploy',
+      'on:',
+      '  push:',
+      '    branches: [main]',
+      'jobs:',
+      '  build:',
+      '    steps:',
+      '      - run: npm run test:units',
+      '      - run: npm run verify:all',
+      '      - run: npm run test:built',
+      '',
+    ].join('\n'),
+    '.github/workflows/sync.yml': [
+      'name: Sync',
+      'on:',
+      '  workflow_dispatch:',
+      'jobs:',
+      '  sync:',
+      '    steps:',
+      '      - run: gh workflow run deploy.yml --ref main',
+      '',
+    ].join('\n'),
+  },
+
+  /* 目標檔案根本不存在，也是同一條 */
+  'dispatch-target-missing（叫一支不存在的）': {
+    expect: 'dispatch-target-missing',
+    '.github/workflows/sync.yml': [
+      'name: Sync',
+      'on:',
+      '  workflow_dispatch:',
+      'jobs:',
+      '  sync:',
+      '    steps:',
+      '      - run: gh workflow run publish.yml --ref main',
+      '',
+    ].join('\n'),
+  },
+
+  /*
+   * ── if: steps.<id>.outputs.<名字> 指得到東西嗎 ──
+   *
+   * 這是**安靜**的那一種：讀不到的 output 是空字串，條件為假，
+   * 那一步跳過，整支 workflow 還是綠的。
+   */
+  'step-output-unset': {
+    '.github/workflows/sync.yml': [
+      'name: Sync',
+      'on:',
+      '  workflow_dispatch:',
+      'jobs:',
+      '  sync:',
+      '    steps:',
+      '      - name: 有變動就 commit',
+      '        id: commit',
+      '        run: echo "changed=true" >> "$GITHUB_OUTPUT"',
+      '      - name: 觸發部署',
+      '        if: steps.committ.outputs.changed == \'true\'',
+      '        run: echo deploy',
+      '',
+    ].join('\n'),
+  },
+
+  /* id 對了，但那段 shell 從來沒寫過那個名字 */
+  'step-output-unset（id 在但沒人寫那個 output）': {
+    expect: 'step-output-unset',
+    '.github/workflows/sync.yml': [
+      'name: Sync',
+      'on:',
+      '  workflow_dispatch:',
+      'jobs:',
+      '  sync:',
+      '    steps:',
+      '      - name: 有變動就 commit',
+      '        id: commit',
+      '        run: echo "沒有寫任何 output"',
+      '      - name: 觸發部署',
+      '        if: steps.commit.outputs.changed == \'true\'',
+      '        run: echo deploy',
+      '',
+    ].join('\n'),
+  },
+
+  /*
    * ── 有測試檔，但沒有人跑它 ──
    *
    * 「這個專案有哪些測試」寫在檔案系統與 package.json 兩個地方。
@@ -385,6 +480,74 @@ try {
       failed++;
       console.log(out.split('\n').map((l) => '        ' + l).join('\n'));
     }
+  }
+
+  /*
+   * 同一條規則的兩條分支，訊息要說對死因。
+   *
+   * 第 4 輪（第二十七圈）的突變掃描抓到的：把「檔案不存在」那條分支
+   * 拿掉，測試**照樣全綠** —— 因為執行會掉到下一個判斷，
+   * 拿 `undefined` 去比對正則，結果還是報同一條規則，只是訊息變成
+   * 「沒有宣告 workflow_dispatch」。
+   *
+   * 對讀訊息的人來說那是兩回事：一個要去建檔案，一個要去改 on:。
+   * 所以這一格比對的是**訊息**，不是規則 id。
+   */
+  {
+    const dir = await build('dispatch-target-file-gone', {
+      ...base(),
+      '.github/workflows/sync.yml': [
+        'name: Sync',
+        'on:',
+        '  workflow_dispatch:',
+        'jobs:',
+        '  sync:',
+        '    steps:',
+        '      - run: gh workflow run publish.yml --ref main',
+        '',
+      ].join('\n'),
+    });
+    const out = await check(dir);
+    const ok = /沒有這個檔案/.test(out);
+    if (!ok) failed++;
+    console.log(`  ${ok ? '✓' : 'X'} 目標檔案不存在時，訊息說的是「沒有這個檔案」`);
+    if (!ok) console.log('        ' + out.split('\n').filter((l) => l.includes('dispatch-target')).join('\n        '));
+  }
+
+  /*
+   * 反向：action 自己宣告的 output 不算。
+   *
+   * 這一格是第 4 輪（第二十七圈）第一版的誤報寫成的案例：
+   * `deploy.yml` 讀 `steps.deployment.outputs.page_url`，
+   * 而那是 `actions/deploy-pages` 的 output —— action 的 output
+   * 不會出現在 workflow 檔案裡，拿「有沒有 echo 進 $GITHUB_OUTPUT」
+   * 去要求它是必然的誤報，第一次跑就報了那一個。
+   *
+   * 少了這一格，把「只對 run: 步驟要求」那一行拿掉會靜靜通過。
+   */
+  {
+    const dir = await build('step-output-from-action', {
+      ...base(),
+      '.github/workflows/pages.yml': [
+        'name: Pages',
+        'on:',
+        '  workflow_dispatch:',
+        'jobs:',
+        '  deploy:',
+        '    steps:',
+        '      - name: 部署',
+        '        id: deployment',
+        '        uses: actions/deploy-pages@v4',
+        '      - name: 印出網址',
+        '        run: echo "${{ steps.deployment.outputs.page_url }}"',
+        '',
+      ].join('\n'),
+    });
+    const out = await check(dir);
+    const ok = !out.includes('[step-output-unset]');
+    if (!ok) failed++;
+    console.log(`  ${ok ? '✓' : 'X'} action 自己宣告的 output 不算（反向案例）`);
+    if (!ok) console.log('        ' + out.split('\n').filter((l) => l.includes('step-output')).join('\n        '));
   }
 
   /*
