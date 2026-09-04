@@ -598,6 +598,36 @@ for (const [key, value] of Object.entries(CASES)) {
     }
   };
 
+  /*
+   * ── 這兩格需要真的 dist/，而 test:units 不一定有 ──────────
+   *
+   * 第 7 輪（第二十六圈）跑 `npm run ci:sim` 紅了一格。原因是這兩格
+   * 呼叫 `runPerf()` **不帶 `--dir=`** —— 它量的是真的 `dist/`。
+   * 而 `deploy.yml` 的順序是
+   *
+   *     test:units  →  verify:all（裡面才 build）  →  test:built
+   *
+   * 那一步的名字就叫「工具的單元測試（**不需要 dist 的那些**）」。
+   * 在乾淨的 runner 上跑到這裡時 `dist/` 還不存在，於是：
+   *
+   *   - 「抓得到而且擋得住」那一格**紅**（真的部署會停在這裡）
+   *   - 「沒過期時不報」那一格**綠**，而它是空的 —— 輸出裡本來就沒有那句話
+   *
+   * 一紅一假綠，而且是同一個原因。
+   *
+   * 這裡不改成「用假站測」（第 2 輪〔第二十四圈〕記過：漂移檢查刻意只在
+   * 量真的 dist 時才跑，拿假站比一次紅了 18 格）。改成**沒有就明講沒查**。
+   * CI 上真正在守這件事的是 `verify:all` 裡的 `check:perf` 本身 ——
+   * 它在 build 之後跑，漂移超過門檻就擋。
+   */
+  const hasDist = await readFile(resolve(ROOT, 'dist/index.html'), 'utf8').then(
+    () => true,
+    () => false,
+  );
+  if (!hasDist) {
+    console.log('  · 說明數字的漂移檢查：沒有 dist/，這兩格沒有檢查');
+    console.log('      （CI 上 test:units 跑在 build 之前。真正在守它的是 verify:all 裡的 check:perf。）');
+  } else {
   const clean = (await runPerf()).out;
   const okQuiet = !clean.includes('說明裡的數字過期');
   if (!okQuiet) failed++;
@@ -623,6 +653,7 @@ for (const [key, value] of Object.entries(CASES)) {
     if (!okCatch) failed++;
     console.log(`  ${okCatch ? '✓' : 'X'} 數字過期時抓得到而且擋得住（exit ${code}）`);
     if (!okCatch) console.log('        ' + out.split('\n').filter((l) => /過期|預算內/.test(l)).join(' ｜ '));
+  }
   }
 }
 
