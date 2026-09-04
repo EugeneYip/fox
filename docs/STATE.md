@@ -6,8 +6,8 @@
 > 這裡只寫「現在的狀態」與「接下來做什麼」。設計理由在 [ARCHITECTURE.md](ARCHITECTURE.md)，
 > 上線步驟在 [DEPLOY.md](DEPLOY.md)，寫作方式在 [CONTENT.md](CONTENT.md)。
 >
-> 最後更新：2026-09-04（第二十六圈走完；git 歷史已壓成一個乾淨的 commit；
-> 這一份從 2,715 行瘦身到約 300 行 —— 200 筆輪次摘要搬回 REVIEW-LOG.md）
+> 最後更新：2026-09-04（**網站已上線：https://bellafoxy.com**，DNS 與 HTTPS 都好了；
+> 第二十七圈第 1 輪〔無障礙〕做完）
 
 ---
 
@@ -191,7 +191,7 @@ git ls-files | grep -c identity.local    # 必須是 0
 
 ## 週期性檢查（loop）現在跑到哪
 
-**下一輪：第二十七圈第 1 輪 —— 無障礙。**
+**下一輪：第二十七圈第 2 輪 —— 效能。**
 
 做法：一次只深入一個面向（八個面向輪流），每一圈換一個**問題**去問全站。
 輪替順序、每一輪的規則、以及全部 210 筆逐輪紀錄都在
@@ -232,7 +232,7 @@ git ls-files | grep -c identity.local    # 必須是 0
 | 第二十五圈 | 這一格綠燈，有沒有可能是它根本沒有跑？ |
 | 第二十六圈 | 如果這件事今天壞了，我們多久之後會知道？是誰告訴我們的？ |
 
-**第二十七圈（要開始）：這件事，換一個人來做，做得到嗎？**
+**第二十七圈（進行中）：這件事，換一個人來做，做得到嗎？**
 不是「文件寫了沒」（第二十四圈問過），是**照著做會不會卡住** ——
 第一次 clone 下來要跑什麼、缺哪個檔案會發生什麼、錯誤訊息看不看得懂、
 `identity.local.ts` 這種「只有站主有」的東西擋住了哪些路、
@@ -308,6 +308,7 @@ git ls-files | grep -c identity.local    # 必須是 0
 | 怎麼上線 | [DEPLOY.md](DEPLOY.md) |
 | 怎麼寫文章（給不寫程式的人） | [CONTENT.md](CONTENT.md) |
 | 隱私開關怎麼調 | [PRIVACY.md](PRIVACY.md) |
+| 無障礙那三件人工項目怎麼做 | [A11Y.md](A11Y.md) |
 | 支援哪些平臺、handle 要填什麼 | [PLATFORMS.md](PLATFORMS.md) |
 | 檢查過什麼、找到什麼 | [REVIEW-LOG.md](REVIEW-LOG.md) |
 | 在這個 repo 上寫程式的規矩 | [CLAUDE.md](../CLAUDE.md) |

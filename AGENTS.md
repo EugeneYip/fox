@@ -37,7 +37,8 @@ npm run verify:all && npm run test:tools
 
 其餘：[ARCHITECTURE.md](docs/ARCHITECTURE.md)（設計理由與刻意沒做的事）、
 [PRIVACY.md](docs/PRIVACY.md)、[DEPLOY.md](docs/DEPLOY.md)、
-[CONTENT.md](docs/CONTENT.md)（怎麼寫一篇）。
+[CONTENT.md](docs/CONTENT.md)（怎麼寫一篇）、
+[A11Y.md](docs/A11Y.md)（無障礙裡自動查不到的那三件怎麼量）。
 
 ---
 
