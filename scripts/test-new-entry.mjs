@@ -51,6 +51,26 @@ console.log('\n開新內容的實測\n' + '─'.repeat(56));
    * 少了這一格，把預設改成 false 會靜靜通過。
    */
   ok('預設是草稿', md.includes('draft: true'), md.slice(0, 200));
+  /*
+   * ── 有沒有告訴她「這些只發生在你的電腦上」──────────
+   *
+   * 第 3 輪（第二十七圈）實測：照文件說的拿掉 `draft: true`、
+   * 跑完兩套關卡、本機那一頁好好的，而線上同一個網址回 **404**。
+   *
+   * 這條路是站主要的「她自己就能發文」，而它停在跑關卡那一步 ——
+   * 比自己宣稱的目標少了 git add／commit／push 三個動作。
+   *
+   * 這一格守的不是那三個指令的字面（步驟寫在 docs/CONTENT.md，
+   * 同一份寫兩個地方遲早會有一邊過期），是**那句提醒還在、而且指得到路**。
+   */
+  const outDir = await mkdtemp(join(tmpdir(), 'write-out-'));
+  const { out } = await write(outDir, ['--collection=notes', '--title=測試輸出', '--slug=test-output']);
+  ok(
+    '寫完會說「只發生在這臺電腦上」並指向上線的步驟',
+    /只發生在這臺電腦上/.test(out) && /CONTENT\.md/.test(out),
+    out.split('\n').slice(-6).join(' | '),
+  );
+  await rm(outDir, { recursive: true, force: true });
   await rm(dir, { recursive: true, force: true });
 }
 

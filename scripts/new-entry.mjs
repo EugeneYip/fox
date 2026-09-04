@@ -215,10 +215,24 @@ async function main() {
   if (draft) {
     console.log('現在是草稿（`draft: true`）—— 網站上還看不到。要發佈就把那一行刪掉。');
   }
+  /*
+   * 第 3 輪（第二十七圈）之前這裡只印到第 3 步，於是這條路
+   * **比它自己宣稱的目標少了三步**：跑完關卡之後沒有任何東西告訴她
+   * 「這些都只發生在你的電腦上」。
+   *
+   * 實測過：照 CONTENT.md 說的拿掉 `draft: true`、跑完兩套關卡、
+   * 本機那一頁好好的，而線上同一個網址回 404。
+   *
+   * 詳細步驟放在 docs/CONTENT.md，這裡只指路 ——
+   * 同一份步驟寫在兩個地方，遲早會有一邊過期。
+   */
   console.log('\n接下來：');
   console.log('  1. 打開那個檔案，把內容寫進去');
   console.log('  2. npm run dev      在瀏覽器上看');
-  console.log('  3. npm run verify:all && npm run test:tools    兩個都綠才算好\n');
+  console.log('  3. npm run verify:all && npm run test:tools    兩個都綠才算好');
+  console.log('  4. 上面三步都只發生在這臺電腦上。要讓 bellafoxy.com 上真的有');
+  console.log('     這一頁，還要 git add／commit／push —— 步驟寫在');
+  console.log('     docs/CONTENT.md 的「怎麼讓它真的上線」。推完約 80 秒會上線。\n');
 }
 
 await main();
