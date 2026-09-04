@@ -192,6 +192,22 @@ npm run mutate -- <檔案> --restore                      # 還原
   但**文案與內容管線的檢查不在裡面** —— `check:copy` 與 `check:content` 住在
   `test:tools` 的 `test:built` 那一半。第 6 輪（第七圈）就是只跑了 `verify:all`
   就 commit，把一個文案違規推進去，隔一輪才被 `ci:sim` 抓到。
+
+  **改到 `test:units` 那條鏈、或改到 `.github/workflows/` 的時候，再加跑一個：**
+
+  ```bash
+  npm run ci:sim
+  ```
+
+  理由：那兩套關卡跑在**你的工作樹**上，而 CI 拿到的是**版控裡的檔案**，
+  順序也不一樣。第 7 輪（第二十六圈）踩到一次 —— `test:units` 裡有一格
+  需要真的 `dist/`，而 deploy.yml 的 `test:units` 跑在 build **之前**
+  （那一步的名字就叫「不需要 dist 的那些」）。本機永遠有 dist，所以兩套關卡
+  全綠；乾淨的 runner 上會停在第一步。**唯一會抓到它的是 `ci:sim`，
+  而它只有人手動跑才會跑。**
+
+  （`ci:sim` 跑的是 **HEAD**，不是工作樹 —— 那是刻意的，因為 CI 拿到的就是
+  版控裡的東西。所以要驗自己剛改的東西，得先 commit。）
   （原本這裡寫「五道」，那是更早以前的數字。）
 - **不要 push。** 站主自己來 —— 這裡的帳號接不到 GitHub。
 - **不要把狀態留在腦袋裡。** 決定了什麼、找到什麼問題、下一步是什麼，
