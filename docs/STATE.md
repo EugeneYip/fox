@@ -79,7 +79,8 @@ npm run fixtures -- --clean         # 一定要清乾淨
 | | 狀態 | 卡在哪 |
 |---|---|---|
 | **推上 GitHub** | ✅ 已推 | 2026-09-04 推上 `EugeneYip/fox`（先 private 檢查、再轉公開）。213 個 commit 壓成 1 個（`a67a0a0`），壓縮前後 tree hash 一致，私密檔案從未進過歷史。Pages 已啟用（`build_type=workflow`）、`cname=bellafoxy.com`，部署 workflow 綠燈。**「接不到 GitHub」那句是錯的，已實測推翻** |
-| **DNS 切到 GitHub Pages** | 🔄 進行中 | 2026-09-04 開始。要刪 apex 與 `www` 兩筆指向舊站的轉址，改成 4 筆 A（`185.199.108–111.153`）＋ `www` CNAME → `eugeneyip.github.io.`。**信件記錄（MX、SPF TXT）與五個 vanity 轉址一律不動。** DNS 生效後才能開 `https_enforced` |
+| **DNS 切到 GitHub Pages** | ✅ 已完成 | 2026-09-04 做完。刪掉 apex 與 `www` 兩筆指向舊站的 URL 轉址（Porkbun 會連帶清掉它自己建的 ALIAS／CNAME，24 → 20 筆），新增 4 筆 A（`185.199.108–111.153`）＋ `www` CNAME → `eugeneyip.github.io`。**MX 2 筆與 SPF TXT 完好、五個 vanity 轉址（`ig`／`instagram`／`poetry`／`youtube`／`yt`）完好。** 實測：apex 回 200、`www` 301 導到 apex |
+| **HTTPS** | ⏸ 等憑證 | DNS 剛指過去，GitHub 還沒簽出憑證（`https_enforced=false`，直接開會拿到「憑證還不存在」）。已重設一次自訂網域觸發重新檢查。憑證好了之後跑：`gh api -X PUT repos/EugeneYip/fox/pages -F https_enforced=true` |
 | **YouTube 影片同步** | ✅ 已在跑 | 走官方 Atom feed，**不需要金鑰**。已同步 9 支影片。⚠ 那個 feed 只回**最新 15 支**（第 4 輪〔第十一圈〕用大頻道實測），所以**第 16 支之後**更早的影片這條路就看不到了 —— 到時候才需要 `YOUTUBE_API_KEY` |
 | **頻道本身** | ⏸ 停更中 | 最後一支影片 2024-10-26。**站主知道，是刻意的**（2026-09-04 確認）。同步到的 9 支全是短影音詩詞（王昌齡、杜甫、李白⋯），確認是他們自己的頻道。另外有一個長影片頻道是別人的，只是其中一支提到她 —— **那個不在來源清單裡，也不該加** |
 | **她其他平臺的帳號** | ⏸ 刻意不放 | 網站上只有 YouTube 一個來源。2026-09-04 整理 DNS 轉址時看到**另一個平臺的帳號**，站主當天明確說不可以放上網站 —— 所以那個帳號名**不寫進這個公開 repo**（寫進註解等於發佈它）。理由從「不知道」變成「知道，而且刻意不放」，結果一樣是一筆 |
@@ -150,8 +151,11 @@ npm run verify:all && npm run test:tools
    輸出寫「身分規則：8 個值，來自 PRIVACY_NEEDLES」
 2. ✅ **開啟 GitHub Pages** —— `build_type=workflow`、`cname=bellafoxy.com`，
    部署 workflow 綠燈，站台實測回 200（36 KB，標題「狐說八道」）
-3. 🔄 **改 Porkbun 的 DNS** —— 進行中，見上面那張表
-4. ⏸ **勾 Enforce HTTPS** —— 要等第 3 步生效、GitHub 簽出憑證才能開。
+3. ✅ **改 Porkbun 的 DNS** —— 見上面那張表。做法上有一個坑值得記：
+   **不要直接刪 DNS 記錄，要刪「URL 轉址」設定本身**
+   （`/api/domains/deleteDomainForwarding`）—— Porkbun 會連帶清掉它為那筆
+   轉址建的 ALIAS 與萬用字元 CNAME。直接刪記錄會留下孤兒設定
+4. ⏸ **勾 Enforce HTTPS** —— 要等 GitHub 簽出憑證才能開。
    現在 `https_enforced=false`，提早開會拿到「憑證還不存在」
 
 每次改動之前都要跑 `npm run audit:privacy`，確認沒有個資外洩。

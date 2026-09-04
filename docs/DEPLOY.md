@@ -3,10 +3,13 @@
 從現在（本機有一份完整的網站）到 `https://bellafoxy.com` 能打開，總共四步。
 每一步都標了「誰做」與「大概多久」。
 
-> 目前狀態（2026-09-02 查證）
-> - `github.com/EugeneYip/fox` 已建立，**公開**，空的，預設分支 `main`
-> - `bellafoxy.com` 註冊在 **Porkbun**，目前是「網址轉址」到 `eugeneyip.com/fox.html`
-> - GitHub Pages 尚未啟用
+> 目前狀態（2026-09-04 實際做完）
+> - `github.com/EugeneYip/fox` 已建立、**公開**，網站已推上去，部署 workflow 綠燈
+> - `bellafoxy.com` 註冊在 **Porkbun**，DNS 已切到 GitHub Pages（A ×4、AAAA ×4、`www` CNAME）
+> - GitHub Pages 已啟用（Source ＝ GitHub Actions），`cname=bellafoxy.com`
+> - **只剩 Enforce HTTPS**，要等 Let's Encrypt 簽出憑證
+>
+> 底下第 0～3 步都做完了，留著是給日後換網域或重做的人看。
 
 ---
 
@@ -77,10 +80,21 @@ git ls-files | grep -c identity.local
 
 ### 3a. 先關掉現有的轉址
 
-`bellafoxy.com` 現在是 Porkbun 的「URL Forwarding」轉到 `eugeneyip.com/fox.html`。
+`bellafoxy.com` 原本是 Porkbun 的「URL Forwarding」轉到 `eugeneyip.com/fox.html`。
 **這個一定要先關掉**，不然它會蓋過下面設定的 A 記錄。
 
 Porkbun → `bellafoxy.com` → **URL Forwarding** → 刪掉現有的轉址規則。
+
+> **要刪的是「轉址設定」，不是 DNS 記錄。** 2026-09-04 實際做的時候學到：
+> 每建一筆 URL 轉址，Porkbun 會自己生兩筆 DNS ——
+> 一筆 `ALIAS 主機名 → uixie.porkbun.com`，一筆萬用字元
+> `CNAME *.主機名 → uixie.porkbun.com`。在 DNS 頁面把它們刪掉，
+> **轉址設定本身還在**，下次它可能又長回來；從 URL Forwarding 頁面刪，
+> 那兩筆會一起清掉（實測 24 筆 → 20 筆）。
+>
+> **只刪該刪的那幾筆。** 這個網域上還有別的轉址（`ig`、`instagram`、
+> `poetry`、`youtube`、`yt` 五個），以及**信件用的 MX ×2 與 SPF TXT** ——
+> 那些一筆都不能動。刪之前先把整張表列出來對過一次。
 
 ### 3b. 設定 DNS 記錄
 
@@ -98,8 +112,13 @@ Porkbun → `bellafoxy.com` → **DNS Records**。刪掉舊的 A / ALIAS 記錄�
 | AAAA | （留空） | `2606:50c0:8003::153` | |
 | CNAME | `www` | `eugeneyip.github.io` | 結尾不要加路徑 |
 
-> 以上 IP 於 2026-09-02 實測確認（`dig eugeneyip.github.io` 的結果一致）。
+> 以上 IP 於 2026-09-04 再次實測確認（`dig eugeneyip.github.io` 的 A 與 AAAA
+> 跟這張表完全一致），而且就是照這張表設下去的。
 > GitHub 極少更動，但若日後連不上，先回頭核對這一組。
+>
+> 剛設完的頭幾分鐘，`dig` 有可能只回三筆 AAAA —— 那是四臺權威伺服器
+> 還沒同步完，不是漏設。分別問 `maceio`／`salvador`／`fortaleza`／`curitiba`
+> 四臺，四臺都回四筆就是好了。
 
 **Porkbun 的替代做法**：Porkbun 支援 `ALIAS` 記錄，可以用一筆
 `ALIAS  （留空）  eugeneyip.github.io` 取代上面八筆 A/AAAA。
