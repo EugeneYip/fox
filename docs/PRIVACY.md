@@ -162,6 +162,27 @@ pattern: /她的本名/g        // ← 這裡原本是真的名字。為了檢�
 | 本機開發 | `src/config/identity.local.ts`（在 `.gitignore`） |
 | CI | `PRIVACY_NEEDLES` secret，一行一個值 |
 
+### 那個 secret 要設在哪（有一個會讓人設錯的地方）
+
+**Settings → Secrets and variables → Actions → Repository secrets**
+
+<https://github.com/EugeneYip/fox/settings/secrets/actions>
+
+> ⚠️ **不要設在 Settings → Environments 底下。**
+>
+> 那裡的 secret 只有在 job 宣告了 `environment:` 的時候才讀得到，
+> 而 `deploy.yml` 沒有宣告（也不該為了這個宣告）。
+>
+> 從網頁上看，兩個地方都叫「secrets」、都顯示成已設定 ——
+> **分辨得出來的只有 job 自己。**
+>
+> 這不是假想的：2026-09-04 第一次推上 GitHub 就是這樣設的，
+> CI 停在隱私稽核那一步（run 33899518777）。
+> 守門有接住，但那要花掉一次完整的 CI 才知道。
+
+值本身要填什麼：本名、校名⋯⋯**這份文件不寫出來**（它是公開的）。
+本機已經有 `identity.local.ts` 的話，那幾個欄位的值就是要填的東西。
+
 只取這幾個欄位：`realName`、`school`、`dept`、`city`、`email`。
 **刻意不含** `country`、`region`、`degree`、`years` —— `privacy.ts` 的
 預設本來就允許顯示到國家層級，把「臺灣」當成要防的字串只會製造滿螢幕的誤報。

@@ -1351,8 +1351,29 @@ if (identity.source === 'none') {
   console.log('  CI：把值設成 PRIVACY_NEEDLES secret（一行一個）');
   console.log('  沒有這一步的話，本名／校名有沒有被貼進頁面，這支腳本查不到。');
   if (CI) {
+    /*
+     * ── 這一段是照著一次真的失敗改的 ──────────
+     *
+     * 2026-09-04 17:23 的第一次 CI（run 33899518777）就停在這裡，
+     * 而原因不是「忘記設」，是**設在看起來一樣、但 job 讀不到的地方**：
+     * 站主在 Settings → Environments 底下建了一個叫 PRIVACY_NEEDLES 的
+     * **環境**，把值放進那個環境的 secrets 裡。
+     *
+     * Environment secret 只有在 job 宣告了 `environment:` 的時候才看得到，
+     * 而 deploy.yml 沒有宣告（也不該為了這個宣告）。
+     * 從網頁上看，兩個地方都叫「secrets」、都顯示成已設定 ——
+     * 分辨得出來的只有 job 自己。
+     *
+     * 守門有接住（這一步 exit 1，整支 workflow 紅）。但接住是**事後**，
+     * 而那要花掉一次完整的 CI 才知道。所以訊息裡直接點名那個陷阱。
+     */
     console.error('\nCI 上沒有 PRIVACY_NEEDLES —— 這不是「乾淨」，是「沒有檢查」。');
-    console.error('到 repo 的 Settings → Secrets → Actions 加上它（一行一個值）。\n');
+    console.error('  要設在這裡：Settings → Secrets and variables → Actions → Repository secrets');
+    console.error('  值是一行一個。');
+    console.error('  ⚠ 不要設在 Settings → Environments 底下 —— 那裡的 secret 只有宣告了');
+    console.error('    environment: 的 job 讀得到，而這支沒有宣告。兩個地方在網頁上都叫');
+    console.error('    「secrets」、都顯示成已設定，分辨得出來的只有 job 自己。');
+    console.error('    （2026-09-04 第一次 CI 就是這樣停在這裡的。）\n');
     process.exit(1);
   }
 } else {

@@ -812,6 +812,23 @@ const crawlerRow = (/** @type {string} */ text) => `| \`allowAiCrawlers\` | \`fa
   if (!okCi) failed++;
   console.log(`  ${okCi ? '✓' : 'X'} CI 上沒有 PRIVACY_NEEDLES：exit 1`);
 
+  /*
+   * ── 訊息要點名那個真的害過人的陷阱 ──────────
+   *
+   * 2026-09-04 第一次 CI（run 33899518777）就停在這一步，
+   * 而原因不是「忘記設」，是設在 Settings → Environments 底下 ——
+   * 那裡的 secret 只有宣告了 `environment:` 的 job 讀得到。
+   * 兩個地方在網頁上都叫「secrets」、都顯示成已設定。
+   *
+   * 守門有接住，但那是**事後**：要花掉一次完整的 CI 才知道。
+   * 所以訊息要說「要設在哪」以及「不要設在哪」，兩句都要在。
+   */
+  const okWhere =
+    /Repository secrets/.test(ci.out) && /Environments/.test(ci.out);
+  if (!okWhere) failed++;
+  console.log(`  ${okWhere ? '✓' : 'X'} 訊息說了要設在哪、以及不要設在哪（Environment 的陷阱）`);
+  if (!okWhere) console.log('        ' + ci.out.split('\n').slice(-8).join(' | '));
+
   const ciWith = await audit(dir, { CI: 'true', PRIVACY_NEEDLES: '某個假名' });
   const okWith = ciWith.code === 0;
   if (!okWith) failed++;
