@@ -122,8 +122,8 @@ check(
  */
 const probe = `
   const d = new Date('2026-01-01');
-  const taipei = Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric' }).format(d));
-  console.log(JSON.stringify({ tz: process.env.TZ, local: d.getFullYear(), taipei }));
+  const pinned = Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric' }).format(d));
+  console.log(JSON.stringify({ tz: process.env.TZ, local: d.getFullYear(), pinned }));
 `;
 /** @param {string} tz */
 const runIn = (tz) =>
@@ -134,14 +134,14 @@ const runIn = (tz) =>
     }).trim(),
   );
 
-const taipei = runIn('Asia/Taipei');
-const newYork = runIn('America/New_York');
+const zonePinned = runIn('Asia/Taipei');
+const eastUS = runIn('America/New_York');
 const utc = runIn('UTC');
 
 check(
   '三個時區底下，臺北年份都是 2026',
-  taipei.taipei === 2026 && newYork.taipei === 2026 && utc.taipei === 2026,
-  JSON.stringify({ taipei, newYork, utc }),
+  zonePinned.pinned === 2026 && eastUS.pinned === 2026 && utc.pinned === 2026,
+  JSON.stringify({ zonePinned, eastUS, utc }),
 );
 /*
  * 反向：確認這個測試真的分得出東西來。
@@ -150,8 +150,8 @@ check(
  */
 check(
   '而 getFullYear() 在美東確實會給 2025（證明這個測試分得出差別）',
-  newYork.local === 2025 && taipei.local === 2026,
-  JSON.stringify({ 美東: newYork.local, 臺北: taipei.local }),
+  eastUS.local === 2025 && zonePinned.local === 2026,
+  JSON.stringify({ 美東: eastUS.local, 釘住的時區: zonePinned.local }),
 );
 
 /*

@@ -11,7 +11,10 @@
  * 真的洩漏，而且不會有任何地方報錯。所以這裡兩個方向都測。
  */
 import { RULES } from './lib/privacy-rules.mjs';
-import { identityRules } from './lib/identity-needles.mjs';
+import { identityRules, readIdentityNeedles } from './lib/identity-needles.mjs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 /**
  * catch／skip 是字串（測 pattern），files 是路徑（測 only）。
@@ -226,6 +229,44 @@ for (const rule of RULES) {
   hit('黃 小明', false, '中文詞中間夾空白（刻意不放寬）');
 
   ok(identityRules([]).length === 0, '身分規則：沒有值時不產生規則');
+
+/*
+ * ── 跟專案釘住的時區同名的值，不當成搜尋字串 ──────────
+ *
+ * 2026-09-04 身分規則第一次真的跑（在那之前這台機器沒有 identity.local.ts、
+ * CI 上也沒有 secret），結果 28 個 identity-value，落點全部是時區相關的檔案。
+ * 逐欄位量過：只有**英文城市**命中，而命中的是 `Asia/⋯` 這個時區識別碼。
+ *
+ * 這個專案把時區釘成 `Asia/Taipei`（`dates.ts` 兩處，有測試在守）——
+ * 那個字串本來就公開寫在程式碼裡，拿它當「不能出現的個資」，
+ * 等於要求專案不能寫出自己用的時區。
+ *
+ * 判準做在**來源**（讀 needles 的時候），不是在兩個工具各補一個例外 ——
+ * 第二十四圈整圈都在講「同一件事寫在兩個地方」。
+ */
+{
+  const dir = mkdtempSync(join(tmpdir(), 'needle-zone-'));
+  mkdirSync(join(dir, 'src/config'), { recursive: true });
+  mkdirSync(join(dir, 'src/lib'), { recursive: true });
+  writeFileSync(
+    join(dir, 'src/lib/dates.ts'),
+    "const a = { timeZone: 'Asia/Taipei' };\nconst b = { timeZone: 'Asia/Taipei' };\n",
+    'utf8',
+  );
+  writeFileSync(
+    join(dir, 'src/config/identity.local.ts'),
+    "export const identity = { realName: { zh: '某真名', en: 'Taipei' }, email: 'x@real.invalid' };\n",
+    'utf8',
+  );
+  const got = readIdentityNeedles(dir);
+  ok(
+    !got.needles.some((n) => n.toLowerCase() === 'taipei'),
+    '身分規則：跟釘住的時區同名的值不當搜尋字串',
+  );
+  ok(got.needles.includes('某真名'), '身分規則：其他值照樣當搜尋字串');
+  ok(/沒有當成搜尋字串/.test(got.detail), '身分規則：排除掉的要說出來，不是安靜地漏掉');
+  rmSync(dir, { recursive: true, force: true });
+}
   ok(rule.pattern.flags.includes('i'), '身分規則：大小寫不分');
 
   /*

@@ -93,7 +93,37 @@ export function readIdentityNeedles(root) {
   const stillExample = [...needles].filter((n) => exampleValues.has(n));
   const real = [...needles].filter((n) => !exampleValues.has(n));
 
-  if (real.length === 0) {
+  /*
+   * ── 跟專案自己釘住的時區同名的，不能當搜尋字串 ──────────
+   *
+   * 2026-09-04 身分規則第一次真的跑起來（在那之前這台機器沒有這個檔案、
+   * CI 上也沒有 secret），結果 **28 個 identity-value**，落點全部集中在
+   * `src/lib/dates.ts`、`scripts/test-portability.mjs`、`parse-feed.mjs`⋯
+   * —— 全是時區相關的檔案。
+   *
+   * 逐欄位量過：本名（中英）、校名、系名、中文城市、email 在版控裡
+   * **一個檔案都沒有命中**；只有**英文城市**命中 6 個檔案，
+   * 而命中的是 `Asia/⋯` 這個 IANA 時區識別碼。
+   *
+   * 這個專案把時區釘成 `Asia/Taipei`（`dates.ts` 兩處，有測試在守）。
+   * 也就是說那個字串**本來就公開寫在程式碼裡** —— 拿它當「不能出現的
+   * 個資」，等於要求專案不能寫出自己用的時區。保護它沒有意義。
+   *
+   * 這支腳本上面的註解早就記過同一種病：
+   * 「刻意不含 country、region —— 把『臺灣』當成要防的字串
+   * 只會製造滿螢幕的誤報」。這是那句話的第二個實例。
+   *
+   * **排除掉，而且說出來** —— 不說的話，讀報告的人會以為城市有被保護。
+   */
+  const datesPath = resolve(root, 'src/lib/dates.ts');
+  const pinnedZones = existsSync(datesPath)
+    ? [...readFileSync(datesPath, 'utf8').matchAll(/timeZone:\s*'([^']+)'/g)].map((m) => m[1])
+    : [];
+  const zoneWords = new Set(pinnedZones.flatMap((z) => z.split(/[/_]/)).map((w) => w.toLowerCase()));
+  const clashing = real.filter((n) => zoneWords.has(n.toLowerCase()));
+  const usable = real.filter((n) => !zoneWords.has(n.toLowerCase()));
+
+  if (usable.length === 0) {
     return {
       needles: [],
       source: 'none',
@@ -109,10 +139,14 @@ export function readIdentityNeedles(root) {
    * 不然它們會去撞範本檔與測試的 fixture，而那兩個本來就該含有那些字串。
    */
   return {
-    needles: real,
+    needles: usable,
     source: 'local-file',
     detail:
-      `identity.local.ts（${real.length} 個值）` +
+      `identity.local.ts（${usable.length} 個值）` +
+      (clashing.length > 0
+        ? `，另外 ${clashing.length} 個跟專案釘住的時區同名，**沒有當成搜尋字串**` +
+          '（那個字串本來就公開寫在 dates.ts 裡，保護它沒有意義）'
+        : '') +
       (stillExample.length > 0
         ? `，另外 ${stillExample.length} 個還是範本的值（沒有拿來比對）`
         : ''),
