@@ -141,6 +141,11 @@ dig +short www.bellafoxy.com CNAME
 
 **誰做：你**　**時間：1 分鐘 + 等憑證**
 
+> ✅ 2026-09-04 做完。DNS 改完約 **15 分鐘** 後 Let's Encrypt 就簽出憑證
+> （`CN=bellafoxy.com`），接著 `https_enforced` 才開得起來 ——
+> 太早開會拿到「The certificate does not exist yet」。
+> 用指令的話是 `gh api -X PUT repos/EugeneYip/fox/pages -F https_enforced=true`。
+
 1. 回到 `https://github.com/EugeneYip/fox/settings/pages`
 2. **Custom domain** 填 `bellafoxy.com` → Save
 3. 等 GitHub 顯示 DNS check successful（DNS 沒生效前會顯示錯誤，等一下再試）
