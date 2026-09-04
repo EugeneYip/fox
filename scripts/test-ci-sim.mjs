@@ -75,10 +75,10 @@ async function fakeRepo({ steps, scripts, cname = true }) {
   return dir;
 }
 
-/** @param {string} dir */
-async function sim(dir) {
+/** @param {string} dir @param {string[]} [extra] */
+async function sim(dir, extra = []) {
   try {
-    const { stdout } = await run('node', [resolve(ROOT, 'scripts/ci-sim.mjs'), `--root=${dir}`]);
+    const { stdout } = await run('node', [resolve(ROOT, 'scripts/ci-sim.mjs'), `--root=${dir}`, ...extra]);
     return { out: stdout, code: 0 };
   } catch (err) {
     const e = /** @type {{ stdout?: string, code?: number }} */ (err);
@@ -102,6 +102,50 @@ console.log('\nCI 模擬的實測\n' + '─'.repeat(56));
   const { out, code } = await sim(dir);
   ok('步驟全過：兩個都印 ✓、離開碼 0', code === 0 && /✓ verify:all/.test(out) && /✓ beta/.test(out), out.slice(-400));
   ok('CNAME 那一道真的跑了 workflow 裡的 shell', out.includes('CNAME = example.test'), out.slice(-300));
+  /*
+   * 預設不真的裝，但要讓人知道有那條路。
+   *
+   * 第 7 輪（第二十七圈）之前，「npm ci 用 npm ls 代打」的理由是
+   * 站主的開機碟很緊 —— 而那個限制早就不成立了（家目錄從 5.7 GB
+   * 回到 77 GiB），只是沒有人回頭看。一個在限制下做的取捨，
+   * 限制消失了而選項連提都沒提，等於沒有人會發現可以重新選。
+   */
+  ok('預設那條路會說「--real-install 可以真的裝」', /--real-install/.test(out), out.slice(-400));
+  await rm(dir, { recursive: true, force: true });
+}
+
+/*
+ * ── --real-install 失敗時要說對死因 ──────────
+ *
+ * 這一格挑的是**失敗**那條路：假專案沒有 package-lock.json，
+ * `npm ci` 會立刻拒絕。成功那條路要真的下載幾百 MB，
+ * 不適合放進每次都跑的測試（實測 29 秒＋235 MB）。
+ *
+ * 而失敗那條才是這個模式存在的理由：CI 上 `npm ci` 一死，
+ * 後面什麼都不會跑，所以訊息必須說出「停在這一步」。
+ * 2026-09-04 第一次 CI 就是這樣死的（`.npmrc` 裡有一條只在
+ * 站主那台機器上成立的 cache 路徑）—— 那種問題 `npm ls` 完全看不到。
+ */
+{
+  const dir = await fakeRepo({ steps: ['verify:all'], scripts: { 'verify:all': 'echo ok' } });
+  const { out, code } = await sim(dir, ['--real-install']);
+  /*
+   * 判準裡最重要的是**最後那一項**：後面的步驟一步都不能跑。
+   *
+   * 第一版只驗 `code === 1` ＋ 兩句訊息，而突變掃描當場抓到它太粗：
+   * 把 `process.exitCode = 1; throw` 拿掉之後，訊息照樣印
+   * （它們在被拿掉的那兩行**之前**），而 exit 1 是**後面 CNAME 那一步**
+   * 給的 —— 那一格於是接住了完全不同的死因，還顯示成綠的。
+   *
+   * 「停在這一步」是一句可以驗字面的話：跑得到 `✓ verify:all`
+   * 就表示沒有停。同一圈第 4 輪也踩過一次同樣形狀的（同一條規則的
+   * 兩條分支，訊息不同而測試只比對規則 id）。
+   */
+  ok(
+    '--real-install：npm ci 失敗時 exit 1、說「停在這一步」，而且真的停住',
+    code === 1 && /npm ci 失敗/.test(out) && /停在這一步/.test(out) && !/✓ verify:all/.test(out),
+    `${out.slice(-500)}（exit ${code}）`,
+  );
   await rm(dir, { recursive: true, force: true });
 }
 

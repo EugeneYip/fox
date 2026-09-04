@@ -16,11 +16,27 @@
  * CI 拿到的就是那些，本機多出來的東西（`identity.local.ts`、`dist/`、
  * `.env`）在那裡都不存在。
  *
- * ## 為什麼 node_modules 用連結而不是 npm ci
+ * ## 為什麼 node_modules 預設用連結
  *
- * `npm ci` 要下載幾百 MB，而站主的開機碟很緊（第 7 輪〔第四圈〕
- * 就因為暫存區塞爆而讓 Bash 整個失敗過）。
- * lockfile 與 package.json 的一致性另外用 `npm ls` 驗，那才是 `npm ci` 會擋的東西。
+ * 原本的理由是：「`npm ci` 要下載幾百 MB，而站主的開機碟很緊
+ * （第 7 輪〔第四圈〕就因為暫存區塞爆而讓 Bash 整個失敗過）」。
+ *
+ * 第 7 輪（第二十七圈）回頭量了一次，**那個限制已經不成立了**：
+ *
+ *     家目錄（/System/Volumes/Data）  77 GiB 可用（當初是 5.7 GB）
+ *     ~/.npm                          6.4 MB（當初是 4.3 GB）
+ *     真的 npm ci                     29 秒、287 個套件、235 MB
+ *
+ * 一個在限制下做的取捨，限制消失了而沒有人回頭看。
+ * （同一圈第 2 輪也踩到同一個形狀：拿別人的站代打量出來的壓縮率，
+ * 自己的站上線之後沒有人重量，而且方向是反的。）
+ *
+ * 所以現在有 `--real-install`：真的跑一次 `npm ci`。
+ * **預設仍然是連結** —— 那條路快、不需要網路，適合每次 commit 前跑。
+ * `--real-install` 是「接手的人第一天會做的事」，偶爾跑一次就好。
+ *
+ * 沒有 `--real-install` 的時候，lockfile 與 package.json 的一致性
+ * 用 `npm ls` 驗 —— 那才是 `npm ci` 會擋的東西。
  */
 import { execFileSync, execSync } from 'node:child_process';
 import { rmSync, mkdirSync, symlinkSync, existsSync, readFileSync } from 'node:fs';
@@ -48,7 +64,24 @@ const ROOT = rootArg
  * 暫存放在專案所在的磁碟，不要放 /tmp ——
  * 開機碟只剩幾百 MB，而這裡會放一份完整的原始碼。
  */
-const TMP = resolve(ROOT, '..', `.ci-sim${rootArg ? '-test' : ''}`);
+/*
+ * 暫存目錄的名字要**帶行程編號**。
+ *
+ * 原本是固定的 `.ci-sim` / `.ci-sim-test`，而 `--root=` 那條路的
+ * 「上一層」對每一個測試 fixture 來說都是同一個系統暫存目錄 ——
+ * 也就是說任何兩個同時在跑的實例會互相 `rmSync` 掉對方。
+ *
+ * 第 7 輪（第二十七圈）真的撞到：一邊跑 `ci:sim --real-install`
+ * （它裡面會跑 `test:units` → `test:ci-sim`），一邊在做突變掃描，
+ * 結果那次 `--real-install` 報了三格失敗。**那三格跟被突變的東西無關**，
+ * 是兩個實例在同一個目錄上打架。
+ *
+ * 花了一輪才想通死因不是程式錯，是我自己同時跑了兩個 —— 而那正是
+ * 這一圈在問的事：換一個人來做，他會不會也被這個假訊號騙走一小時。
+ */
+const TMP = resolve(ROOT, '..', `.ci-sim${rootArg ? '-test' : ''}-${process.pid}`);
+/** 真的跑一次 npm ci，而不是把上層的 node_modules 連進來 */
+const REAL_INSTALL = process.argv.includes('--real-install');
 
 /*
  * deploy.yml 的步驟順序 —— **從 deploy.yml 讀出來的，不是抄一份**。
@@ -138,11 +171,15 @@ if (nodeMismatch) {
  * 擋不住「Pages 的設定對不對」。
  */
 const kinds = stepKinds(deployYml);
-const simulated = DEPLOY_STEPS.length + 1; // npm 的那幾步 ＋ CNAME 那段 shell
+/* npm 的那幾步 ＋ CNAME 那段 shell；--real-install 的話 npm ci 也算真的跑 */
+const simulated = DEPLOY_STEPS.length + 1 + (REAL_INSTALL ? 1 : 0);
 console.log(
   `  涵蓋：deploy.yml 共 ${kinds.total} 步 —— 這裡真的跑 ${simulated} 步` +
-    `（${DEPLOY_STEPS.length} 個 npm script ＋ CNAME 那段 shell），` +
-    `npm ci 用 npm ls 代打，其餘 ${kinds.uses} 步是 GitHub 的 action（含上傳與部署），本機跑不了`,
+    `（${DEPLOY_STEPS.length} 個 npm script ＋ CNAME 那段 shell` +
+    (REAL_INSTALL ? ' ＋ 真的 npm ci' : '') +
+    `），` +
+    (REAL_INSTALL ? '' : 'npm ci 用 npm ls 代打（--real-install 可以真的裝），') +
+    `其餘 ${kinds.uses} 步是 GitHub 的 action（含上傳與部署），本機跑不了`,
 );
 
 rmSync(TMP, { recursive: true, force: true });
@@ -154,15 +191,40 @@ try {
   const count = execSync(`find "${TMP}" -type f | wc -l`, { encoding: 'utf8' }).trim();
   console.log(`  版控裡的檔案：${count} 個`);
 
-  symlinkSync(resolve(ROOT, 'node_modules'), resolve(TMP, 'node_modules'));
+  if (REAL_INSTALL) {
+    /*
+     * 真的裝。這是 CI 那一步的原樣，而它會抓到 `npm ls` 抓不到的東西 ——
+     * 例如 2026-09-04 第一次 CI 死掉的那個原因（`.npmrc` 裡有一條
+     * 只在站主那台機器上成立的 cache 路徑），`npm ls` 完全看不到。
+     */
+    const t0 = Date.now();
+    try {
+      execFileSync('npm', ['ci'], { cwd: TMP, stdio: 'pipe' });
+      console.log(`  ✓ npm ci（真的裝）　${((Date.now() - t0) / 1000).toFixed(0)} 秒`);
+    } catch (err) {
+      const e = /** @type {{ stdout?: Buffer, stderr?: Buffer }} */ (err);
+      console.log('  X npm ci 失敗 —— CI 上會停在這一步，後面什麼都不會跑。');
+      console.log(
+        String(e?.stderr ?? e?.stdout ?? '')
+          .split('\n')
+          .slice(-8)
+          .map((l) => '      ' + l)
+          .join('\n'),
+      );
+      process.exitCode = 1;
+      throw new Error('npm ci 失敗');
+    }
+  } else {
+    symlinkSync(resolve(ROOT, 'node_modules'), resolve(TMP, 'node_modules'));
 
-  // npm ci 真正會擋的是這個
-  try {
-    execFileSync('npm', ['ls', '--depth=0'], { cwd: ROOT, stdio: 'ignore' });
-    console.log('  ✓ package.json 與 lockfile 一致（npm ci 不會失敗）');
-  } catch {
-    console.log('  X package.json 與 lockfile 對不上 —— npm ci 會直接失敗');
-    process.exitCode = 1;
+    // 不真的裝的話，npm ci 真正會擋的是這個
+    try {
+      execFileSync('npm', ['ls', '--depth=0'], { cwd: ROOT, stdio: 'ignore' });
+      console.log('  ✓ package.json 與 lockfile 一致（npm ci 不會失敗）');
+    } catch {
+      console.log('  X package.json 與 lockfile 對不上 —— npm ci 會直接失敗');
+      process.exitCode = 1;
+    }
   }
 
   let failed = 0;
