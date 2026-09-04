@@ -36,6 +36,7 @@ import { fileURLToPath } from 'node:url';
 import { XMLValidator } from 'fast-xml-parser';
 import { countItems } from './lib/count-items.mjs';
 import { ALL_TEMPLATE_TEXT } from './lib/entry-template.mjs';
+import { dedupedInlineStyles } from './lib/site-css.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const arg = (/** @type {string} */ name) => {
@@ -844,7 +845,55 @@ const RULES = [
   'feed-unreadable',
   'template-text-left',
   'field-undocumented',
+  'vertical-lost',
 ];
+/*
+ * ── schema 說詩詞預設直排，產出裡還有那條規則嗎 ──────────
+ *
+ * `content.config.ts` 寫著 `vertical: z.boolean().default(true)` ——
+ * 也就是**每一首詩預設直排**。直排是這個站最有辨識度的一件事，
+ * 而實作它的只有 `PoemBlock.astro` 裡一行 `writing-mode: vertical-rl`。
+ *
+ * 第 8 輪（第二十六圈）實測：把那一行改成 `horizontal-tb`，
+ * 產出的 CSS 裡 `vertical-rl` **整個消失**，而
+ * `npm run verify:all` 與 `npm run test:tools` **都是綠的**。
+ *
+ * 誰會告訴我們？讀者，或者她。全站的詩會變成橫排，
+ * 而沒有任何一道關卡覺得有問題。
+ *
+ * 判準只問「產出的 CSS 裡還有沒有那條宣告」—— 靜態掃描看不出版面對不對，
+ * 但看得出那條規則**在不在**。而它不在的時候，一定是壞的。
+ */
+{
+  const wantVertical = entries.filter(
+    (e) => e.collection === 'poems' && !/^vertical:\s*false\s*$/m.test(e.text),
+  ).length;
+
+  if (wantVertical > 0) {
+    saw('vertical-lost', wantVertical);
+    /* 外部 CSS 與內嵌 <style> 兩半都要看 —— Astro 兩種都會產生 */
+    let css = '';
+    for (const f of await readdir(resolve(DIST, '_astro')).catch(() => [])) {
+      if (f.endsWith('.css')) css += await readFile(resolve(DIST, '_astro', f), 'utf8');
+    }
+    css += dedupedInlineStyles(built.filter((b) => b.path.endsWith('.html')).map((b) => b.text)).join('\n');
+
+    if (css === '') {
+      notes.push('直排沒有檢查：產出裡找不到任何 CSS。');
+    } else if (!/writing-mode\s*:\s*vertical-rl/.test(css)) {
+      problems.push({
+        file: 'dist/（全站 CSS）',
+        id: 'vertical-lost',
+        msg:
+          `有 ${wantVertical} 首詩沒有寫 \`vertical: false\`（schema 的預設是直排），` +
+          '但產出的 CSS 裡找不到 `writing-mode: vertical-rl`。\n' +
+          '      全站的詩會變成橫排，而其他檢查看不出來。\n' +
+          '      改法：看 src/components/content/PoemBlock.astro —— 直排那一段是不是被改掉或刪掉了。',
+      });
+    }
+  }
+}
+
 for (const id of RULES) if (!subjects.has(id)) subjects.set(id, 0);
 
 console.log('\n內容管線檢查\n' + '─'.repeat(56));

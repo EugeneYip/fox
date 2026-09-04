@@ -245,6 +245,46 @@ const CASES = {
    * 所以「少一個欄位」是這一格與真實情況的**唯一**差別 ——
    * 用一份空的假指南也會紅，但那證明不了它數的是欄位而不是「檔案沒內容」。
    */
+  /*
+   * ── 直排從產出裡消失了 ──
+   *
+   * `content.config.ts` 寫著 `vertical: z.boolean().default(true)`，
+   * 而實作它的只有 `PoemBlock.astro` 裡一行 `writing-mode: vertical-rl`。
+   * 第 8 輪（第二十六圈）實測：把那一行改掉，六道關卡加兩套測試全綠，
+   * 而全站的詩會變成橫排。誰會告訴我們？讀者，或者她。
+   */
+  'vertical-lost': {
+    content: { 'poems/wu-yi-xiang.md': poem() },
+    dist: {
+      'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
+      '_astro/x.css': '.poem__original{writing-mode:horizontal-tb}\n',
+    },
+  },
+  /* 反向：CSS 裡還有那條宣告就不該報 */
+  'vertical-lost（還在就不報）': {
+    expect: 'no-title',
+    content: {
+      'poems/wu-yi-xiang.md': poem(),
+      'poems/broken.md': '---\nlang: zh-TW\n---\n沒有 title。\n',
+    },
+    dist: {
+      'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
+      '_astro/x.css': '.poem__original{writing-mode:vertical-rl}\n',
+    },
+  },
+  /* 反向：每一首都寫了 vertical: false 的話，這條沒有主體 */
+  'vertical-lost（全部橫排就沒東西可守）': {
+    expect: 'no-title',
+    content: {
+      'poems/wu-yi-xiang.md': poem().replace('---\n\n', '---\n') .replace('lang: zh-TW', 'lang: zh-TW\nvertical: false'),
+      'poems/broken.md': '---\nlang: zh-TW\n---\n沒有 title。\n',
+    },
+    dist: {
+      'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
+      '_astro/x.css': '.poem__original{writing-mode:horizontal-tb}\n',
+    },
+  },
+
   'field-undocumented': {
     guide: REAL_GUIDE.replaceAll('videoUrl', 'videoLink'),
     content: { 'poems/wu-yi-xiang.md': poem() },
