@@ -26,6 +26,7 @@ const run = promisify(execFile);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 const realClaude = await readFile(resolve(ROOT, 'CLAUDE.md'), 'utf8');
+const realContent = await readFile(resolve(ROOT, 'docs/CONTENT.md'), 'utf8');
 
 const html = (/** @type {string} */ body) =>
   `<!DOCTYPE html><html lang="zh-Hant-TW"><head><title>x</title></head><body>${body}</body></html>`;
@@ -216,8 +217,25 @@ const CASES = {
    */
   'rule-not-documented': {
     hit: { 'CLAUDE.md': '# 這一份沒有提到任何一條文案規則\n' },
-    /* 反向：真正的 CLAUDE.md 五條都提到了，不該響 */
-    miss: { 'CLAUDE.md': realClaude },
+    /* 反向：真正的兩份文件五條都提到了，不該響 */
+    miss: { 'CLAUDE.md': realClaude, 'docs/CONTENT.md': realContent },
+  },
+
+  /*
+   * ── 寫文案的人讀的那一份也要有 ──────────
+   *
+   * 第 6 輪（第二十七圈）量到：五條規則**全部只寫在 CLAUDE.md**，
+   * 而那份的第一行是「給之後在這個 repo 上工作的 Claude」。
+   * 真正在寫文案的人讀 docs/CONTENT.md（「這份是寫給 Bella 的」），
+   * 那裡一條都沒有 —— 而且有三條規則的錯誤訊息還寫著「見 CLAUDE.md」。
+   *
+   * 這一格守的是：CLAUDE.md 寫得再完整，寫文案的人那一份少了也要響。
+   * 少了它，把 DOCS 縮回只剩 CLAUDE.md 會靜靜通過。
+   */
+  'rule-not-documented（寫文案的人那一份沒寫）': {
+    expect: 'rule-not-documented',
+    hit: { 'CLAUDE.md': realClaude, 'docs/CONTENT.md': '# 寫東西的方法\n\n這一份沒有提到用字約定。\n' },
+    miss: { 'CLAUDE.md': realClaude, 'docs/CONTENT.md': realContent },
   },
   'halfwidth-ellipsis': {
     hit: { 'dist/index.html': html('<p>然後就...沒有然後了。</p>') },

@@ -458,7 +458,7 @@ for (const rel of ['src/i18n/ui.ts', 'src/config/site.ts']) {
 }
 
 /*
- * ── 每一條文案規則都要寫在 CLAUDE.md 裡 ────────────
+ * ── 每一條文案規則，兩份文件都要寫 ────────────
  *
  * 第 6 輪（第十四圈）量到的：`straight-quotes` 與 `halfwidth-ellipsis`
  * **只存在於這支腳本裡**，CLAUDE.md 的「語氣」一節沒有寫。
@@ -469,25 +469,52 @@ for (const rel of ['src/i18n/ui.ts', 'src/config/site.ts']) {
  * 這一條把「兩邊要一致」變成會紅燈的東西。判準只要求**規則 id 出現在
  * 文件裡**，不要求怎麼寫 —— 措辭是人的事，存在與否才是機器該管的。
  *
+ * ## 第 6 輪（第二十七圈）：讀者搞錯了
+ *
+ * 那一圈問「換一個人來做，做得到嗎」，而量到的是：五條規則
+ * **全部只寫在 `CLAUDE.md`**，那份的第一行是「給之後在這個 repo 上
+ * 工作的 Claude」。真正在寫文案的人讀的是 `docs/CONTENT.md`
+ * （「這份是寫給 Bella 的」），那裡一條都沒有 ——
+ * 而且有三條規則的錯誤訊息還寫著「見 CLAUDE.md」，等於把她指回一份
+ * 寫給 AI 的文件。
+ *
+ * 這一條檢查把「要寫下來」制度化了，而它指定的讀者是錯的。
+ *
+ * 改成**兩份都要有**：寫的人看得到，而且兩邊的清單不可能分岔 ——
+ * 加一條新規則會同時要求兩個地方。
+ *
  * `unused-i18n-key` 不在此列：它管的是 `ui.ts` 的衛生，不是寫作約定，
- * 寫進「語氣」那一節反而讓人困惑。
+ * 寫進那兩節反而讓人困惑。
  */
 {
   const NOT_A_WRITING_RULE = new Set(['unused-i18n-key']);
-  const claude = await readFile(resolve(ROOT, 'CLAUDE.md'), 'utf8').catch(() => '');
-  if (claude) {
-    /* 主體是「該寫進文件的規則」—— 讀不到 CLAUDE.md 的話是 0，那也是實話 */
-    saw('rule-not-documented', RULES.filter((r) => !NOT_A_WRITING_RULE.has(r.id)).length);
+  /** 一份給在這裡寫程式的人（含 AI），一份給真的在寫文案的人 */
+  const DOCS = ['CLAUDE.md', 'docs/CONTENT.md'];
+  /** @type {Map<string, string>} */
+  const docTexts = new Map();
+  for (const d of DOCS) {
+    const body = await readFile(resolve(ROOT, d), 'utf8').catch(() => '');
+    if (body) docTexts.set(d, body);
+  }
+  if (docTexts.size > 0) {
+    const writingRules = RULES.filter((r) => !NOT_A_WRITING_RULE.has(r.id));
+    /* 主體是「規則 × 讀得到的文件」—— 一份都讀不到的話是 0，那也是實話 */
+    saw('rule-not-documented', writingRules.length * docTexts.size);
     for (const rule of RULES) {
-      if (NOT_A_WRITING_RULE.has(rule.id) || claude.includes(rule.id)) continue;
+      if (NOT_A_WRITING_RULE.has(rule.id)) continue;
+      const missing = [...docTexts.entries()].filter(([, body]) => !body.includes(rule.id)).map(([d]) => d);
+      if (missing.length === 0) continue;
       problems.push({
-        file: 'CLAUDE.md',
+        file: missing[0],
         line: 0,
         id: 'rule-not-documented',
         text: rule.id,
         why:
-          `\`check:copy\` 會擋這條，但 CLAUDE.md 的「語氣」一節沒有寫 —— ` +
-          '照文件寫的人會被 CI 擋下來卻不知道為什麼。把它寫進去，或者把規則拿掉。',
+          `\`check:copy\` 會擋這條，但 ${missing.join(' 與 ')} 沒有寫到它 —— ` +
+          '照文件寫的人會被 CI 擋下來卻不知道為什麼。\n' +
+          '      改法：CLAUDE.md 寫給在這裡寫程式的人（「語氣」那一節），' +
+          'docs/CONTENT.md 寫給真的在寫文案的人（「用字的幾個約定」那一節）。' +
+          '兩份都要有，不然清單會分岔。或者把規則拿掉。',
       });
     }
   }
