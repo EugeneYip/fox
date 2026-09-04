@@ -51,8 +51,10 @@ npm run verify:all && npm run test:tools
 2. **零第三方請求。** 不加字型服務、分析工具、CDN、直接的 YouTube iframe。
    影片一律走 `VideoFacade`（按了才載入）。
 3. **只有中文與英文，不要加日文。** 站主 2026-09-02 明確說過。
-4. **不要編造她的平臺帳號。** 除了 YouTube（@FoxPoetry），其他平臺的帳號
-   都還不知道。`src/config/sources.mjs` 只有一筆，那是事實不是待辦。
+4. **不要編造她的平臺帳號。** 網站上只有 YouTube（@FoxPoetry）一個來源，
+   `src/config/sources.mjs` 只有一筆，那是事實不是待辦。
+   另外有一個平臺的帳號**是知道的**，但站主 2026-09-04 說不放上網站，
+   **帳號名也不寫進這個公開 repo**。細節見 `src/config/sources.mjs` 開頭。
 
 ---
 

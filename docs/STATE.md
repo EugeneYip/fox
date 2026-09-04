@@ -78,11 +78,11 @@ npm run fixtures -- --clean         # 一定要清乾淨
 
 | | 狀態 | 卡在哪 |
 |---|---|---|
-| **推上 GitHub** | ❌ 還沒 | Claude 這邊是教育帳號，接不到 GitHub。**只能 Eugene 自己做** |
-| **DNS 切到 GitHub Pages** | ❌ 還沒 | 要在 Porkbun 後台操作，見 DEPLOY.md 第 3 步 |
+| **推上 GitHub** | ✅ 已推 | 2026-09-04 推上 `EugeneYip/fox`（先 private 檢查、再轉公開）。213 個 commit 壓成 1 個（`a67a0a0`），壓縮前後 tree hash 一致，私密檔案從未進過歷史。Pages 已啟用（`build_type=workflow`）、`cname=bellafoxy.com`，部署 workflow 綠燈。**「接不到 GitHub」那句是錯的，已實測推翻** |
+| **DNS 切到 GitHub Pages** | 🔄 進行中 | 2026-09-04 開始。要刪 apex 與 `www` 兩筆指向舊站的轉址，改成 4 筆 A（`185.199.108–111.153`）＋ `www` CNAME → `eugeneyip.github.io.`。**信件記錄（MX、SPF TXT）與五個 vanity 轉址一律不動。** DNS 生效後才能開 `https_enforced` |
 | **YouTube 影片同步** | ✅ 已在跑 | 走官方 Atom feed，**不需要金鑰**。已同步 9 支影片。⚠ 那個 feed 只回**最新 15 支**（第 4 輪〔第十一圈〕用大頻道實測），所以**第 16 支之後**更早的影片這條路就看不到了 —— 到時候才需要 `YOUTUBE_API_KEY` |
 | **頻道本身** | ⏸ 停更中 | 最後一支影片 2024-10-26。**站主知道，是刻意的**（2026-09-04 確認）。同步到的 9 支全是短影音詩詞（王昌齡、杜甫、李白⋯），確認是他們自己的頻道。另外有一個長影片頻道是別人的，只是其中一支提到她 —— **那個不在來源清單裡，也不該加** |
-| **她其他平臺的帳號** | ⏸ 未知 | **除了 YouTube，一個都不知道。** 這是事實不是待辦 |
+| **她其他平臺的帳號** | ⏸ 刻意不放 | 網站上只有 YouTube 一個來源。2026-09-04 整理 DNS 轉址時看到**另一個平臺的帳號**，站主當天明確說不可以放上網站 —— 所以那個帳號名**不寫進這個公開 repo**（寫進註解等於發佈它）。理由從「不知道」變成「知道，而且刻意不放」，結果一樣是一筆 |
 | **英文文案** | ✅ 已校 | 第 6 輪逐句校過。但英文版目前沒有**內容**，只有介面 |
 
 ---
@@ -138,27 +138,29 @@ npm run verify:all && npm run test:tools
 （那支腳本刻意不叫你自己下 `git log -S"名字"` —— 那會把本名留在 shell 的
 歷史紀錄裡，為了查個資外洩而製造另一份個資。）
 
-## Eugene 接下來要做的四件事
+## 上線這條路走到哪了
 
-完整步驟與疑難排解在 [DEPLOY.md](DEPLOY.md)，這裡只列順序：
+完整步驟與疑難排解在 [DEPLOY.md](DEPLOY.md)。2026-09-04 的進度：
 
-0. ~~先清掉 git 歷史裡的個資~~ —— **已經做了**（2026-09-04 壓成一個 commit）。
-   只剩一個選擇性的收尾：`git reflog expire --expire=now --all && git gc --prune=now`
-1. **推上 GitHub** —— 本機已經 `git init` 並且有 commit 了，只差 remote 與 push
-   - push 之後到 repo 的 Settings → Secrets → Actions 加一個 `PRIVACY_NEEDLES`，
-     內容是要防的字串（本名、校名⋯⋯），一行一個。
-     沒設的話 CI 的隱私稽核會明講「身分規則沒有執行」
-2. **開啟 GitHub Pages**，Source 選「GitHub Actions」
-3. **改 Porkbun 的 DNS** —— 先刪掉現有的 URL 轉址，再設 A/AAAA 或 ALIAS
-4. **在 GitHub 綁定 `bellafoxy.com`**，等憑證，勾 Enforce HTTPS
+0. ✅ **清掉 git 歷史裡的個資** —— 213 個 commit 壓成 1 個。
+   只剩一個選擇性的收尾（在 Eugene 那台機器上跑）：
+   `git reflog expire --expire=now --all && git gc --prune=now`
+1. ✅ **推上 GitHub** —— `EugeneYip/fox`，先 private 檢查、確認乾淨後轉公開。
+   `PRIVACY_NEEDLES` secret 已設（Eugene 自己填的值），CI 上實測有生效：
+   輸出寫「身分規則：8 個值，來自 PRIVACY_NEEDLES」
+2. ✅ **開啟 GitHub Pages** —— `build_type=workflow`、`cname=bellafoxy.com`，
+   部署 workflow 綠燈，站台實測回 200（36 KB，標題「狐說八道」）
+3. 🔄 **改 Porkbun 的 DNS** —— 進行中，見上面那張表
+4. ⏸ **勾 Enforce HTTPS** —— 要等第 3 步生效、GitHub 簽出憑證才能開。
+   現在 `https_enforced=false`，提早開會拿到「憑證還不存在」
 
-推之前一定要跑 `npm run audit:privacy`，確認沒有個資外洩。
+每次改動之前都要跑 `npm run audit:privacy`，確認沒有個資外洩。
 
 ---
 
 ## 版控狀態
 
-本機有 git 紀錄，**但還沒有 remote，也還沒 push**。
+本機有 git 紀錄，remote 是 `EugeneYip/fox`，**2026-09-04 已經推上去了**。
 
 ```bash
 git log --oneline    # 看目前的檢查點
