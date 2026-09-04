@@ -1,0 +1,39 @@
+# build
+dist/
+.astro/
+.output/
+
+# deps
+node_modules/
+.npm-cache/
+
+# env / secrets —— 千萬不要 commit
+.env
+.env.*
+!.env.example
+
+# ⚠️ 個人資料。這個 repo 是公開的，本名／學歷／email 只能放在這個檔案裡，
+# 絕對不要拿掉這一行。範本見 src/config/identity.local.example.ts
+src/config/identity.local.ts
+
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# logs
+*.log
+npm-debug.log*
+
+# 暫存
+.tmp/
+*.local
+
+# Claude Code 的本機設定（launch.json 會 commit，個人設定不會）
+.claude/settings.local.json

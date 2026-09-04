@@ -1,0 +1,183 @@
+---
+/**
+ * 全站底層版型。所有頁面都經過這裡。
+ *
+ * 這個檔案負責三件事：<head> 的 metadata、深淺色主題的初始化、
+ * 以及 header / main / footer 的骨架。
+ */
+import { site, LOCALES, LOCALE_HREFLANG, DEFAULT_LOCALE, type Locale } from '@config/site';
+import { buildSeo, buildJsonLd, type SeoInput } from '@lib/seo';
+import { useTranslations, switchLocalePath } from '@i18n/utils';
+import Header from '@components/layout/Header.astro';
+import Footer from '@components/layout/Footer.astro';
+import '@styles/global.css';
+
+type Props = Omit<SeoInput, 'locale' | 'pathname'> & {
+  locale?: Locale;
+  /** 首頁的 hero 需要滿版，不套 wrap */
+  bare?: boolean;
+  /**
+   * 這一頁**真的存在**的語言。預設全部 —— `[...locale]` 的頁面兩種語言都會產生。
+   *
+   * 內容衍生的頁面（內頁、標籤頁）只有一種語言，要自己傳。
+   * 第 7 輪（第十一圈）量到：全站 19 個頁面的 `hreflang` 指向不存在的網址 ——
+   * 那是在對搜尋引擎宣告一個會回 404 的頁面。
+   */
+  availableLocales?: readonly Locale[];
+  class?: string;
+};
+
+const {
+  locale = (Astro.currentLocale as Locale) ?? DEFAULT_LOCALE,
+  bare,
+  class: className,
+  availableLocales = LOCALES,
+  ...seoInput
+} = Astro.props;
+
+const pathname = Astro.url.pathname;
+const seo = buildSeo({ ...seoInput, locale, pathname });
+const jsonLd = buildJsonLd(seo, locale);
+const t = useTranslations(locale);
+
+/* 只宣告真的存在的那幾個語言 —— 指到 404 的 hreflang 比沒有 hreflang 更糟 */
+const alternates = LOCALES.filter((l) => availableLocales.includes(l)).map((l) => ({
+  hreflang: LOCALE_HREFLANG[l],
+  href: new URL(switchLocalePath(pathname, l), site.url).toString(),
+}));
+---
+
+<!doctype html>
+<html lang={seo.htmlLang} data-theme-pref="system">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+
+    <title>{seo.title}</title>
+    <meta name="description" content={seo.description} />
+    <meta name="robots" content={seo.robots} />
+    <link rel="canonical" href={seo.canonical} />
+
+    {alternates.map((a) => (
+      <link rel="alternate" hreflang={a.hreflang} href={a.href} />
+    ))}
+    <link rel="alternate" hreflang="x-default" href={site.url} />
+
+    {/* 對外連結不送 referrer；同站內部照常，才不會影響自家的相對連結行為 */}
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+
+    <meta name="theme-color" content={site.themeColor.light} media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content={site.themeColor.dark} media="(prefers-color-scheme: dark)" />
+
+    {/* Open Graph */}
+    <meta property="og:type" content={seo.type} />
+    <meta property="og:title" content={seo.title} />
+    <meta property="og:description" content={seo.description} />
+    <meta property="og:url" content={seo.canonical} />
+    <meta property="og:site_name" content={seo.siteName} />
+    <meta property="og:locale" content={seo.htmlLang.replace('-', '_')} />
+    <meta property="og:image" content={seo.ogImage} />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    {seo.type === 'article' && seo.publishedAt && (
+      <meta property="article:published_time" content={seo.publishedAt} />
+    )}
+    {seo.type === 'article' && seo.updatedAt && (
+      <meta property="article:modified_time" content={seo.updatedAt} />
+    )}
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <link
+      rel="alternate"
+      type="application/rss+xml"
+      title={seo.siteName}
+      href={new URL('/rss.xml', site.url).toString()}
+    />
+    {/*
+      兩份 feed 都要讓閱讀器看得見。/rss.xml 只有站上自己寫的東西，
+      /rss-all.xml 還包含各平臺同步回來的 —— 而站上現在真正在更新的是後者。
+      少了這一條，那份 feed 建得出來但誰都到不了（第 4 輪〔第十八圈〕量到 0 處）。
+    */}
+    <link
+      rel="alternate"
+      type="application/rss+xml"
+      title={`${seo.siteName}${t('rss.allSuffix')}`}
+      href={new URL('/rss-all.xml', site.url).toString()}
+    />
+
+    <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} is:inline />
+
+    {/* 頁面自己要加的 <head> 內容，例如分頁的 rel=prev/next */}
+    <slot name="head" />
+
+    {/*
+      主題初始化必須在畫面繪製前跑完，否則深色模式的使用者會先看到一閃的白底。
+      這是全站唯一一段 inline script，而且不對外送任何東西。
+
+      詩的直排／橫排偏好也在這裡讀。第 2 輪（第十圈）量出來：那個偏好原本
+      只由 body 末尾的 module 設定，而 module 是 defer 的 —— 存過「橫排」的人
+      第一次繪製看到的是直排，然後整頁往下跳。實測跳的量（1024px）：
+      烏衣巷 22px、靜夜思 82px、琵琶行節錄 **434px**。
+      同一個問題主題早就用「在 head 擋著跑」解掉了，詩沒有。
+    */}
+    {/*
+      `data-js` 標記「JS 有跑」。第 5 輪（第十二圈）量到：主題鈕與詩的方向鈕
+      完全靠 click 監聽器，沒有 JS 的時候它們**看得到、按得到、而且螢幕閱讀器
+      會念「按一下改為橫排」—— 但按了什麼都不會發生**。
+
+      這個站已經為「沒有 JS」設計過兩次（語言鈕用原生 <details>、搜尋有 noscript
+      指出替代路徑），所以那兩個按鈕是跟自己的意圖不一致，不是新的要求。
+      沒有 JS 時把它們藏起來（規則在 global.css）—— 藏掉的是一個做不到事情的
+      控制項，不是功能：主題仍然跟隨系統（`light-dark()` 是純 CSS），
+      詩仍然是作者指定的方向（實測 vertical-rl／horizontal-tb 都對）。
+
+      那一行放在 try **外面**：底下讀 localStorage 可能丟例外，
+      而「JS 有跑」這件事跟儲存能不能用無關。
+
+      註解寫在這裡而不是腳本裡面 —— `is:inline` 的內容不會被壓縮，
+      第一版把這段說明放進腳本，每頁內嵌 JS 從 2.3 KB 變成 2.8 KB（預算 94%）。
+    */}
+    <script is:inline>
+      (() => {
+        document.documentElement.dataset.js = '';
+        try {
+          const saved = localStorage.getItem('fox-theme');
+          if (saved === 'light' || saved === 'dark') {
+            document.documentElement.dataset.theme = saved;
+            document.documentElement.dataset.themePref = saved;
+          }
+          const poem = localStorage.getItem('fox-poem-orientation');
+          if (poem === 'horizontal' || poem === 'vertical') {
+            document.documentElement.dataset.poemOrientation = poem;
+          }
+        } catch (_) {
+          /* 無痕模式會擋 localStorage —— 那就跟隨系統，不是問題 */
+        }
+      })();
+    </script>
+  </head>
+
+  <body>
+    <a class="skip-link" href="#main">{t('nav.skipToContent')}</a>
+
+    <Header locale={locale} availableLocales={availableLocales} />
+
+    <main id="main" class:list={[!bare && 'wrap', className]}>
+      <slot />
+    </main>
+
+    <Footer locale={locale} />
+  </body>
+</html>
+
+<style is:global>
+  main {
+    flex: 1 0 auto;
+    padding-block: var(--s-7) var(--s-9);
+  }
+</style>

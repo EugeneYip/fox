@@ -1,0 +1,75 @@
+---
+/**
+ * 狐火 —— 首頁 hero 底下幾點浮動的暖光。
+ *
+ * 傳說狐狸口中會吐出磷火。這裡用幾個模糊的圓點慢慢飄，
+ * 不是特效，是氣氛。純 CSS，沒有 JavaScript，沒有 canvas。
+ *
+ * prefers-reduced-motion 時會完全停下來（不是變慢，是停），
+ * 因為對前庭系統敏感的人來說，緩慢的持續移動反而更難受。
+ */
+interface Props {
+  count?: number;
+}
+
+const { count = 7 } = Astro.props;
+const embers = Array.from({ length: count }, (_, i) => ({
+  left: 6 + ((i * 37) % 88),
+  delay: (i * 2.7) % 14,
+  duration: 16 + ((i * 5) % 11),
+  size: 3 + ((i * 3) % 5),
+  drift: i % 2 === 0 ? 1 : -1,
+}));
+---
+
+<div class="foxfire" aria-hidden="true">
+  {embers.map((e) => (
+    <span
+      class="foxfire__ember"
+      style={`
+        --left:${e.left}%;
+        --delay:${e.delay}s;
+        --duration:${e.duration}s;
+        --size:${e.size}px;
+        --drift:${e.drift};
+      `}
+    />
+  ))}
+</div>
+
+<style>
+  .foxfire {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .foxfire__ember {
+    position: absolute;
+    inset-block-end: -10%;
+    inset-inline-start: var(--left);
+    inline-size: var(--size);
+    block-size: var(--size);
+    border-radius: 50%;
+    background: var(--c-flame);
+    filter: blur(1.5px);
+    opacity: 0;
+    animation: rise var(--duration) var(--delay) infinite linear;
+  }
+
+  @keyframes rise {
+    0%   { transform: translate3d(0, 0, 0) scale(0.7); opacity: 0; }
+    12%  { opacity: 0.5; }
+    70%  { opacity: 0.28; }
+    100% {
+      transform: translate3d(calc(var(--drift) * 40px), -110%, 0) scale(1.15);
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .foxfire { display: none; }
+  }
+</style>

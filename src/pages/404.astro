@@ -1,0 +1,131 @@
+---
+/**
+ * 404。
+ *
+ * 這一頁刻意不放在 [...locale] 底下 —— GitHub Pages 只會找根目錄的
+ * /404.html，放在語言資料夾裡它找不到。
+ */
+import Base from '@layouts/Base.astro';
+import { useTranslations, localizePath } from '@i18n/utils';
+import { DEFAULT_LOCALE } from '@config/site';
+import FoxMark from '@components/fox/FoxMark.astro';
+
+const locale = DEFAULT_LOCALE;
+const t = useTranslations(locale);
+
+/*
+ * ── 這一頁兩種語言都要看得懂 ──────────────────────────
+ *
+ * 第 6 輪（第十八圈）量到的：GitHub Pages 對**任何**找不到的路徑都送這一份，
+ * 包含 `/en/⋯` 打錯的那些。而這一頁整頁只有中文 —— 站上唯一一頁
+ * 英文讀者完全讀不懂的，偏偏是他迷路時看到的那一頁。
+ *
+ * 兩排連結不是重複：中文那排指向 `/`、`/archive`、`/search`，
+ * 英文那排指向 `/en/⋯`。迷路的人會被送回**自己那一邊**。
+ */
+const en = useTranslations('en');
+---
+
+{/*
+  `availableLocales={[]}` = 這一頁沒有任何語言版本的分身。
+  GitHub Pages 只認根目錄那一份 `404.html`，所以 `/en/404` 不存在
+  （第 7 輪〔第十一圈〕的連結掃描指出來的）。給空陣列之後，
+  語言鈕的兩個選項都會連到該語言的**首頁** —— 對一個迷路的人來說也正好是對的。
+*/}
+<Base locale={locale} availableLocales={[]} title="404" noindex>
+  <div class="nf">
+    <div class="nf__mark"><FoxMark size={90} variant="line" /></div>
+    <h1 class="nf__title">{t('error.404.title')}</h1>
+    <p class="nf__body muted">{t('error.404.body')}</p>
+    <p class="nf__links ui">
+      <a href={localizePath('/', locale)}>{t('error.404.back')}</a>
+      <span aria-hidden="true">·</span>
+      <a href={localizePath('/archive', locale)}>{t('archive.title')}</a>
+      <span aria-hidden="true">·</span>
+      <a href={localizePath('/search', locale)}>{t('search.title')}</a>
+    </p>
+
+    <div class="nf__en" lang="en">
+      <p class="nf__body muted">{en('error.404.body')}</p>
+      <p class="nf__links ui">
+        <a href={localizePath('/', 'en')}>{en('error.404.back')}</a>
+        <span aria-hidden="true">·</span>
+        <a href={localizePath('/archive', 'en')}>{en('archive.title')}</a>
+        <span aria-hidden="true">·</span>
+        <a href={localizePath('/search', 'en')}>{en('search.title')}</a>
+      </p>
+    </div>
+  </div>
+</Base>
+
+<style>
+  .nf {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: var(--s-4);
+    padding-block: var(--s-9);
+  }
+
+  .nf__mark {
+    color: var(--c-flame);
+    opacity: 0.8;
+    /* 狐狸叼著頁面跑掉了 —— 讓牠稍微歪一點 */
+    transform: rotate(-8deg);
+  }
+
+  .nf__title { font-size: var(--t-lg); }
+
+  /*
+   * 英文那一段是「另一條路」不是主要內容，所以用一條分隔線與較淡的字
+   * 把層次做出來 —— 不是把同一件事說兩次。
+   */
+  .nf__en {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--s-2);
+    margin-block-start: var(--s-5);
+    padding-block-start: var(--s-5);
+    border-block-start: var(--border-thin);
+    inline-size: min(100%, 34ch);
+  }
+  .nf__en .nf__links { margin-block-start: 0; }
+
+  .nf__body { max-inline-size: 34ch; }
+
+  .nf__links {
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+    font-size: var(--t-sm);
+    margin-block-start: var(--s-3);
+  }
+
+  /*
+   * 高度明寫，跟第 8 輪（第六圈）給分頁做的一樣。
+   *
+   * 原本什麼都沒寫，高度整個來自 line-height —— 而它**剛好**過得了
+   * WCAG 2.5.8（互動目標至少 24×24）。第 8 輪（第七圈）實測：
+   *
+   *   900px 視窗 → 42 × 26      （餘裕 2px）
+   *   320px 視窗 → 39.2 × 24.15（餘裕 **0.15px**）
+   *
+   * 字級是 `--t-sm`（clamp），行高是 `--lh-body`（1.85），`padding` 是 0，
+   * 兩個乘起來剛好比 24 大一點點 —— 跟分頁那次是同一個機制，
+   * 也是同一種「合格是巧合」。
+   *
+   * 順帶記一個教訓：第 8 輪（第六圈）量這三個連結時得到 26px、
+   * 判定「餘裕充足」—— 那是在 900px 的視窗下量的。
+   * **數字沒有錯，錯在沒有帶著它的量測條件。**
+   */
+  .nf__links a {
+    display: flex;
+    align-items: center;
+    min-block-size: 2rem;
+    text-decoration: none;
+    color: var(--c-ink-soft);
+  }
+  .nf__links a:hover { color: var(--c-flame-ink); }
+</style>

@@ -1,0 +1,41 @@
+---
+/**
+ * 空狀態。
+ *
+ * 新網站大部分頁面一開始都是空的。與其顯示一片空白，
+ * 不如講一句話 —— 這是「還沒開始」，不是「壞掉了」。
+ */
+import FoxMark from '@components/fox/FoxMark.astro';
+
+interface Props {
+  title: string;
+  body?: string;
+}
+const { title, body } = Astro.props;
+---
+
+<div class="empty">
+  <FoxMark size={52} variant="line" />
+  <p class="empty__title">{title}</p>
+  {body && <p class="empty__body muted">{body}</p>}
+  <slot />
+</div>
+
+<style>
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--s-3);
+    padding-block: var(--s-8);
+    text-align: center;
+    color: var(--c-ink-faint);
+  }
+
+  .empty__title {
+    font-size: var(--t-md);
+    color: var(--c-ink-soft);
+  }
+
+  .empty__body { max-inline-size: 32ch; }
+</style>

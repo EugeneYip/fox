@@ -1,0 +1,241 @@
+---
+import { render, getEntry, type CollectionEntry } from 'astro:content';
+import Base from '@layouts/Base.astro';
+import { entryPaths } from '@i18n/paths';
+import { getEntries, getNeighbors, getTranslations } from '@lib/content';
+import { useTranslations, localizePath } from '@i18n/utils';
+import { formatDate, isoDate } from '@lib/dates';
+import { privacy } from '@config/privacy';
+import type { Locale } from '@config/site';
+import CoverImage from '@components/content/CoverImage.astro';
+import PoemBlock from '@components/content/PoemBlock.astro';
+import VideoFacade from '@components/content/VideoFacade.astro';
+import TagList from '@components/ui/TagList.astro';
+import FoxSeal from '@components/fox/FoxSeal.astro';
+
+export async function getStaticPaths() {
+  return entryPaths(await getEntries('poems'));
+}
+
+const { entry, locale } = Astro.props as { entry: CollectionEntry<'poems'>; locale: Locale };
+const { Content } = await render(entry);
+const t = useTranslations(locale);
+const neighbors = await getNeighbors('poems', entry);
+/*
+ * 這一篇真的有哪幾種語言。`getTranslations()`（靠 `translationKey` 串同一篇的
+ * 不同語言版本）從第一圈就寫好了，但**從來沒有人用過** —— 第 7 輪（第十一圈）
+ * 量到語言鈕與 hreflang 都指向不存在的網址，才把它接上。
+ */
+const availableLocales = [locale, ...(await getTranslations('poems', entry)).map((tr) => tr.lang)];
+
+/*
+ * 用 getEntry 逐一取，而不是 getEntries。
+ * getEntries 回傳的是「所有 collection 的聯集」型別，拿不到 data.poem；
+ * getEntry 保留了 reference 上的 collection 資訊，型別才會準。
+ */
+const related = (
+  await Promise.all(entry.data.related.map((ref) => getEntry(ref)))
+).filter((r): r is CollectionEntry<'poems'> => Boolean(r));
+
+/** 從 YouTube 網址取出影片 ID，支援 watch / youtu.be / shorts 三種形式 */
+function youtubeId(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const u = new URL(url);
+    if (u.hostname === 'youtu.be') return u.pathname.slice(1) || undefined;
+    if (u.pathname.startsWith('/shorts/')) return u.pathname.split('/')[2] || undefined;
+    return u.searchParams.get('v') ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const videoId = youtubeId(entry.data.videoUrl);
+const description =
+  entry.data.description ??
+  `${entry.data.poem.author}〈${entry.data.poem.title}〉—— ${entry.data.plain?.slice(0, 60) ?? ''}`;
+---
+
+<Base
+  locale={locale}
+  availableLocales={availableLocales}
+  title={`${entry.data.poem.title}・${entry.data.poem.author}`}
+  description={description}
+  type="article"
+  publishedAt={entry.data.publishedAt}
+  updatedAt={entry.data.updatedAt}
+  tags={entry.data.tags}
+  class="wrap--content"
+>
+  {entry.data.cover && <CoverImage src={entry.data.cover} alt={entry.data.coverAlt} width={760} />}
+
+  <PoemBlock
+    poem={entry.data.poem}
+    plain={entry.data.plain}
+    annotations={entry.data.annotations}
+    vertical={entry.data.vertical}
+    locale={locale}
+  />
+
+  {entry.body?.trim() && (
+    <section class="poem-page__section" aria-label={t('poem.thoughts')}>
+      <h2 class="poem-page__section-title ui">{t('poem.thoughts')}</h2>
+      <div class="prose"><Content /></div>
+    </section>
+  )}
+
+  {videoId && (
+    <section class="poem-page__section" aria-label={t('poem.listen')}>
+      <h2 class="poem-page__section-title ui">{t('poem.listen')}</h2>
+      {/*
+        iframe 的 title 跟底下 VideoFacade 的對齊 ——〈詩名〉作者。
+        第 3 輪（第十四圈）比對時發現同一件事的兩條路寫法不同：
+        這一條沒有補書名號，另一條有。**這條路現在走不到**
+        （`allowThirdPartyEmbeds` 翻成 true 會被 audit:privacy 當場擋下，
+        第 5 輪〔第十一圈〕實測過），所以這個改動沒辦法在產出上驗證 ——
+        但留著兩種寫法更糟。
+      */}
+      {privacy.allowThirdPartyEmbeds ? (
+        <div class="poem-page__embed">
+          <iframe
+            src={`https://www.youtube-nocookie.com/embed/${videoId}?rel=0`}
+            title={`〈${entry.data.poem.title}〉${entry.data.poem.author}`}
+            loading="lazy"
+            allow="accelerometer; encrypted-media; picture-in-picture; fullscreen"
+            referrerpolicy="strict-origin-when-cross-origin"
+          />
+        </div>
+      ) : (
+        <VideoFacade videoId={videoId} title={`〈${entry.data.poem.title}〉${entry.data.poem.author}`} locale={locale} />
+      )}
+    </section>
+  )}
+
+  <footer class="poem-page__foot">
+    <FoxSeal char="狐" size={34} />
+    <time class="ui faint" datetime={isoDate(entry.data.publishedAt)}>
+      {formatDate(entry.data.publishedAt, locale)}
+    </time>
+    <TagList tags={entry.data.tags} locale={locale} />
+  </footer>
+
+  {related.length > 0 && (
+    <section class="poem-page__section" aria-label={t('poem.related')}>
+      <h2 class="poem-page__section-title ui">{t('poem.related')}</h2>
+      <ul class="poem-page__related ui">
+        {related.map((r) => (
+          <li>
+            <a href={localizePath(`/poems/${r.id}`, locale)}>
+              〈{r.data.poem.title}〉<span class="faint">{r.data.poem.author}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )}
+
+  {(neighbors.newer || neighbors.older) && (
+    <nav class="poem-page__nav ui" aria-label={t('nav.adjacent')}>
+      {neighbors.newer ? (
+        <a href={localizePath(`/poems/${neighbors.newer.id}`, locale)}>
+          <span class="faint"><span aria-hidden="true">←</span> {t('list.newer')}</span>
+          <span>〈{neighbors.newer.data.poem.title}〉</span>
+        </a>
+      ) : <span />}
+      {neighbors.older && (
+        <a class="poem-page__nav-end" href={localizePath(`/poems/${neighbors.older.id}`, locale)}>
+          <span class="faint">{t('list.older')} <span aria-hidden="true">→</span></span>
+          <span>〈{neighbors.older.data.poem.title}〉</span>
+        </a>
+      )}
+    </nav>
+  )}
+</Base>
+
+<style>
+  .poem-page__section {
+    margin-block-start: var(--s-8);
+    padding-block-start: var(--s-5);
+    border-block-start: var(--border-thin);
+  }
+
+  .poem-page__section-title {
+    font-size: var(--t-xs);
+    font-weight: 600;
+    letter-spacing: var(--ls-wide);
+    color: var(--c-ink-faint);
+    text-transform: uppercase;
+    margin-block-end: var(--s-4);
+  }
+
+  .poem-page__embed {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    border-radius: var(--r-md);
+    overflow: hidden;
+  }
+
+  .poem-page__embed iframe {
+    position: absolute;
+    inset: 0;
+    inline-size: 100%;
+    block-size: 100%;
+    border: 0;
+  }
+
+  .poem-page__foot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--s-3);
+    margin-block-start: var(--s-8);
+    padding-block-start: var(--s-6);
+    border-block-start: var(--border-thin);
+  }
+
+  .poem-page__related {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: var(--s-2);
+  }
+
+  .poem-page__related li { margin: 0; }
+
+  .poem-page__related a {
+    font-size: var(--t-sm);
+    text-decoration: none;
+  }
+
+  .poem-page__related a:hover { color: var(--c-flame-ink); }
+
+  .poem-page__nav {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--s-4);
+    margin-block-start: var(--s-7);
+    padding-block-start: var(--s-5);
+    border-block-start: var(--border-thin);
+  }
+
+  .poem-page__nav a {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-1);
+    font-size: var(--t-sm);
+    text-decoration: none;
+  }
+
+  .poem-page__nav a:hover { color: var(--c-flame-ink); }
+
+  .poem-page__nav-end {
+    text-align: end;
+    grid-column: 2;
+  }
+
+  @media (max-width: 34rem) {
+    .poem-page__nav { grid-template-columns: 1fr; }
+    .poem-page__nav-end { grid-column: 1; text-align: start; }
+  }
+</style>

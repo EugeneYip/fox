@@ -1,0 +1,24 @@
+---
+import ListPage from '@layouts/ListPage.astro';
+import { localePaths } from '@i18n/paths';
+import { getEntries, paginate } from '@lib/content';
+import { useTranslations } from '@i18n/utils';
+import type { Locale } from '@config/site';
+
+export const getStaticPaths = () => localePaths();
+
+const { locale } = Astro.props as { locale: Locale };
+const t = useTranslations(locale);
+
+const entries = await getEntries('notes', { lang: locale, featuredFirst: false });
+const page = paginate(entries, 1, '/notes');
+---
+
+<ListPage
+  locale={locale}
+  collection="notes"
+  page={page}
+  title={t('section.notes')}
+  lead={t('notes.lead')}
+  basePath="/notes"
+/>

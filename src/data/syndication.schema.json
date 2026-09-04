@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Syndication cache",
+  "description": "scripts/sync-feeds.mjs 的輸出。不要手改，改了下次同步會被蓋掉。",
+  "type": "object",
+  "required": ["itemCount", "sources", "items"],
+  "properties": {
+    "generatedAt": { "type": ["string", "null"], "format": "date-time" },
+    "itemCount": { "type": "integer", "minimum": 0 },
+    "sources": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": { "enum": ["ok", "error"] },
+          "platform": { "type": "string" },
+          "itemCount": { "type": "integer" },
+          "lastSuccessAt": { "type": ["string", "null"] },
+          "message": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "sourceId", "platform", "title", "url"],
+        "properties": {
+          "id": { "type": "string" },
+          "sourceId": { "type": "string" },
+          "platform": { "type": "string" },
+          "media": { "type": "string" },
+          "title": { "type": "string" },
+          "url": { "type": "string", "format": "uri" },
+          "publishedAt": { "type": ["string", "null"] },
+          "summary": { "type": "string" },
+          "lang": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "thumbnail": { "type": ["string", "null"] },
+          "externalId": { "type": ["string", "null"] },
+          "firstSeenAt": { "type": "string" }
+        }
+      }
+    }
+  }
+}

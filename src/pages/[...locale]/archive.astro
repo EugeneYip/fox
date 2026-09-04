@@ -1,0 +1,139 @@
+---
+import Base from '@layouts/Base.astro';
+import PageHeader from '@components/layout/PageHeader.astro';
+import { localePaths } from '@i18n/paths';
+import { groupByYear, entryUrl } from '@lib/content';
+import { useTranslations, localizePath } from '@i18n/utils';
+import { formatDate, isoDate } from '@lib/dates';
+import type { Locale } from '@config/site';
+import EmptyState from '@components/ui/EmptyState.astro';
+
+export const getStaticPaths = () => localePaths();
+
+const { locale } = Astro.props as { locale: Locale };
+const t = useTranslations(locale);
+const years = await groupByYear(locale);
+const total = years.reduce((n, [, items]) => n + items.length, 0);
+
+const TYPE_MARK = { posts: '文', poems: '詩', notes: '札' } as const;
+
+// 空的時候指路 —— 理由與寫法同 ListPage.astro，這一頁沒有走那個版型
+const otherLocale: Locale = locale === 'zh-TW' ? 'en' : 'zh-TW';
+const otherTotal =
+  total === 0
+    ? (await groupByYear(otherLocale)).reduce((n, [, items]) => n + items.length, 0)
+    : 0;
+---
+
+<Base locale={locale} title={t('archive.title')} class="wrap--content">
+  <PageHeader title={t('archive.title')} count={t('list.count', { n: total })} />
+
+  {/*
+    每年用 div 而不是 section：一年一個地標太吵，
+    而且年份的 h2 本來就能用標題導覽，不需要再多一層 landmark。
+    註解放在 map 外面 —— 箭頭函式只能回傳一個表達式，
+    註解跟元素並列會變成兩個節點，直接語法錯誤。
+  */}
+  {years.length > 0 ? (
+    years.map(([year, items]) => (
+      <div class="arc__year">
+        <h2 class="arc__year-label ui">{year}</h2>
+        <ol class="arc__list">
+          {items.map(({ collection, entry }) => (
+            <li class="arc__item">
+              <time class="arc__date ui faint" datetime={isoDate(entry.data.publishedAt)}>
+                {formatDate(entry.data.publishedAt, locale).replace(/^\d{4}年?\s?/, '')}
+              </time>
+              <span class="arc__mark" data-type={collection} aria-hidden="true">
+                {TYPE_MARK[collection]}
+              </span>
+              <a href={localizePath(entryUrl(collection, entry), locale)}>
+                {'poem' in entry.data ? `〈${entry.data.poem.title}〉` : entry.data.title}
+              </a>
+            </li>
+          ))}
+        </ol>
+      </div>
+    ))
+  ) : (
+    <EmptyState title={t('list.empty')} body={t('home.emptyBody')}>
+      {otherTotal > 0 && (
+        <a class="ui" href={localizePath('/archive', otherLocale)}>
+          {t('list.otherLang', { n: otherTotal })}{' '}
+          <span aria-hidden="true">→</span>
+        </a>
+      )}
+    </EmptyState>
+  )}
+</Base>
+
+<style>
+  .arc__year + .arc__year { margin-block-start: var(--s-7); }
+
+  .arc__year-label {
+    font-size: var(--t-lg);
+    font-weight: 600;
+    color: var(--c-ink-faint);
+    padding-block-end: var(--s-2);
+    border-block-end: var(--border-thin);
+    margin-block-end: var(--s-3);
+  }
+
+  .arc__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .arc__item {
+    display: grid;
+    /*
+     * 前兩欄用 `min(…, N%)` 而不是硬的 rem。
+     *
+     * 固定軌道不會讓步：容器再窄也一樣寬。而那個 rem 會跟著**使用者自己
+     * 調大的瀏覽器預設字級**長大 —— 第 1 輪（第二十二圈）實測，
+     * 視窗 320px、根字級 32px 時前兩欄吃掉 227px，只剩 93px 給詩題，
+     * 於是〈靜夜思〉把整頁推出去 12px。
+     *
+     * 跟 PlatformGrid 的 `minmax(min(14rem, 100%), 1fr)` 是同一種修法。
+     */
+    grid-template-columns: min(5.5rem, 30%) min(1.6rem, 10%) 1fr;
+    gap: var(--s-2);
+    align-items: baseline;
+    padding-block: var(--s-2);
+    margin: 0;
+  }
+
+  .arc__date {
+    font-size: var(--t-xs);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .arc__mark {
+    display: inline-grid;
+    place-items: center;
+    inline-size: 1.3rem;
+    block-size: 1.3rem;
+    font-size: var(--t-xs);
+    border-radius: var(--r-sm);
+    background: var(--c-bg-sunken);
+    color: var(--c-ink-faint);
+    align-self: center;
+  }
+
+  .arc__mark[data-type="poems"] {
+    background: var(--c-flame-wash);
+    color: var(--c-flame-ink);
+  }
+
+  .arc__item a {
+    text-decoration: none;
+    line-height: var(--lh-snug);
+  }
+
+  .arc__item a:hover { color: var(--c-flame-ink); }
+
+  @media (max-width: 34rem) {
+    .arc__item { grid-template-columns: min(4.5rem, 30%) min(1.6rem, 10%) 1fr; }
+  }
+</style>

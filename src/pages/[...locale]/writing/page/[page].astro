@@ -1,0 +1,39 @@
+---
+/**
+ * 第 2 頁以後。第 1 頁在 ../index.astro，網址維持乾淨的 /writing。
+ *
+ * 為什麼多一層 page/：單篇內容住在 /writing/{slug}，如果分頁用 /writing/2，
+ * 一篇 slug 叫「2」的文章就會跟第二頁撞在一起。
+ */
+import ListPage from '@layouts/ListPage.astro';
+import { localePaths } from '@i18n/paths';
+import { getEntries, paginate, extraPageNumbers } from '@lib/content';
+import { useTranslations } from '@i18n/utils';
+import type { Locale } from '@config/site';
+
+export async function getStaticPaths() {
+  const paths = [];
+  for (const { params, props } of localePaths()) {
+    const entries = await getEntries('posts', { lang: props.locale });
+    for (const n of extraPageNumbers(entries.length)) {
+      paths.push({ params: { ...params, page: String(n) }, props: { ...props, pageNumber: n } });
+    }
+  }
+  return paths;
+}
+
+const { locale, pageNumber } = Astro.props as { locale: Locale; pageNumber: number };
+const t = useTranslations(locale);
+
+const entries = await getEntries('posts', { lang: locale, featuredFirst: true });
+const page = paginate(entries, pageNumber, '/writing');
+---
+
+<ListPage
+  locale={locale}
+  collection="posts"
+  page={page}
+  title={t('section.writing')}
+  lead={t('writing.lead')}
+  basePath="/writing"
+/>

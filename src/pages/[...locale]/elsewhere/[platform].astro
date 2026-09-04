@@ -1,0 +1,88 @@
+---
+/**
+ * 某一個平臺的全部收錄。第 1 頁在這裡，第 2 頁以後在 page/[page].astro。
+ *
+ * 這一頁**必須**分頁，理由跟 /poems 那三個列表不一樣：那三個是站主自己寫的，
+ * 長多快由他決定；這一頁是 sync-feeds 自動抓來的，**成長不經過任何人的手**。
+ * 頻道現在只有 9 支影片，但一旦她重新開始發，這一頁就會跟著長，
+ * 而且不會有人注意到 —— 沒有人會去看「我的 /elsewhere 是不是變太大了」。
+ *
+ * 實測（scripts/make-fixtures.mjs，409 支影片）不分頁時單頁 534 KB、
+ * gzip 17.1 KB，直接撞破效能預算。
+ */
+import Base from '@layouts/Base.astro';
+import PageHeader from '@components/layout/PageHeader.astro';
+import { localePaths } from '@i18n/paths';
+import { getSyndication } from '@lib/syndication';
+import { useTranslations, localizePath } from '@i18n/utils';
+import { externalLinkRel } from '@config/privacy';
+import { sources } from '@config/sources.mjs';
+import { platformOrFallback, type Platform } from '@config/platforms';
+import { site, type Locale } from '@config/site';
+import SyndicationList from '@components/content/SyndicationList.astro';
+import Pagination from '@components/ui/Pagination.astro';
+import { paginate, SYNDICATION_PAGE_SIZE } from '@lib/content';
+import type { SyndicatedItem } from '@lib/syndication';
+
+export async function getStaticPaths() {
+  const all = await getSyndication();
+  const ids = [...new Set(all.map((i) => i.platform.id))];
+
+  return localePaths().flatMap(({ params, props }) =>
+    ids.map((id) => ({
+      params: { ...params, platform: id },
+      props: { ...props, platformId: id },
+    })),
+  );
+}
+
+const { locale, platformId } = Astro.props as { locale: Locale; platformId: string };
+const t = useTranslations(locale);
+
+const platform: Platform = platformOrFallback(platformId);
+const all: SyndicatedItem[] = await getSyndication({ platform: platformId });
+const page = paginate(all, 1, `/elsewhere/${platformId}`, SYNDICATION_PAGE_SIZE);
+const items = page.items;
+
+const source = sources.find((s) => s.platform === platformId && s.enabled);
+const homeUrl =
+  source?.homeUrl ?? platform.homeTemplate?.replaceAll('{handle}', source?.handle ?? '');
+
+const name = platform.name[locale] ?? platform.name['zh-TW'];
+const abs = (path: string) => new URL(localizePath(path, locale), site.url).toString();
+
+// 只有一頁時顯示總數，多頁時說清楚現在看的是哪一段 —— 與 ListPage 一致
+const count =
+  page.total > 1
+    ? t('list.range', { from: page.from, to: page.to, total: page.totalItems })
+    : t('list.count', { n: page.totalItems });
+---
+
+<Base locale={locale} title={name} class="wrap--content">
+  <Fragment slot="head">
+    {page.nextUrl && <link rel="next" href={abs(page.nextUrl)} />}
+  </Fragment>
+
+  <PageHeader title={name} count={count}>
+    {homeUrl && (
+      <p class="ui">
+        <a class="els-visit" href={homeUrl} target="_blank" rel={externalLinkRel}>
+          {t('elsewhere.readOn', { platform: name })} <span aria-hidden="true">↗</span>
+        </a>
+      </p>
+    )}
+  </PageHeader>
+
+  <SyndicationList items={items} locale={locale} showPlatform={false} headingLevel="h2" />
+
+  <Pagination page={page} locale={locale} basePath={`/elsewhere/${platformId}`} />
+</Base>
+
+<style>
+  .els-visit {
+    font-size: var(--t-sm);
+    text-decoration: none;
+    color: var(--c-ink-soft);
+  }
+  .els-visit:hover { color: var(--c-flame-ink); }
+</style>

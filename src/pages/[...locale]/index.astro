@@ -1,0 +1,190 @@
+---
+import Base from '@layouts/Base.astro';
+import { localePaths } from '@i18n/paths';
+import { site, DEFAULT_LOCALE, type Locale } from '@config/site';
+import { useTranslations, localizePath, pick } from '@i18n/utils';
+import { getAllWriting } from '@lib/content';
+import { getSyndication, getActivePlatforms } from '@lib/syndication';
+import FoxMark from '@components/fox/FoxMark.astro';
+import Foxfire from '@components/fox/Foxfire.astro';
+import SectionHeading from '@components/ui/SectionHeading.astro';
+import EntryCard from '@components/ui/EntryCard.astro';
+import EmptyState from '@components/ui/EmptyState.astro';
+import SyndicationList from '@components/content/SyndicationList.astro';
+import PlatformGrid from '@components/content/PlatformGrid.astro';
+
+export const getStaticPaths = () => localePaths();
+
+const { locale } = Astro.props as { locale: Locale };
+const t = useTranslations(locale);
+
+const latest = await getAllWriting({ lang: locale, limit: 6 });
+// 空的時候指路 —— 理由與寫法同 ListPage.astro。首頁是英文讀者看到的第一頁，
+// 這裡不說，他就不會知道另一個語言有東西
+const otherLocale: Locale = locale === 'zh-TW' ? 'en' : 'zh-TW';
+const otherLatest = latest.length === 0 ? (await getAllWriting({ lang: otherLocale })).length : 0;
+const elsewhere = await getSyndication({ limit: 5 });
+const platforms = await getActivePlatforms();
+
+const name = pick(site.name, locale) ?? site.name[DEFAULT_LOCALE];
+const tagline = pick(site.tagline, locale) ?? '';
+const gloss = pick(site.epigraph.gloss, locale) ?? '';
+---
+
+<Base locale={locale} bare>
+  {/* 純排版分組，不需要變成地標 —— 裡面的 h1 已經是導覽用的錨點 */}
+  <div class="hero">
+    <Foxfire count={7} />
+
+    <div class="wrap hero__inner">
+      {/* 顏色套在外層容器上：Astro 的 scoped style 不會穿進子元件，
+          但 color 會沿著 DOM 繼承下去，SVG 的 currentColor 就吃得到 */}
+      <div class="hero__mark"><FoxMark size={76} variant="line" /></div>
+
+      <h1 class="hero__name">{name}</h1>
+      <p class="hero__tagline">{tagline}</p>
+
+      <figure class="hero__epigraph">
+        {/*
+          引文與出處**永遠**是中文（那是《詩經》的原文與書名），跟頁面語言無關。
+          出處這一行原本漏了 lang，英文版上螢幕閱讀器會用英文語音唸
+          「《詩經・鄭風・子衿》」。用 zh-Hant 而不是 zh-Hant-TW —— 古典漢文
+          不屬於任何一個地區。
+        */}
+        <blockquote lang="zh-Hant">{site.epigraph.text}</blockquote>
+        <figcaption>
+          <span class="hero__source" lang="zh-Hant">{site.epigraph.source}</span>
+          {locale !== 'zh-TW' && <span class="hero__gloss faint">{gloss}</span>}
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <div class="wrap wrap--wide home">
+    <section class="home__section" aria-label={t('home.latest')}>
+      <SectionHeading
+        title={t('home.latest')}
+        href={localizePath('/archive', locale)}
+        linkText={t('home.viewAll')}
+        linkLabel={t('home.viewAllOf', { section: t('home.latest') })}
+      />
+
+      {latest.length > 0 ? (
+        <div class="home__entries">
+          {latest.map(({ collection, entry }) => (
+            <EntryCard collection={collection} entry={entry} locale={locale} />
+          ))}
+        </div>
+      ) : (
+        <EmptyState title={t('home.emptyTitle')} body={t('home.emptyBody')}>
+          {otherLatest > 0 && (
+            <a class="ui" href={localizePath('/archive', otherLocale)}>
+              {t('list.otherLang', { n: otherLatest })}{' '}
+              <span aria-hidden="true">→</span>
+            </a>
+          )}
+        </EmptyState>
+      )}
+    </section>
+
+    <section class="home__section" aria-label={t('home.elsewhere')}>
+      <SectionHeading
+        title={t('home.elsewhere')}
+        href={localizePath('/elsewhere', locale)}
+        linkText={t('home.viewAll')}
+        linkLabel={t('home.viewAllOf', { section: t('home.elsewhere') })}
+      />
+
+      {platforms.length > 0 && <PlatformGrid entries={platforms} locale={locale} />}
+
+      {elsewhere.length > 0 && (
+        <div class="home__syndication">
+          <SyndicationList items={elsewhere} locale={locale} />
+        </div>
+      )}
+
+      {platforms.length === 0 && elsewhere.length === 0 && (
+        <EmptyState title={t('elsewhere.notSyncedYet')} />
+      )}
+    </section>
+  </div>
+</Base>
+
+<style>
+  .hero {
+    position: relative;
+    overflow: hidden;
+    border-block-end: var(--border-thin);
+    /* 淡淡的暖光從左上灑下來，像燈下讀書 */
+    background:
+      radial-gradient(70% 60% at 22% 0%, var(--c-flame-wash), transparent 68%),
+      var(--c-bg);
+  }
+
+  .hero__inner {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: var(--s-4);
+    padding-block: clamp(var(--s-8), 12vh, var(--s-10));
+  }
+
+  .hero__mark { color: var(--c-flame); }
+
+  .hero__name {
+    font-size: var(--t-display);
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    /* 中文標題加了字距後右邊會多出一格，補回來才對齊 */
+    margin-inline-end: -0.1em;
+    line-height: 1.1;
+  }
+
+  .hero__tagline {
+    font-size: var(--t-md);
+    color: var(--c-ink-soft);
+    letter-spacing: 0.04em;
+  }
+
+  .hero__epigraph {
+    margin: var(--s-5) 0 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--s-2);
+  }
+
+  .hero__epigraph blockquote {
+    border: 0;
+    padding: 0;
+    font-size: var(--t-lg);
+    color: var(--c-ink);
+    letter-spacing: 0.2em;
+    margin-inline-end: -0.2em;
+  }
+
+  .hero__epigraph figcaption {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-1);
+    font-family: var(--f-sans);
+    font-size: var(--t-xs);
+    color: var(--c-ink-faint);
+  }
+
+  .hero__gloss { max-inline-size: 38ch; }
+
+  /* ── 首頁內容 ────────────────────────────────────── */
+
+  .home {
+    display: grid;
+    gap: var(--s-9);
+  }
+
+  .home__section { min-inline-size: 0; }
+
+  .home__syndication { margin-block-start: var(--s-6); }
+</style>

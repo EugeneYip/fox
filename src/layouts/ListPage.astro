@@ -1,0 +1,118 @@
+---
+/**
+ * 文章／詩詞／短札三個列表頁的共用版型。
+ * 差別只在標題與資料來源，沒必要寫三次。
+ */
+import Base from '@layouts/Base.astro';
+import PageHeader from '@components/layout/PageHeader.astro';
+import EntryCard from '@components/ui/EntryCard.astro';
+import EmptyState from '@components/ui/EmptyState.astro';
+import Pagination from '@components/ui/Pagination.astro';
+import { useTranslations, localizePath } from '@i18n/utils';
+import { site } from '@config/site';
+import { getEntries, extraPageNumbers } from '@lib/content';
+import type { AnyEntry, WritingCollection, Page } from '@lib/content';
+import type { Locale } from '@config/site';
+
+interface Props {
+  locale: Locale;
+  collection: WritingCollection;
+  page: Page<AnyEntry>;
+  title: string;
+  lead?: string;
+  description?: string;
+  /** 分頁網址的基底，例如 '/poems' */
+  basePath: string;
+}
+
+const { locale, collection, page, title, lead, description, basePath } = Astro.props;
+const t = useTranslations(locale);
+
+// 第二頁以後的標題帶上頁碼，否則分頁在搜尋結果裡會全部長一樣
+const pageTitle =
+  page.current > 1
+    ? title + t('page.titleSuffix', { current: page.current, total: page.total })
+    : title;
+
+// 只有一頁的時候顯示總數就好，多頁時說清楚現在看的是哪一段
+const count =
+  page.totalItems === 0
+    ? undefined
+    : page.total > 1
+      ? t('list.range', { from: page.from, to: page.to, total: page.totalItems })
+      : t('list.count', { n: page.totalItems });
+
+const abs = (path: string) => new URL(localizePath(path, locale), site.url).toString();
+
+/*
+ * ── 這裡空的時候，另一個語言有東西嗎 ──────────────────
+ *
+ * 第 3 輪（第十八圈）從讀者那一側量：站上五篇已發佈的內容全部是 zh-TW，
+ * 所以英文讀者在 /en/poems、/en/writing、/en/notes 上看到的都是
+ * 「Nothing here yet.」—— 而他**無從得知另一個語言其實有東西**。
+ * 語言切換鈕在頁首，但沒有一句話把「這裡是空的」跟「那邊不是」連起來。
+ *
+ * 只在真的空的時候才多查一次，非空的頁面不付這個成本。
+ */
+const otherLocale: Locale = locale === 'zh-TW' ? 'en' : 'zh-TW';
+const otherEntries = await getEntries(collection, { lang: otherLocale });
+const otherCount = page.totalItems === 0 ? otherEntries.length : 0;
+
+/*
+ * ── 語言鈕在第二頁以後會指到不存在的頁 ──────────────────
+ *
+ * 第 2 輪（第十九圈）灌 500 篇量到的：`getStaticPaths` 只會替**有那麼多篇**
+ * 的語言產生 `page/N`，但 `Base` 的 `availableLocales` 預設是兩種語言都有，
+ * 於是 `/poems/page/10` 上的語言鈕與 hreflang 都指向 `/en/poems/page/10`
+ * —— 那一頁不存在。500 篇下 `check:links` 抓到 **16 個這種連結**。
+ *
+ * 站上現在只有 5 篇、沒有第二頁，所以這個 bug 在真實內容下看不到；
+ * 她寫到第 31 篇的那天就會出現，而且是語言鈕直接 404。
+ *
+ * 第 1 頁一定兩種語言都有（空的列表頁也會產生），所以只要判斷 N ≥ 2。
+ */
+const availableLocales =
+  page.current === 1 || extraPageNumbers(otherEntries.length).includes(page.current)
+    ? undefined // 兩種語言都有這一頁 —— 用 Base 的預設
+    : ([locale] as const);
+---
+
+<Base
+  locale={locale}
+  availableLocales={availableLocales}
+  title={pageTitle}
+  description={description ?? lead}
+  noindex={page.current > 1}
+  class="wrap--content"
+>
+  {/*
+    給搜尋引擎的分頁關係。第二頁以後標 noindex —— 那些頁面的內容
+    只是同一批文章的另一段，被單獨收錄沒有意義，還會稀釋第一頁。
+  */}
+  <Fragment slot="head">
+    {page.prevUrl && <link rel="prev" href={abs(page.prevUrl)} />}
+    {page.nextUrl && <link rel="next" href={abs(page.nextUrl)} />}
+  </Fragment>
+
+  <PageHeader title={title} lead={page.current === 1 ? lead : undefined} count={count} />
+
+  {page.items.length > 0 ? (
+    <div class="list">
+      {page.items.map((entry) => (
+        <EntryCard collection={collection} entry={entry} locale={locale} showType={false} headingLevel="h2" />
+      ))}
+    </div>
+  ) : (
+    <EmptyState title={t('list.empty')} body={t('home.emptyBody')}>
+      {otherCount > 0 && (
+        <a class="ui" href={localizePath(basePath, otherLocale)}>
+          {t('list.otherLang', { n: otherCount })}{' '}
+          {/* 箭頭是裝飾，不要進可及名稱（跟 SectionHeading、Pagination 一樣的寫法） */}
+          <span aria-hidden="true">→</span>
+        </a>
+      )}
+    </EmptyState>
+  )}
+
+  <Pagination page={page} basePath={basePath} locale={locale} />
+</Base>

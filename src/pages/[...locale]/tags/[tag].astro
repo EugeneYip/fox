@@ -1,0 +1,83 @@
+---
+/**
+ * 某個標籤底下的全部內容。第 1 頁在這裡，第 2 頁以後在 [tag]/page/[page].astro。
+ *
+ * 這是站內最後一個沒有分頁的列表頁。實測（500 篇，scripts/make-fixtures.mjs）
+ * 最大的標籤頁是 320 KB、1,290 個連結 —— 全站最重的一頁。
+ * gzip 之後 11.8 KB 還在預算內，但 DOM 大小是實打實的算繪成本。
+ *
+ * 路由參數用 slug（小寫），顯示用原本的寫法 —— 見 tagSlug() 的註解，
+ * 那是第 3 輪（第一圈）修掉「唐詩／Tang／tang 會產生多個一樣的頁面」的做法。
+ */
+import Base from '@layouts/Base.astro';
+import PageHeader from '@components/layout/PageHeader.astro';
+import { localePaths } from '@i18n/paths';
+import { getAllWriting, getTagCloud, tagSlug } from '@lib/content';
+import { paginate } from '@lib/content';
+import { useTranslations, localizePath } from '@i18n/utils';
+import { site, type Locale } from '@config/site';
+import EntryCard from '@components/ui/EntryCard.astro';
+import Pagination from '@components/ui/Pagination.astro';
+
+export async function getStaticPaths() {
+  /*
+   * 先把每種語言有哪些標籤都算出來，再產生路徑 —— 這樣每一頁都知道
+   * **自己這個標籤在哪幾種語言底下存在**。
+   *
+   * 為什麼需要：標籤頁是從內容長出來的，而內容目前全是 zh-TW，
+   * 所以 `/tags/唐詩` 有、`/en/tags/唐詩` 沒有。第 7 輪（第十一圈）量到
+   * 語言鈕與 hreflang 都指向那個不存在的網址（全站 19 頁）。
+   */
+  const byLocale: Array<{
+    entry: ReturnType<typeof localePaths>[number];
+    tags: Awaited<ReturnType<typeof getTagCloud>>;
+  }> = [];
+  for (const entry of localePaths()) {
+    byLocale.push({ entry, tags: await getTagCloud(entry.props.locale) });
+  }
+  const localesWithSlug = (slug: string) =>
+    byLocale.filter((b) => b.tags.some((x) => x.slug === slug)).map((b) => b.entry.props.locale);
+
+  const paths = [];
+  for (const { entry, tags } of byLocale) {
+    for (const { tag, slug } of tags) {
+      // 路由參數用 slug（小寫），顯示用原本的寫法
+      paths.push({
+        params: { ...entry.params, tag: slug },
+        props: { ...entry.props, tag, slug, availableLocales: localesWithSlug(slug) },
+      });
+    }
+  }
+  return paths;
+}
+
+const { locale, tag, slug, availableLocales } = Astro.props as {
+  locale: Locale; tag: string; slug: string; availableLocales: Locale[];
+};
+const t = useTranslations(locale);
+
+const all = await getAllWriting({ lang: locale });
+const matches = all.filter(({ entry }) => entry.data.tags.some((x) => tagSlug(x) === slug));
+const basePath = `/tags/${slug}`;
+const page = paginate(matches, 1, basePath);
+const abs = (path: string) => new URL(localizePath(path, locale), site.url).toString();
+
+const count =
+  page.total > 1
+    ? t('list.range', { from: page.from, to: page.to, total: page.totalItems })
+    : t('list.count', { n: page.totalItems });
+---
+
+<Base locale={locale} availableLocales={availableLocales} title={t('tags.taggedWith', { tag })} class="wrap--content">
+  <Fragment slot="head">
+    {page.nextUrl && <link rel="next" href={abs(page.nextUrl)} />}
+  </Fragment>
+
+  <PageHeader title={t('tags.taggedWith', { tag })} count={count} />
+
+  {page.items.map(({ collection, entry }) => (
+    <EntryCard collection={collection} entry={entry} locale={locale} headingLevel="h2" />
+  ))}
+
+  <Pagination page={page} locale={locale} basePath={basePath} />
+</Base>

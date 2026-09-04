@@ -1,0 +1,187 @@
+---
+/**
+ * 分頁導覽。
+ *
+ * 頁數多的時候不會把每一頁都列出來 —— 只顯示頭尾、目前頁與左右各一頁，
+ * 中間用刪節號帶過。20 頁的話全部列出來會比內容本身還吵。
+ */
+import type { Page } from '@lib/content';
+import { useTranslations, localizePath } from '@i18n/utils';
+import type { Locale } from '@config/site';
+
+interface Props {
+  page: Page<unknown>;
+  basePath: string;
+  locale: Locale;
+}
+
+const { page, basePath, locale } = Astro.props;
+const t = useTranslations(locale);
+
+/** 產生要顯示的頁碼，中間省略的地方放 null */
+function windowed(current: number, total: number): Array<number | null> {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+
+  const keep = new Set([1, total, current, current - 1, current + 1]);
+  const out: Array<number | null> = [];
+  let gap = false;
+  for (let n = 1; n <= total; n++) {
+    if (keep.has(n)) {
+      out.push(n);
+      gap = false;
+    } else if (!gap) {
+      out.push(null);
+      gap = true;
+    }
+  }
+  return out;
+}
+
+const numbers = windowed(page.current, page.total);
+const href = (n: number) => localizePath(n === 1 ? basePath : `${basePath}/page/${n}`, locale);
+---
+
+{page.total > 1 && (
+  <nav class="pager ui" aria-label={t('page.nav')}>
+    {page.prevUrl ? (
+      <a class="pager__step" href={localizePath(page.prevUrl, locale)} rel="prev">
+        <span aria-hidden="true">←</span> {t('page.prev')}
+      </a>
+    ) : (
+      <span class="pager__step pager__step--off" aria-hidden="true">
+        ← {t('page.prev')}
+      </span>
+    )}
+
+    <ol class="pager__numbers">
+      {numbers.map((n) =>
+        n === null ? (
+          <li class="pager__gap" aria-hidden="true">…</li>
+        ) : (
+          <li>
+            <a
+              href={href(n)}
+              aria-label={t('page.goto', { n })}
+              aria-current={n === page.current ? 'page' : undefined}
+            >
+              {n}
+            </a>
+          </li>
+        ),
+      )}
+    </ol>
+
+    {page.nextUrl ? (
+      <a class="pager__step" href={localizePath(page.nextUrl, locale)} rel="next">
+        {t('page.next')} <span aria-hidden="true">→</span>
+      </a>
+    ) : (
+      <span class="pager__step pager__step--off" aria-hidden="true">
+        {t('page.next')} →
+      </span>
+    )}
+  </nav>
+)}
+
+<style>
+  .pager {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-4);
+    margin-block-start: var(--s-7);
+    padding-block-start: var(--s-5);
+    border-block-start: var(--border-thin);
+    font-size: var(--t-sm);
+  }
+
+  /*
+   * 高度明寫，跟旁邊的頁碼一樣是 2rem。
+   *
+   * 原本什麼都沒寫，高度整個來自 line-height —— 而它**剛好**過得了
+   * WCAG 2.5.8（互動目標至少 24×24）。第 8 輪（第六圈）實測：
+   *
+   *   375px 視窗 → 57.01 × 24.34（餘裕 0.34px）
+   *   320px 視窗 → 56.58 × 24.15（餘裕 0.15px）
+   *
+   * 字級是 clamp()、行高是 --lh-body（1.85），兩個乘起來剛好比 24 大一點點。
+   * 也就是說**它合格是巧合**：--lh-body 調成 1.8、或 --t-sm 的下限再低一點，
+   * 就會掉到 24 以下，而沒有任何東西會說話（目標尺寸要有版面才算得出來，
+   * 靜態檢查看不到）。
+   *
+   * 分頁在第 8 輪（第六圈）之前**從來沒有被算繪過**（站上沒有任何列表
+   * 超過 30 筆），所以這個數字也是第一次被量。
+   */
+  .pager__step {
+    /*
+     * flex 不是 grid —— 第一版寫 `display: grid; place-items: center`，
+     * 結果「下一頁」和它後面的箭頭 <span> 被排成**兩個 grid 列**：
+     * 目標從 57×24 變成 39×48，整個 pager 也從一列變成兩列。
+     * 高度是修好了，但那不是修好。
+     */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3em;
+    min-block-size: 2rem;
+    text-decoration: none;
+    color: var(--c-ink-soft);
+    white-space: nowrap;
+  }
+
+  .pager__step:hover { color: var(--c-flame-ink); }
+
+  /* 沒有上／下一頁時保留位置，才不會讓中間的頁碼跳來跳去 */
+  .pager__step--off {
+    color: var(--c-ink-faint);
+    opacity: 0.4;
+  }
+
+  .pager__numbers {
+    display: flex;
+    align-items: center;
+    gap: var(--s-1);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .pager__numbers li { margin: 0; }
+
+  .pager__numbers a {
+    display: grid;
+    place-items: center;
+    min-inline-size: 2rem;
+    block-size: 2rem;
+    padding-inline: 0.4em;
+    border-radius: var(--r-md);
+    text-decoration: none;
+    color: var(--c-ink-soft);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .pager__numbers a:hover {
+    background: var(--c-bg-sunken);
+    color: var(--c-flame-ink);
+  }
+
+  .pager__numbers a[aria-current="page"] {
+    background: var(--c-flame-wash);
+    color: var(--c-flame-ink);
+    font-weight: 600;
+  }
+
+  .pager__gap {
+    color: var(--c-ink-faint);
+    padding-inline: 0.2em;
+  }
+
+  @media (max-width: 34rem) {
+    .pager {
+      flex-wrap: wrap;
+      justify-content: center;
+      row-gap: var(--s-3);
+    }
+    .pager__numbers { order: -1; flex-basis: 100%; justify-content: center; }
+  }
+</style>

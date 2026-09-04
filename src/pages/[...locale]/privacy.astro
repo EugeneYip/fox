@@ -1,0 +1,194 @@
+---
+/**
+ * 隱私說明。
+ *
+ * 內容以「每個語言一份結構化資料」的方式定義，而不是直接把中文寫進樣板。
+ * 原本是後者，結果 /en/privacy 整頁都是中文 —— 而這正好是英文訪客
+ * 最需要讀得懂的一頁（這是網站對讀者的承諾）。
+ *
+ * 有些句子會隨 privacy.ts 的開關而不同（例如影片嵌入），所以內容是用
+ * 函式產生的，不是靜態常數。
+ */
+import Base from '@layouts/Base.astro';
+import PageHeader from '@components/layout/PageHeader.astro';
+import { localePaths } from '@i18n/paths';
+import { privacy } from '@config/privacy';
+import { pick } from '@i18n/utils';
+import type { Locale } from '@config/site';
+
+export const getStaticPaths = () => localePaths();
+
+const { locale } = Astro.props as { locale: Locale };
+const title = pick({ 'zh-TW': '隱私', en: 'Privacy' }, locale) ?? '隱私';
+
+interface Section {
+  heading: string;
+  /** 段落。`code` 標記的字串會被包成 <code> */
+  paragraphs?: string[];
+  items?: string[];
+}
+
+const embedSentence = {
+  'zh-TW': privacy.allowThirdPartyEmbeds
+    ? '本站的影片以 iframe 直接嵌入，載入頁面時會向 YouTube 發出請求。'
+    : '本站不直接嵌入 YouTube 影片。你按下播放之後才會載入，並且使用 youtube-nocookie.com。在那之前，Google 不會知道你來過。',
+  en: privacy.allowThirdPartyEmbeds
+    ? 'Videos on this site are embedded directly, so loading a page makes a request to YouTube.'
+    : 'This site does not embed YouTube videos directly. One loads only after you press play, and it uses youtube-nocookie.com. Until then, Google does not know you were here.',
+} as const;
+
+/*
+ * 「唯一的例外是⋯⋯」這一句原本是寫死的，而上面那句是跟著開關走的。
+ * 第 5 輪（第十一圈）把開關翻成 `true` 建了一次，隱私頁就同時說了兩句
+ * 互相矛盾的話：「載入頁面時會向 YouTube 發出請求」與「唯一的例外是
+ * **你按下播放之後**的影片框」。同一頁上，一句說進站就送，一句說按了才送。
+ *
+ * 兩句都描述同一件事，就要跟著同一個開關。
+ */
+const exceptionSentence = {
+  'zh-TW': privacy.allowThirdPartyEmbeds
+    ? '唯一的例外是 YouTube 的影片框 —— 它在頁面載入時就會出現，用的是 youtube-nocookie.com。'
+    : '唯一的例外是你按下播放之後的 YouTube 影片框 —— 那是你主動要求的，而且用的是 youtube-nocookie.com。',
+  en: privacy.allowThirdPartyEmbeds
+    ? 'The one exception is the YouTube frame, which loads with the page and uses youtube-nocookie.com.'
+    : 'The one exception is the YouTube frame that appears after you press play — you asked for that one, and it uses youtube-nocookie.com.',
+} as const;
+
+const CONTENT: Record<Locale, { lead: string; sections: Section[] }> = {
+  'zh-TW': {
+    lead: '簡短版本：這個網站不收集你的任何資料。',
+    sections: [
+      {
+        heading: '我們不做的事',
+        items: [
+          '不使用 cookie',
+          '不使用 Google Analytics 或任何分析服務',
+          '不使用外部字型、外部 CDN、外部圖片',
+          '不嵌入會自動載入的第三方內容',
+          '不設定帳號，因此不儲存任何個人資料',
+        ],
+      },
+      {
+        heading: '瀏覽器裡存了什麼',
+        paragraphs: ['只有兩個項目，都存在你自己的瀏覽器裡（localStorage），不會被送到任何地方：'],
+        items: ['fox-theme —— 你選的深色或淺色', 'fox-poem-orientation —— 你選的詩詞直排或橫排'],
+      },
+      {
+        heading: '這個網站怎麼保證上面那些',
+        paragraphs: [
+          '光是「我們不做」是一句話，所以另外加了一道由瀏覽器執行的規則（Content Security Policy）：這個網站宣告了它只會載入自己網域的資源。萬一哪天有人不小心放進一段外部腳本，你的瀏覽器會直接拒絕它，而不是安靜地送出請求。',
+          exceptionSentence['zh-TW'],
+        ],
+      },
+      {
+        heading: '影片',
+        paragraphs: [
+          embedSentence['zh-TW'],
+          /*
+           * 第 5 輪（第十八圈）量到的落差：下面「對外連結」那一段說的是
+           * 一律 noreferrer（對方什麼都拿不到），而影片框走的是 iframe，
+           * referrerPolicy 是 strict-origin-when-cross-origin ——
+           * YouTube 會知道你從這個網域來。兩件事不一樣，就分開講。
+           */
+          '按下播放之後，就進入 YouTube 自己的隱私政策範圍了。那個影片框會讓 YouTube 知道你是從 bellafoxy.com 來的（只有網域，不含是哪一頁）—— 下面「對外連結」那一條講的是連結，不含這個。',
+        ],
+      },
+      {
+        heading: '對外連結',
+        paragraphs: ['站上的外部連結一律加上 rel="noreferrer"，對方網站不會知道你是從這裡點過去的。'],
+      },
+      {
+        heading: '伺服器',
+        paragraphs: [
+          '網站託管在 GitHub Pages 上。GitHub 會保有伺服器層級的存取紀錄（IP 位址等），這部分依 GitHub 自己的隱私政策處理，我們既看不到也管不到。',
+        ],
+      },
+      {
+        heading: '有問題的話',
+        paragraphs: ['這個網站的原始碼是公開的，包括所有隱私相關的設定。如果你不相信上面寫的，可以自己去看。'],
+      },
+    ],
+  },
+  en: {
+    lead: 'The short version: this site collects nothing about you.',
+    sections: [
+      {
+        heading: 'What this site does not do',
+        items: [
+          'No cookies',
+          'No Google Analytics, and no other analytics service',
+          'No external fonts, no CDNs, no remote images',
+          'No third-party content that loads on its own',
+          'No accounts, so no personal data to store',
+        ],
+      },
+      {
+        heading: 'What is kept in your browser',
+        paragraphs: ['Two things, both in your own browser (localStorage), neither of which is sent anywhere:'],
+        items: [
+          'fox-theme — whether you chose light or dark',
+          'fox-poem-orientation — whether you chose vertical or horizontal for poems',
+        ],
+      },
+      {
+        heading: 'How the site keeps those promises',
+        paragraphs: [
+          'Saying "we do not do that" is just a sentence, so there is also a rule your browser enforces (a Content Security Policy): this site declares that it will only load resources from its own domain. If someone ever slips in an outside script by mistake, your browser refuses it outright instead of quietly making the request.',
+          exceptionSentence.en,
+        ],
+      },
+      {
+        heading: 'Video',
+        paragraphs: [
+          embedSentence.en,
+          'Once you press play, YouTube’s own privacy policy takes over. That frame does tell YouTube you came from bellafoxy.com — the domain only, not which page. The rule under “Outbound links” below is about links, not about this.',
+        ],
+      },
+      {
+        heading: 'Outbound links',
+        paragraphs: [
+          'Every external link carries rel="noreferrer", so the site you land on is not told where you came from.',
+        ],
+      },
+      {
+        heading: 'The server',
+        paragraphs: [
+          'The site is hosted on GitHub Pages. GitHub keeps server-level access logs (IP addresses and the like) under its own privacy policy. We can neither see them nor turn them off.',
+        ],
+      },
+      {
+        heading: 'If you would rather check than trust',
+        paragraphs: [
+          'The source of this site is public, including every privacy setting described above. You do not have to take our word for it.',
+        ],
+      },
+    ],
+  },
+};
+
+const { lead, sections } = CONTENT[locale];
+
+/** 把 key 名與屬性名包成 <code>，其餘照原樣輸出 */
+const CODEY = /(fox-theme|fox-poem-orientation|rel="noreferrer"|youtube-nocookie\.com)/g;
+const withCode = (text: string) => text.replace(CODEY, '<code>$1</code>');
+---
+
+<Base locale={locale} title={title} description={lead} class="wrap--prose">
+  <PageHeader title={title} />
+
+  <div class="prose">
+    <p><strong>{lead}</strong></p>
+
+    {sections.map((section) => (
+      <>
+        <h2>{section.heading}</h2>
+        {section.paragraphs?.map((p) => <p set:html={withCode(p)} />)}
+        {section.items && (
+          <ul>
+            {section.items.map((item) => <li set:html={withCode(item)} />)}
+          </ul>
+        )}
+      </>
+    ))}
+  </div>
+</Base>

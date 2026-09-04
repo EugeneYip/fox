@@ -1,0 +1,123 @@
+---
+/**
+ * 系列導覽 —— 「這一篇是〈讀詩的方法〉的第 2 篇，同系列還有這些」。
+ *
+ * `series` 與 `seriesOrder` 兩個欄位在 schema 裡放了很久，但沒有任何頁面
+ * 用到它們：填了 `seriesOrder: 3` 不會有任何效果，也不會有錯誤訊息。
+ * 這個元件讓那兩個欄位真的做事。
+ *
+ * 排序規則在 lib/content.ts 的 getSeries()：有 seriesOrder 的照數字排，
+ * 沒填的排在後面依日期排。這樣半途才想到要編號也不會把既有的順序打亂。
+ */
+import type { CollectionEntry } from 'astro:content';
+import { useTranslations, localizePath } from '@i18n/utils';
+import type { Locale } from '@config/site';
+
+interface Props {
+  series: string;
+  entries: CollectionEntry<'posts'>[];
+  currentId?: string;
+  locale: Locale;
+  basePath: string;
+}
+
+const { series, entries, currentId, locale, basePath } = Astro.props;
+const t = useTranslations(locale);
+
+const index = entries.findIndex((e) => e.id === currentId);
+const position = index >= 0 ? index + 1 : undefined;
+---
+
+<nav class="series" aria-label={series}>
+  <p class="series__head ui">
+    <span class="series__name">{series}</span>
+    {position && (
+      <span class="series__pos faint">
+        {t('series.position', { current: position, total: entries.length })}
+      </span>
+    )}
+  </p>
+
+  <ol class="series__list ui">
+    {entries.map((entry, i) => (
+      <li>
+        {entry.id === currentId ? (
+          <span class="series__current" aria-current="page">
+            <span class="series__n">{i + 1}</span>
+            {entry.data.title}
+          </span>
+        ) : (
+          <a href={localizePath(`${basePath}/${entry.id}`, locale)}>
+            <span class="series__n">{i + 1}</span>
+            {entry.data.title}
+          </a>
+        )}
+      </li>
+    ))}
+  </ol>
+</nav>
+
+<style>
+  .series {
+    margin-block-end: var(--s-6);
+    padding: var(--s-4);
+    background: var(--c-bg-sunken);
+    border-radius: var(--r-md);
+  }
+
+  .series__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--s-2) var(--s-3);
+    margin-block-end: var(--s-3);
+  }
+
+  .series__name {
+    font-size: var(--t-xs);
+    font-weight: 600;
+    letter-spacing: var(--ls-wide);
+    color: var(--c-flame-ink);
+    text-transform: uppercase;
+  }
+
+  .series__pos { font-size: var(--t-xs); }
+
+  .series__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: var(--s-1);
+  }
+
+  .series__list li { margin: 0; }
+
+  .series__list :is(a, .series__current) {
+    display: flex;
+    gap: var(--s-3);
+    align-items: baseline;
+    font-size: var(--t-sm);
+    line-height: var(--lh-snug);
+    text-decoration: none;
+    padding-block: 0.15em;
+  }
+
+  .series__list a { color: var(--c-ink-soft); }
+  .series__list a:hover { color: var(--c-flame-ink); }
+
+  .series__current {
+    color: var(--c-ink);
+    font-weight: 600;
+  }
+
+  .series__n {
+    flex: none;
+    inline-size: 1.4em;
+    color: var(--c-ink-faint);
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+  }
+
+  .series__current .series__n { color: var(--c-flame); }
+</style>

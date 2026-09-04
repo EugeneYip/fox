@@ -1,0 +1,165 @@
+---
+/**
+ * 關於本站 —— 技術與設計的說明。
+ *
+ * 順便當作同步狀態的儀表板：哪些來源正常、哪些掛了，一眼看得到。
+ * 網站自己知道自己壞在哪裡，比等人發現好。
+ *
+ * 文案跟 privacy.astro 一樣走「每個語言一份結構化資料」——
+ * 原本是把中文寫死在樣板裡，結果 /en/colophon 整頁都是中文。
+ */
+import Base from '@layouts/Base.astro';
+import PageHeader from '@components/layout/PageHeader.astro';
+import { localePaths } from '@i18n/paths';
+import { lastSyncedAt, syncHealth } from '@lib/syndication';
+import { formatDate } from '@lib/dates';
+import { pick } from '@i18n/utils';
+import { PLATFORMS } from '@config/platforms';
+import { privacy } from '@config/privacy';
+import { externalLinkRel } from '@config/privacy';
+import type { Locale } from '@config/site';
+
+export const getStaticPaths = () => localePaths();
+
+const { locale } = Astro.props as { locale: Locale };
+const synced = lastSyncedAt();
+const health = syncHealth();
+
+const byKind = PLATFORMS.reduce<Record<string, number>>((acc, p) => {
+  acc[p.feedKind] = (acc[p.feedKind] ?? 0) + 1;
+  return acc;
+}, {});
+
+const rssish = (byKind.rss ?? 0) + (byKind.hybrid ?? 0);
+
+const title = pick({ 'zh-TW': '關於本站', en: 'Colophon' }, locale) ?? '關於本站';
+
+const T = {
+  'zh-TW': {
+    howHeading: '怎麼做的',
+    how: '這個網站是靜態的 —— 沒有後端、沒有資料庫。所有頁面在建置的時候就產生好，放在 GitHub Pages 上。',
+    builtWith: '用 {astro} 建置，原始碼在 {github}。',
+    typeHeading: '字型與顏色',
+    type1:
+      '沒有載入任何外部字型 —— 全部使用系統既有的字型。這代表在不同裝置上看起來會有些差異，但也代表你的瀏覽器不會因為讀這個網站而向第三方送出任何請求。',
+    type2: '顏色取自宣紙、墨，以及狐狸的毛色。深色模式不是把淺色反轉，是另外調過的一套。',
+    trackHeading: '關於追蹤',
+    track: [
+      '沒有分析工具，沒有 cookie，沒有指紋辨識',
+      '沒有廣告，沒有第三方腳本',
+      privacy.allowThirdPartyEmbeds
+        ? '影片以 iframe 直接嵌入'
+        : '影片預設不嵌入 —— 按下播放才會載入，避免你在不知情的情況下被記錄',
+      '有一道 Content Security Policy 由瀏覽器強制執行 —— 零第三方請求不只是約定，是規則',
+      '伺服器端的存取紀錄由 GitHub Pages 保管，這部分不在我們控制之內',
+    ],
+    syncHeading: '多平臺同步',
+    syncBody: `目前登錄了 ${PLATFORMS.length} 個平臺：${rssish} 個有公開 RSS 可以直接抓、${byKind.bridge ?? 0} 個需要橋接服務、${byKind.manual ?? 0} 個只能手動登錄。`,
+    lastSync: '上次同步',
+    never: '尚未同步過',
+    sourceState: '來源狀態',
+    ok: (n: number) => `${n} 個正常`,
+    failed: (n: number, ids: string) => `，${n} 個異常（${ids}）`,
+  },
+  en: {
+    howHeading: 'How it is made',
+    how: 'This site is static — no backend, no database. Every page is generated at build time and served from GitHub Pages.',
+    builtWith: 'Built with {astro}; the source is on {github}.',
+    typeHeading: 'Type and colour',
+    type1:
+      'No web fonts are loaded — everything uses the fonts already on your device. That means it looks a little different from machine to machine, but it also means your browser makes no third-party request just to read this.',
+    type2:
+      'The colours come from paper, ink, and the coat of a fox. Dark mode is not the light palette inverted; it is a second palette, mixed separately.',
+    trackHeading: 'On tracking',
+    track: [
+      'No analytics, no cookies, no fingerprinting',
+      'No ads, no third-party scripts',
+      privacy.allowThirdPartyEmbeds
+        ? 'Videos are embedded directly'
+        : 'Videos are not embedded by default — one loads only when you press play, so nothing is recorded without your say-so',
+      'A Content Security Policy is enforced by your browser — zero third-party requests is a rule here, not just an intention',
+      'Server-level access logs are kept by GitHub Pages, which is outside our control',
+    ],
+    syncHeading: 'Syndication',
+    syncBody: `${PLATFORMS.length} platforms are catalogued: ${rssish} publish a feed that can be read directly, ${byKind.bridge ?? 0} need a bridge service, and ${byKind.manual ?? 0} can only be entered by hand.`,
+    lastSync: 'Last synced',
+    never: 'Not yet synced',
+    sourceState: 'Sources',
+    ok: (n: number) => `${n} healthy`,
+    failed: (n: number, ids: string) => `, ${n} failing (${ids})`,
+  },
+} as const;
+
+const t = T[locale];
+const [beforeAstro, rest] = t.builtWith.split('{astro}');
+const [betweenLinks, afterGithub] = rest.split('{github}');
+---
+
+<Base locale={locale} title={title} class="wrap--content">
+  <PageHeader title={title} />
+
+  <div class="prose">
+    <h2>{t.howHeading}</h2>
+    <p>{t.how}</p>
+    <p>
+      {beforeAstro}
+      <a href="https://astro.build" target="_blank" rel={externalLinkRel}>Astro</a>
+      {betweenLinks}
+      <a href="https://github.com/EugeneYip/fox" target="_blank" rel={externalLinkRel}>GitHub</a>
+      {afterGithub}
+    </p>
+
+    <h2>{t.typeHeading}</h2>
+    <p>{t.type1}</p>
+    <p>{t.type2}</p>
+
+    <h2>{t.trackHeading}</h2>
+    <ul>
+      {t.track.map((line) => <li>{line}</li>)}
+    </ul>
+
+    <h2>{t.syncHeading}</h2>
+    <p>{t.syncBody}</p>
+
+    <dl class="colo__status ui">
+      <div>
+        <dt>{t.lastSync}</dt>
+        <dd>{synced ? formatDate(synced, locale) : t.never}</dd>
+      </div>
+      <div>
+        <dt>{t.sourceState}</dt>
+        <dd>
+          {t.ok(health.ok)}
+          {health.failed.length > 0 && (
+            <span class="colo__failed">{t.failed(health.failed.length, health.failed.join('、'))}</span>
+          )}
+        </dd>
+      </div>
+    </dl>
+  </div>
+</Base>
+
+<style>
+  .colo__status {
+    display: grid;
+    gap: var(--s-2);
+    font-size: var(--t-sm);
+    padding: var(--s-4);
+    background: var(--c-bg-sunken);
+    border-radius: var(--r-md);
+  }
+
+  .colo__status > div {
+    display: grid;
+    grid-template-columns: 6rem 1fr;
+    gap: var(--s-3);
+  }
+
+  .colo__status dt { color: var(--c-ink-faint); }
+  .colo__status dd { margin: 0; }
+  .colo__failed { color: var(--c-seal); }
+
+  @media (max-width: 34rem) {
+    .colo__status > div { grid-template-columns: 1fr; gap: var(--s-1); }
+  }
+</style>

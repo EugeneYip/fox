@@ -1,0 +1,63 @@
+# 每次 push 與 PR 都跑：型別檢查、建置、隱私稽核。
+# 目的是在推上去之前就抓到問題，而不是等網站壞了才發現。
+# 這個 workflow 只管 PR。
+#
+# 推到 main 的時候不跑 —— deploy.yml 已經會跑同一套 verify:all，
+# 兩個都跑等於每次 push 做兩份一模一樣的工作。
+# 分工是：這裡在合併**之前**給回饋，deploy.yml 在發佈**之前**把關。
+name: 檢查
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: 型別檢查
+        run: npm run check
+
+      # PRIVACY_NEEDLES 是要搜尋的個資字串（本名、校名⋯⋯），一行一個。
+      # 值不能寫在 repo 裡 —— 那正是這道檢查要防的事。設成 repo secret。
+      # 沒設的話 audit 仍然會跑，但會明講「身分規則沒有執行」。
+      - name: 隱私稽核（有硬編碼的個資就擋下來）
+        run: npm run audit:privacy
+        env:
+          PRIVACY_NEEDLES: ${{ secrets.PRIVACY_NEEDLES }}
+
+      - name: 對比度（WCAG，深淺兩套都算）
+        run: npm run check:contrast
+
+      - name: 建置
+        run: npm run build
+
+      - name: 無障礙靜態檢查（要有 dist/ 才能跑，所以排在建置之後）
+        run: npm run check:a11y
+
+      - name: 效能預算（同樣需要 dist/）
+        run: npm run check:perf
+
+      # 這一步不算在「六道關卡」裡（verify:all 沒有它）。
+      # 它測的是同步腳本對別人伺服器的禮貌 —— 主機間隔與 Retry-After，
+      # 跟網站本身正不正確無關，但改壞了不會有任何地方報錯，所以要有人看著。
+      # 這裡的順序沒問題（排在建置之後），但還是分成兩步，
+      # 跟 deploy.yml 一致 —— 兩份檔案用同一組 script 名稱，
+      # 以後有人動其中一個時比較不會漏掉另一個。
+      - name: 工具的單元測試（不算在六道關卡裡）
+        run: npm run test:units
+
+      - name: 產出的檢查（文案慣例、內容管線）
+        run: npm run test:built

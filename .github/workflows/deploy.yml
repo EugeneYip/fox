@@ -1,0 +1,104 @@
+# 建置並部署到 GitHub Pages。
+#
+# 第一次使用前要先做兩件事（在 GitHub 網頁上，只需一次）：
+#   1. Settings → Pages → Build and deployment → Source 選 "GitHub Actions"
+#   2. Settings → Pages → Custom domain 填 bellafoxy.com，並勾選 Enforce HTTPS
+#      （DNS 的設定見 docs/DEPLOY.md）
+name: 部署到 GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # 讓 sync-feeds 更新完資料後可以觸發重新部署
+  workflow_dispatch:
+
+# GITHUB_TOKEN 的最小權限：只給部署需要的
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同時只跑一個部署；但不取消進行中的那個，避免部署到一半被砍
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 取出原始碼
+        uses: actions/checkout@v7
+
+      - name: 準備 Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: 安裝相依套件
+        run: npm ci
+
+      # 跑完整的六道關卡，不是只有 build。
+      #
+      # 工具本身的單元測試。排在 verify:all 前面是有理由的：
+      # verify:all 裡的隱私稽核**依賴這些規則是對的**，而規則寫壞的話
+      # 稽核會安靜地通過（沒有東西可比對，自然沒有發現）。
+      # 先證明規則還會抓，稽核的綠燈才有意義。
+      #
+      # 第二圈第 7 輪補的。第一圈第 7 輪已經修過一次「關卡在另一個 workflow、
+      # 擋不住 deploy」，而我在第 4、5 輪加這些測試時又只加進了 check.yml。
+      # 只跑**不需要 dist** 的那些。
+      # 第 3 輪（第四圈）把 check:content 加進 test:tools 之後，
+      # 這一步在 CI 上會直接失敗 —— 乾淨的 checkout 沒有 dist/，
+      # 而這一步排在建置**之前**。三個 workflow 從來沒在 GitHub 上跑過，
+      # 所以那個錯要等到第一次 push 才會出現。
+      #
+      # 排在前面的理由沒有變（見下面那一步的說明），所以是拆開而不是搬走。
+      - name: 工具的單元測試（不需要 dist 的那些）
+        run: npm run test:units
+
+      # 之前這裡只跑 npm run build，關卡在另一個 workflow（check.yml）裡。
+      # 那兩個 workflow 是**互相獨立**的 —— check 紅燈不會擋住 deploy 綠燈，
+      # 所以無障礙、隱私、CSP、效能的回歸照樣會被發佈出去。
+      #
+      # verify:all 的順序是 型別 → 隱私 → 對比 → build → 無障礙 → 效能，
+      # 後兩道需要 dist/，所以排在 build 之後。跑完 dist/ 就是要上傳的東西。
+      - name: 驗證並建置
+        run: npm run verify:all
+        env:
+          # 要搜尋的個資字串。沒設的話稽核會明講「身分規則沒有執行」。
+          PRIVACY_NEEDLES: ${{ secrets.PRIVACY_NEEDLES }}
+          # 這一步不需要任何金鑰 —— 外部資料在 sync-feeds 就抓好並 commit 了，
+          # 這裡讀的是 repo 裡的 src/data/syndication.json。
+          NODE_ENV: production
+
+      # 需要 dist/ 的檢查，只能排在建置之後
+      - name: 產出的檢查（文案慣例、內容管線）
+        run: npm run test:built
+
+      - name: 檢查 CNAME 有被帶進輸出
+        # 少了這個檔案，GitHub Pages 會把自訂網域取消掉，網站就掛在
+        # eugeneyip.github.io 上。這是最容易發生又最難察覺的失誤，所以擋在這裡。
+        run: |
+          test -f dist/CNAME || { echo "::error::dist/CNAME 不見了，自訂網域會失效"; exit 1; }
+          echo "CNAME = $(cat dist/CNAME)"
+
+      - name: 設定 Pages
+        uses: actions/configure-pages@v6
+
+      - name: 上傳建置結果
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 部署
+        id: deployment
+        uses: actions/deploy-pages@v5

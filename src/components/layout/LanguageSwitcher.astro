@@ -1,0 +1,125 @@
+---
+/**
+ * 語言切換。
+ *
+ * 用原生 <details> 做下拉，不需要 JavaScript 也能用；
+ * 唯一的 JS 是「點外面關起來」這個便利功能，沒有它也不影響操作。
+ */
+import { LOCALES, LOCALE_LABEL, type Locale } from '@config/site';
+import { switchLocalePath, useTranslations, localizePath } from '@i18n/utils';
+
+/*
+ * `available` = 這一頁**真的存在**的語言。預設是全部 —— 對 `[...locale]`
+ * 那些兩種語言都會產生的頁面來說那是對的。
+ *
+ * 內容衍生的頁面（詩／文章／短札的內頁、標籤頁）只有一種語言，
+ * 由那些頁面自己傳進來。第 7 輪（第十一圈）量到：全站有 **19 個頁面**
+ * 的語言鈕指向不存在的網址，點下去會落到**中文的 404 頁**上 ——
+ * 對一個剛按下「English」的人來說是雙重的糟糕。
+ *
+ * 沒有對應頁面時連到該語言的首頁：那一頁一定存在，而且語意上也對 ——
+ * 「這一頁沒有英文版，這是英文版的站」。
+ */
+interface Props { locale: Locale; available?: readonly Locale[] }
+const { locale, available = LOCALES } = Astro.props;
+const t = useTranslations(locale);
+const pathname = Astro.url.pathname;
+
+const SHORT: Record<Locale, string> = { 'zh-TW': '中', en: 'EN' };
+const localeHome = (l: Locale) => localizePath('/', l);
+---
+
+<details class="lang">
+  <summary class="lang__button ui" aria-label={t('nav.language')} title={t('nav.language')}>
+    <span>{SHORT[locale]}</span>
+  </summary>
+  <ul class="lang__menu ui">
+    {LOCALES.map((l) => (
+      <li>
+        <a
+          href={available.includes(l) ? switchLocalePath(pathname, l) : localeHome(l)}
+          hreflang={l}
+          lang={l}
+          aria-current={l === locale ? 'true' : undefined}
+        >
+          {LOCALE_LABEL[l]}
+        </a>
+      </li>
+    ))}
+  </ul>
+</details>
+
+<style>
+  .lang { position: relative; }
+
+  .lang__button {
+    display: grid;
+    place-items: center;
+    inline-size: 2.1rem;
+    block-size: 2.1rem;
+    border-radius: var(--r-md);
+    color: var(--c-ink-soft);
+    font-size: var(--t-sm);
+    cursor: pointer;
+    list-style: none;
+    transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+  }
+
+  .lang__button::-webkit-details-marker { display: none; }
+
+  .lang__button:hover,
+  .lang[open] .lang__button {
+    color: var(--c-flame-ink);
+    background: var(--c-bg-sunken);
+  }
+
+  .lang__menu {
+    position: absolute;
+    inset-inline-end: 0;
+    inset-block-start: calc(100% + var(--s-2));
+    min-inline-size: 9rem;
+    margin: 0;
+    padding: var(--s-1);
+    list-style: none;
+    background: var(--c-bg-raised);
+    border: 1px solid var(--c-rule-strong);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-lift);
+    z-index: 30;
+  }
+
+  .lang__menu li { margin: 0; }
+
+  .lang__menu a {
+    display: block;
+    padding: var(--s-2) var(--s-3);
+    font-size: var(--t-sm);
+    text-decoration: none;
+    border-radius: var(--r-sm);
+    white-space: nowrap;
+  }
+
+  .lang__menu a:hover { background: var(--c-bg-sunken); }
+
+  .lang__menu a[aria-current="true"] {
+    color: var(--c-flame-ink);
+    font-weight: 600;
+  }
+</style>
+
+<script>
+  // 點到別的地方就把下拉關起來。沒有這段也能用（再點一次按鈕即可）。
+  document.addEventListener('click', (event) => {
+    for (const details of document.querySelectorAll<HTMLDetailsElement>('details.lang[open]')) {
+      if (!details.contains(event.target as Node)) details.open = false;
+    }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    for (const details of document.querySelectorAll<HTMLDetailsElement>('details.lang[open]')) {
+      details.open = false;
+      details.querySelector<HTMLElement>('summary')?.focus();
+    }
+  });
+</script>

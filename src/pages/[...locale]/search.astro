@@ -1,0 +1,337 @@
+---
+import Base from '@layouts/Base.astro';
+import PageHeader from '@components/layout/PageHeader.astro';
+import { localePaths } from '@i18n/paths';
+import { useTranslations } from '@i18n/utils';
+import { getSyndication } from '@lib/syndication';
+import type { Locale } from '@config/site';
+
+export const getStaticPaths = () => localePaths();
+
+const { locale } = Astro.props as { locale: Locale };
+const t = useTranslations(locale);
+/* 只為了知道索引裡會出現哪些平臺代號，好在結果列上顯示它們的名字 */
+const syndicated = await getSyndication();
+
+/*
+ * 文案在 build 時就取好，透過 data 屬性交給前端。
+ *
+ * 原本 client script 裡自己抄了一份 STRINGS，結果同樣的句子存在兩個地方
+ * （ui.ts 與這支腳本），改一邊另一邊不會跟著動；而且 loading / failed
+ * 兩句只存在腳本裡，從 ui.ts 完全看不到它們的存在。
+ *
+ * count 的單複數也一起在這裡處理好 —— t() 會依 n 挑 _one，
+ * 前端只要把 {n} 換掉就行，不用再懂一次複數規則。
+ */
+const strings = JSON.stringify({
+  none: t('search.noResults'),
+  loading: t('search.loading'),
+  failed: t('search.failed'),
+  // n = 1 讓 t() 挑 _one，並且直接把 1 代進去（這句永遠只用在 n === 1）
+  countOne: t('search.resultCount', { n: 1 }),
+  // 不傳 vars，才會拿到還留著 {n} 的樣板讓前端自己代入。
+  // 傳 { n: 0 } 的話 t() 會當場把 {n} 換成 0，前端再也換不掉，永遠顯示「0 個結果」。
+  countMany: t('search.resultCount'),
+  /*
+   * 結果那一行的「類型」。第 3 輪（第十一圈）真的去搜了一次才看到：
+   * 這裡原本直接印索引裡的 `k`，而 `k` 是**內部代號** ——
+   * 中文頁的搜尋結果會寫「posts · 翻譯 詩詞 方法」「notes · 雜記」
+   * 「youtube · 詩詞 朗讀」。站上其他地方（EntryCard）早就有翻譯了。
+   *
+   * 索引只有一份、兩種語言共用，所以標籤不能放進索引裡（會變成兩份），
+   * 要在這裡按頁面的語言取好再交給前端。
+   *
+   * 平臺只放**索引裡真的會出現的那幾個**，不是整份平臺目錄 ——
+   * 那會把 24 個名字塞進每一頁的搜尋頁。
+   */
+  kinds: {
+    posts: t('type.post'),
+    poems: t('type.poem'),
+    notes: t('type.note'),
+    ...Object.fromEntries(
+      [...new Map(syndicated.map((i) => [i.platform.id, i.platform])).values()].map((p) => [
+        p.id,
+        p.name[locale] ?? p.name['zh-TW'],
+      ]),
+    ),
+  },
+});
+---
+
+<Base locale={locale} title={t('search.title')} noindex class="wrap--content">
+  <PageHeader title={t('search.title')} lead={t('search.hint')} />
+
+  <form class="search" role="search" data-search data-strings={strings}>
+    <label class="sr-only" for="q">{t('search.title')}</label>
+    <input
+      id="q"
+      type="search"
+      name="q"
+      class="search__input"
+      placeholder={t('search.placeholder')}
+      autocomplete="off"
+      autocapitalize="off"
+      spellcheck="false"
+      enterkeyhint="search"
+    />
+  </form>
+
+  <p class="search__status ui faint" data-search-status aria-live="polite"></p>
+  <ol class="search__results" data-search-results></ol>
+
+  {/* JavaScript 關掉時至少告訴使用者發生什麼事，而不是給一個死掉的輸入框 */}
+  <noscript>
+    <p class="muted">
+      {t('search.noJs', { archive: t('archive.title'), tags: t('tags.title') })}
+    </p>
+  </noscript>
+</Base>
+
+<style>
+  .search__input {
+    inline-size: 100%;
+    padding: var(--s-3) var(--s-4);
+    font-size: var(--t-md);
+    font-family: var(--f-serif);
+    background: var(--c-bg-raised);
+    /* 輸入框空白時，這條線是唯一在說「這裡可以打字」的東西，需要 3:1 */
+    border: 1px solid var(--c-edge);
+    border-radius: var(--r-md);
+    transition: border-color var(--dur-fast) var(--ease);
+  }
+
+  .search__input:focus {
+    border-color: var(--c-flame);
+    outline: none;
+  }
+
+  .search__input:focus-visible {
+    outline: 2px solid var(--c-focus);
+    outline-offset: 2px;
+  }
+
+  .search__status {
+    margin-block-start: var(--s-3);
+    font-size: var(--t-xs);
+    min-block-size: 1.2em;
+  }
+
+  .search__results {
+    list-style: none;
+    margin: var(--s-4) 0 0;
+    padding: 0;
+  }
+
+  .search__results :global(li) {
+    padding-block: var(--s-4);
+    border-block-end: var(--border-thin);
+    margin: 0;
+  }
+
+  .search__results :global(a) {
+    font-size: var(--t-md);
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .search__results :global(a:hover) { color: var(--c-flame-ink); }
+
+  .search__results :global(.res__meta) {
+    display: block;
+    font-family: var(--f-sans);
+    font-size: var(--t-xs);
+    color: var(--c-ink-faint);
+    margin-block-start: var(--s-1);
+  }
+
+  .search__results :global(.res__snippet) {
+    font-size: var(--t-sm);
+    color: var(--c-ink-soft);
+    line-height: var(--lh-snug);
+    margin-block-start: var(--s-2);
+  }
+
+  .search__results :global(mark) {
+    background: var(--c-selection);
+    color: inherit;
+    border-radius: 2px;
+    padding: 0 0.1em;
+  }
+</style>
+
+<script>
+  interface IndexItem {
+    t: string; u: string; l: string; k: string;
+    d?: string; g?: string; b?: string; x?: 1;
+  }
+
+  /*
+   * 全部包在 init 裡，參數是「已確定存在」的元素。
+   * 如果在外層用 if 擋掉 null 再直接用，TypeScript 不會把縮小後的型別
+   * 帶進後面宣告的函式裡，會一路報 possibly null。傳參數最乾淨。
+   */
+  function init(
+    form: HTMLFormElement,
+    input: HTMLInputElement,
+    status: HTMLElement,
+    results: HTMLOListElement,
+  ) {
+  interface Strings {
+    none: string;
+    loading: string;
+    failed: string;
+    countOne: string;
+    countMany: string;
+    kinds: Record<string, string>;
+  }
+  const s: Strings = JSON.parse(form.dataset.strings ?? '{}');
+  const count = (n: number) => (n === 1 ? s.countOne : s.countMany).replace('{n}', String(n));
+
+  let index: IndexItem[] | null = null;
+  let loading: Promise<void> | null = null;
+
+  function ensureIndex(): Promise<void> {
+    if (index) return Promise.resolve();
+    if (loading) return loading;
+    status.textContent = s.loading;
+    loading = fetch('/search-index.json')
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
+      .then((data: { items: IndexItem[] }) => {
+        index = data.items;
+        status.textContent = '';
+      })
+      .catch(() => {
+        status.textContent = s.failed;
+      });
+    return loading;
+  }
+
+  /**
+   * 中文沒有空格分詞，所以不做斷詞，直接做子字串比對。
+   * 英文與日文用空白切成多個詞，全部都要命中（AND）。
+   */
+  function score(item: IndexItem, terms: string[]): number {
+    const title = item.t.toLowerCase();
+    const tags = (item.g ?? '').toLowerCase();
+    const desc = (item.d ?? '').toLowerCase();
+    const body = (item.b ?? '').toLowerCase();
+
+    let total = 0;
+    for (const term of terms) {
+      let hit = 0;
+      if (title.includes(term)) hit += 10;
+      if (tags.includes(term)) hit += 6;
+      if (desc.includes(term)) hit += 3;
+      if (body.includes(term)) hit += 1;
+      if (hit === 0) return 0;      // 有一個詞沒中就整筆不算
+      total += hit;
+    }
+    // 同分時偏好站內內容，外站的排後面
+    return total + (item.x ? 0 : 0.5);
+  }
+
+  function escapeHtml(text: string): string {
+    return text.replace(/[&<>"']/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c,
+    );
+  }
+
+  /** 在摘要裡把命中的詞標起來，並且以第一個命中處為中心裁切 */
+  function snippet(item: IndexItem, terms: string[]): string {
+    const source = item.d || item.b || '';
+    if (!source) return '';
+    const lower = source.toLowerCase();
+    const at = Math.max(0, terms.map((t) => lower.indexOf(t)).filter((i) => i >= 0)[0] ?? 0);
+    const start = Math.max(0, at - 40);
+    let text = escapeHtml(source.slice(start, start + 160));
+    if (start > 0) text = '…' + text;
+    if (start + 160 < source.length) text += '…';
+
+    for (const term of terms) {
+      if (!term) continue;
+      const safe = escapeHtml(term).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      text = text.replace(new RegExp(safe, 'gi'), (m) => `<mark>${m}</mark>`);
+    }
+    return text;
+  }
+
+  function render(query: string) {
+    const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    results.innerHTML = '';
+
+    if (terms.length === 0) {
+      status.textContent = '';
+      return;
+    }
+
+    /*
+     * 索引不在的時候**不要碰 status**。
+     *
+     * 這一行原本是 `terms.length === 0 || !index` 一起清空，而
+     * `ensureIndex()` 的 `.catch()` 是這樣寫的：
+     *
+     *     .catch(() => { status.textContent = s.failed; })
+     *
+     * catch 之後 promise 是**完成**的，所以後面的
+     * `.then(() => render(...))` 照樣跑，而 render 進來時 index 仍然是
+     * null —— 於是剛寫好的「索引載入失敗，請重新整理。」被清成空字串。
+     *
+     * 第 6 輪（第十一圈）把 fetch 換成一定失敗的版本實測：使用者看到的是
+     * **一片空白** —— 打了字、沒有結果、也沒有任何訊息。
+     * `search.failed` 這句話兩種語言都翻好了，而它到不了畫面上。
+     */
+    if (!index) return;
+
+    const hits = index
+      .map((item) => ({ item, score: score(item, terms) }))
+      .filter((h) => h.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 40);
+
+    status.textContent = hits.length ? count(hits.length) : s.none;
+
+    for (const { item } of hits) {
+      const li = document.createElement('li');
+      const external = item.x === 1;
+      li.innerHTML = `
+        <a href="${escapeHtml(item.u)}"${external ? ' target="_blank" rel="noopener noreferrer"' : ''}>
+          ${escapeHtml(item.t)}${external ? ' <span aria-hidden="true">↗</span>' : ''}
+        </a>
+        <span class="res__meta">${escapeHtml(s.kinds[item.k] ?? item.k)}${item.g ? ' · ' + escapeHtml(item.g) : ''}</span>
+        ${snippet(item, terms) ? `<p class="res__snippet">${snippet(item, terms)}</p>` : ''}
+      `;
+      results.append(li);
+    }
+  }
+
+  let timer: number | undefined;
+  input.addEventListener('input', () => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      void ensureIndex().then(() => render(input.value));
+    }, 120);
+  });
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    void ensureIndex().then(() => render(input.value));
+  });
+
+  // 網址帶 ?q= 時直接搜（方便從別的地方連過來）
+  const preset = new URLSearchParams(location.search).get('q');
+  if (preset) {
+    input.value = preset;
+    void ensureIndex().then(() => render(preset));
+  }
+  }
+
+  const form = document.querySelector<HTMLFormElement>('[data-search]');
+  const input = document.querySelector<HTMLInputElement>('#q');
+  const status = document.querySelector<HTMLElement>('[data-search-status]');
+  const results = document.querySelector<HTMLOListElement>('[data-search-results]');
+
+  if (form && input && status && results) init(form, input, status, results);
+</script>

@@ -1,0 +1,158 @@
+---
+/**
+ * 外站文章的合併時間軸。
+ *
+ * 自動抓來的和手動挑選的混在一起，用一個小標記區分。
+ * 手動挑的通常會附一句「為什麼挑這篇」—— 那句話比標題本身有價值，
+ * 所以給它比較顯眼的位置。
+ */
+import type { SyndicatedItem } from '@lib/syndication';
+import { formatDate, isoDate } from '@lib/dates';
+import { useTranslations } from '@i18n/utils';
+import { externalLinkRel } from '@config/privacy';
+import { LOCALE_HREFLANG, type Locale } from '@config/site';
+import PlatformTag from '@components/ui/PlatformTag.astro';
+
+interface Props {
+  items: SyndicatedItem[];
+  locale: Locale;
+  showPlatform?: boolean;
+  /** 標題層級。單一平臺頁是 h1 底下直接接列表，要用 h2 —— 見 EntryCard 的說明 */
+  headingLevel?: 'h2' | 'h3';
+}
+
+const { items, locale, showPlatform = true, headingLevel = 'h3' } = Astro.props;
+const Heading = headingLevel;
+const t = useTranslations(locale);
+
+/*
+ * 外站文章的語言常常跟頁面不一樣 —— 英文版的 /elsewhere 上列的
+ * 仍然是中文的影片標題與摘要（她的內容本來就是中文的）。
+ *
+ * 沒有標 lang 的話，螢幕閱讀器會用**頁面的語言**去唸，
+ * 也就是用英文語音唸中文，結果完全聽不懂。WCAG 3.1.2（AA）。
+ *
+ * 只有在跟頁面語言不同時才輸出 —— 一樣的時候多一個屬性只是雜訊。
+ */
+const itemLang = (item: (typeof items)[number]) =>
+  item.lang && item.lang !== locale ? LOCALE_HREFLANG[item.lang] : undefined;
+---
+
+<ol class="synd">
+  {items.map((item) => (
+    <li class="synd__item">
+      <a
+        class="synd__link"
+        href={item.url}
+        target="_blank"
+        rel={externalLinkRel}
+      >
+        <Heading class="synd__title" lang={itemLang(item)}>{item.title}</Heading>
+      </a>
+
+      <div class="synd__meta ui">
+        {item.publishedAt && (
+          <time datetime={isoDate(item.publishedAt)}>{formatDate(item.publishedAt, locale)}</time>
+        )}
+        {showPlatform && (
+          <>
+            <span aria-hidden="true">·</span>
+            <PlatformTag platform={item.platform} locale={locale} />
+          </>
+        )}
+        <span aria-hidden="true">·</span>
+        <span class="synd__origin" data-origin={item.origin}>
+          {item.origin === 'auto' ? t('elsewhere.autoSynced') : t('elsewhere.handPicked')}
+        </span>
+      </div>
+
+      {/* why 是站主自己寫的（跟著頁面語言），summary 來自對方平臺（可能是別的語言） */}
+      {item.why && <p class="synd__why">{item.why}</p>}
+      {!item.why && item.summary && (
+        <p class="synd__summary muted" lang={itemLang(item)}>{item.summary}</p>
+      )}
+    </li>
+  ))}
+</ol>
+
+<style>
+  .synd {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .synd__item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-2);
+    padding-block: var(--s-5);
+    border-block-end: var(--border-thin);
+    margin: 0;
+  }
+
+  .synd__item:last-child { border-block-end: 0; }
+
+  .synd__link { text-decoration: none; }
+
+  .synd__title {
+    font-size: var(--t-md);
+    font-weight: 600;
+    line-height: var(--lh-snug);
+    transition: color var(--dur-fast) var(--ease);
+    /*
+     * 這裡曾經是 `-webkit-line-clamp: 2`，理由是「外站標題常常是一整段文案，
+     * 不設限的話列表會變成一牆文字」。第 1 輪（第十圈）量了才發現它切的
+     * 不是那種文案，是**每一個正常的標題**：
+     *
+     *   視窗 320／375／480px   9／9 個標題被切，只看得到 2 行（需要 3–5 行）
+     *   視窗 600px            6／9
+     *   視窗 1024px           1／9 —— 桌機剛好卡在兩行的邊界上，所以沒有人發現
+     *
+     * 而且被切掉的正好是後半段（「⋯⋯邊塞詩的巔峰之作」那種說明），
+     * 前半段的詩題與詩句反而留著，看起來像完整的句子。
+     *
+     * 標題是這個連結的**名字**，全文不在頁面上任何其他地方。
+     * 摘要不一樣 —— 那本來就是節錄，全文在連結的另一端，所以它還留著 clamp。
+     */
+  }
+
+  .synd__link:hover .synd__title { color: var(--c-flame-ink); }
+
+  /* 外連的箭頭放在標題後面，跟站內文章區分開 */
+  .synd__link .synd__title::after {
+    content: " ↗";
+    font-size: 0.75em;
+    color: var(--c-ink-faint);
+  }
+
+  .synd__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45em;
+    font-size: var(--t-xs);
+    color: var(--c-ink-faint);
+  }
+
+  .synd__origin[data-origin="manual"] { color: var(--c-moss); }
+
+  .synd__why {
+    font-size: var(--t-sm);
+    line-height: var(--lh-snug);
+    color: var(--c-ink-soft);
+    padding-inline-start: var(--s-3);
+    border-inline-start: 2px solid var(--c-moss);
+    max-inline-size: 62ch;
+  }
+
+  .synd__summary {
+    line-height: var(--lh-snug);
+    max-inline-size: 62ch;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+</style>

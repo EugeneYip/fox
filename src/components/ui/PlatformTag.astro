@@ -1,0 +1,53 @@
+---
+/**
+ * 平台標籤。左邊一個小色點用平台的品牌色 ——
+ * 只用一點點，不要讓 Medium 的黑或 YouTube 的紅蓋過整個版面。
+ */
+import type { Platform } from '@config/platforms';
+import type { Locale } from '@config/site';
+
+/*
+ * 這裡原本有一個 `size?: 'sm' | 'md'`。第 2 輪（第十一圈）用瀏覽器量
+ * 「哪些 CSS 規則從來沒有配到任何元素」的時候，它是**唯一一條真正的死碼**：
+ *
+ *   `.ptag--md` 有樣式，但唯一的呼叫端（SyndicationList）從來不傳 size
+ *   `ptag--sm` 會被畫出來，但**沒有任何規則叫這個名字**（尺寸在 .ptag 上）
+ *
+ * 也就是說兩邊都是空的：一個選項沒有人選得到，一個類別沒有人在看。
+ * 拿掉之後元素上少一個沒有意義的類別，樣式表少一條到不了的規則。
+ */
+interface Props {
+  platform: Platform;
+  locale: Locale;
+}
+const { platform, locale } = Astro.props;
+const label = platform.name[locale] ?? platform.name['zh-TW'];
+---
+
+<span class="ptag ui">
+  <span class="ptag__dot" style={`--brand:${platform.color}`} aria-hidden="true"></span>
+  {label}
+</span>
+
+<style>
+  .ptag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    font-size: var(--t-xs);
+    color: var(--c-ink-soft);
+    white-space: nowrap;
+  }
+
+  .ptag__dot {
+    inline-size: 0.5em;
+    block-size: 0.5em;
+    border-radius: 50%;
+    background: var(--brand);
+    flex: none;
+    /* 純黑或純白的品牌色在對應主題下會消失，加一圈細邊確保看得見 */
+    /* 前一行是 fallback：color-mix 不支援時整條會被丟掉，那圈細邊就沒了 */
+    box-shadow: 0 0 0 1px var(--c-rule-strong);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--c-ink) 22%, transparent);
+  }
+</style>

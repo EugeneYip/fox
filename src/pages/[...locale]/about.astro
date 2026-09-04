@@ -1,0 +1,170 @@
+---
+/**
+ * 關於頁。
+ *
+ * 這一頁是隱私設定影響最大的地方。本名、學歷、地點都不是寫死的，
+ * 而是透過 reveal() 取值 —— privacy.ts 沒打開，這裡就顯示不出來。
+ */
+import Base from '@layouts/Base.astro';
+import PageHeader from '@components/layout/PageHeader.astro';
+import { localePaths } from '@i18n/paths';
+import { site, DEFAULT_LOCALE, type Locale } from '@config/site';
+import { privacy, reveal } from '@config/privacy';
+import { useTranslations, localizePath, pick } from '@i18n/utils';
+import { getActivePlatforms } from '@lib/syndication';
+import FoxMark from '@components/fox/FoxMark.astro';
+import PlatformGrid from '@components/content/PlatformGrid.astro';
+import SectionHeading from '@components/ui/SectionHeading.astro';
+
+export const getStaticPaths = () => localePaths();
+
+const { locale } = Astro.props as { locale: Locale };
+const t = useTranslations(locale);
+
+const penName = pick(site.penName, locale) ?? site.penName[DEFAULT_LOCALE];
+const realName = reveal('realName', locale === 'zh-TW' ? 'zh' : locale) as string | undefined;
+const education = reveal('education', locale === 'zh-TW' ? 'zh' : locale) as
+  | { school: string; dept: string; degree: string; years: string }
+  | undefined;
+const location = reveal('location', locale === 'zh-TW' ? 'zh' : locale) as string | undefined;
+
+const platforms = await getActivePlatforms();
+
+const title = pick({ 'zh-TW': '關於', en: 'About' }, locale) ?? '關於';
+
+const BODY: Record<Locale, string[]> = {
+  'zh-TW': [
+    '讀中文的。喜歡狐狸。',
+    '在做一件很小的事：每天讀一首詩，把它說成今天的話，錄成三十秒的短片。做久了發現三十秒裝不下的東西太多，所以有了這個網站。',
+    '這裡放的是那些裝不下的部分 —— 注解、版本、為什麼這句要這樣讀，以及讀到一半跑掉的念頭。',
+  ],
+  en: [
+    'A reader of Chinese literature. Fond of foxes.',
+    'Doing something small: reading one poem a day, saying it in today’s words, filming thirty seconds of it. After a while it became clear how much thirty seconds cannot hold — so this site exists.',
+    'What lives here is everything that did not fit — the notes, the variants, why a line is read the way it is, and the thoughts that wandered off halfway through.',
+  ],
+};
+---
+
+<Base locale={locale} title={title} description={BODY[locale][0]} class="wrap--content">
+  <PageHeader title={title} />
+
+  <div class="about">
+    <div class="about__mark">
+      <FoxMark size={64} variant="line" />
+    </div>
+
+    <div class="about__body prose">
+      <p class="about__name">
+        {penName}
+        {realName && <span class="about__realname faint">（{realName}）</span>}
+      </p>
+
+      {BODY[locale].map((p) => <p>{p}</p>)}
+
+      {(education || location) && (
+        <dl class="about__facts ui">
+          {education && (
+            <div>
+              <dt>{pick({ 'zh-TW': '學歷', en: 'Education' }, locale)}</dt>
+              <dd>
+                {education.school}　{education.dept}　{education.degree}
+                {privacy.showTimelineYears && <span class="faint">（{education.years}）</span>}
+              </dd>
+            </div>
+          )}
+          {location && (
+            <div>
+              <dt>{pick({ 'zh-TW': '所在', en: 'Based in' }, locale)}</dt>
+              <dd>{location}</dd>
+            </div>
+          )}
+        </dl>
+      )}
+
+      <p class="about__contact faint">
+        {pick(
+          {
+            'zh-TW': '有話想說的話，到下面任何一個平臺找我都可以。',
+            en: 'If you would like to say something, any of the places below works.',
+          },
+          locale,
+        )}
+      </p>
+    </div>
+  </div>
+
+  {platforms.length > 0 && (
+    <section class="about__section" aria-label={t('home.elsewhere')}>
+      {/*
+        linkLabel 不能省：卡片上每一張也有一個「看全部」，去處各不相同。
+        第 1 輪（第十八圈）在首頁補過同一件事，這一頁漏了 —— 第 1 輪（第十九圈）補上。
+      */}
+      <SectionHeading
+        title={t('home.elsewhere')}
+        href={localizePath('/elsewhere', locale)}
+        linkText={t('home.viewAll')}
+        linkLabel={t('home.viewAllOf', { section: t('home.elsewhere') })}
+        headingLevel="h2"
+      />
+      <PlatformGrid entries={platforms} locale={locale} />
+    </section>
+  )}
+</Base>
+
+<style>
+  .about {
+    display: flex;
+    gap: var(--s-6);
+    align-items: flex-start;
+  }
+
+  .about__mark {
+    flex: none;
+    color: var(--c-flame);
+  }
+
+  .about__body { min-inline-size: 0; }
+
+  .about__name {
+    font-size: var(--t-lg);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+  }
+
+  .about__realname {
+    font-size: var(--t-sm);
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+
+  .about__facts {
+    display: grid;
+    gap: var(--s-2);
+    font-size: var(--t-sm);
+    padding-block: var(--s-4);
+    border-block: var(--border-thin);
+  }
+
+  .about__facts > div {
+    display: grid;
+    grid-template-columns: 5rem 1fr;
+    gap: var(--s-3);
+  }
+
+  .about__facts dt {
+    color: var(--c-ink-faint);
+    font-size: var(--t-xs);
+  }
+
+  .about__facts dd { margin: 0; }
+
+  .about__contact { font-size: var(--t-sm); }
+
+  .about__section { margin-block-start: var(--s-8); }
+
+  @media (max-width: 34rem) {
+    .about { flex-direction: column; gap: var(--s-4); }
+    .about__facts > div { grid-template-columns: 1fr; gap: var(--s-1); }
+  }
+</style>

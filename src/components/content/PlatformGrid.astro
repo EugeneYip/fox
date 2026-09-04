@@ -1,0 +1,148 @@
+---
+/**
+ * 平台卡片牆 —— 「狐狸在哪些地方出沒」。
+ *
+ * 就算某個平台一篇都還沒同步到，只要有設定就會顯示。
+ * 網站的用途之一是告訴別人「我在這些地方」，這件事不需要等到有內容。
+ */
+import type { Platform } from '@config/platforms';
+import type { SourceStatus } from '@lib/syndication';
+import { useTranslations, localizePath } from '@i18n/utils';
+import { externalLinkRel } from '@config/privacy';
+import type { Locale } from '@config/site';
+
+interface Entry {
+  platform: Platform;
+  count: number;
+  homeUrl?: string;
+  status?: SourceStatus;
+}
+
+interface Props {
+  entries: Entry[];
+  locale: Locale;
+}
+
+const { entries, locale } = Astro.props;
+const t = useTranslations(locale);
+---
+
+<ul class="pgrid">
+  {entries.map(({ platform, count, homeUrl }) => {
+    /*
+     * 卡片上那兩條連結在螢幕閱讀器的連結清單裡只剩「看全部」「前往」——
+     * 每一張卡片都一樣，而去處各不相同。可及名稱帶上平臺名（畫面不變）。
+     */
+    const name = platform.name[locale] ?? platform.name['zh-TW'];
+    return (
+    <li class="pgrid__cell" style={`--brand:${platform.color}`}>
+      <div class="pgrid__head">
+        <span class="pgrid__name">{name}</span>
+        <span class="pgrid__count ui faint">
+          {count > 0 ? t('list.count', { n: count }) : t('elsewhere.notSyncedYet')}
+        </span>
+      </div>
+
+      <div class="pgrid__links ui">
+        {count > 0 && (
+          <a
+            href={localizePath(`/elsewhere/${platform.id}`, locale)}
+            aria-label={t('home.viewAllOf', { section: name })}
+          >
+            {t('home.viewAll')}
+          </a>
+        )}
+        {homeUrl && (
+          <a
+            href={homeUrl}
+            target="_blank"
+            rel={externalLinkRel}
+            aria-label={t('elsewhere.visitOn', { platform: name })}
+          >
+            {t('elsewhere.visit')} <span aria-hidden="true">↗</span>
+          </a>
+        )}
+      </div>
+    </li>
+    );
+  })}
+</ul>
+
+<style>
+  .pgrid {
+    display: grid;
+    /*
+     * `min(14rem, 100%)` 而不是 `14rem`。
+     *
+     * `minmax()` 的下限是**硬的**：軌道不會縮得比它小，容器再窄也一樣。
+     * 14rem 在預設字級（16px）下是 224px，比任何手機都窄，所以本機看不出來 ——
+     * 但那個 rem 會跟著**使用者自己調大的瀏覽器預設字級**長大。
+     *
+     * 第 1 輪（第二十二圈）實測：視窗 320px、根字級調到 32px（也就是
+     * 把瀏覽器預設字級設成兩倍，那是視力不好的人很常做的設定），
+     * 這個軌道變成 448px，而格線本身只有 240px —— **整頁被推出去 168px**，
+     * 出現橫向捲軸。WCAG 1.4.10（Reflow）要的正是「320px 下不需要橫向捲動」。
+     *
+     * `min(…, 100%)` 讓下限在容器變窄時跟著讓步。
+     */
+    grid-template-columns: repeat(auto-fill, minmax(min(14rem, 100%), 1fr));
+    gap: var(--s-3);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .pgrid__cell {
+    margin: 0;
+    padding: var(--s-4);
+    border: 1px solid var(--c-rule);
+    border-radius: var(--r-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-3);
+    background: var(--c-bg-raised);
+    position: relative;
+    overflow: hidden;
+    transition: border-color var(--dur-fast) var(--ease);
+  }
+
+  /* 左緣一條品牌色的細線 —— 夠認得出來，又不會搶版面 */
+  .pgrid__cell::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    inline-size: 3px;
+    background: var(--brand);
+    opacity: 0.75;
+  }
+
+  .pgrid__cell:hover { border-color: var(--c-rule-strong); }
+
+  .pgrid__head {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-1);
+  }
+
+  .pgrid__name {
+    font-size: var(--t-base);
+    font-weight: 600;
+  }
+
+  .pgrid__count { font-size: var(--t-xs); }
+
+  .pgrid__links {
+    display: flex;
+    gap: var(--s-4);
+    margin-block-start: auto;
+    font-size: var(--t-xs);
+  }
+
+  .pgrid__links a {
+    text-decoration: none;
+    color: var(--c-ink-soft);
+  }
+
+  .pgrid__links a:hover { color: var(--c-flame-ink); }
+</style>

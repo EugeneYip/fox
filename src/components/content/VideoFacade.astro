@@ -1,0 +1,224 @@
+---
+/**
+ * 影片預覽卡 —— 按了才載入。
+ *
+ * 為什麼不直接放 <iframe>：一個 YouTube 嵌入會在頁面載入的當下，
+ * 就把訪客的 IP、User-Agent、以及「看了哪一頁」送給 Google，
+ * 不管訪客有沒有按播放。對一個宣稱不追蹤的網站來說，這是自打嘴巴。
+ *
+ * 所以預設只畫一個自己的預覽卡（零外部請求），按下去才建立 iframe，
+ * 而且用 youtube-nocookie.com。
+ *
+ * poster 有給就用本地圖檔；沒給就畫一個純 CSS 的封面 —— 
+ * 刻意不去 hotlink Google 的縮圖網址，那等於又把訪客送過去了。
+ */
+import { useTranslations } from '@i18n/utils';
+import { externalLinkRel } from '@config/privacy';
+import type { Locale } from '@config/site';
+
+interface Props {
+  /** YouTube 影片 ID */
+  videoId: string;
+  title: string;
+  locale: Locale;
+  /** 本地封面圖路徑，例如 /thumbs/abc.jpg */
+  poster?: string;
+}
+
+const { videoId, title, locale, poster } = Astro.props;
+const t = useTranslations(locale);
+const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+
+/*
+ * ── 兩個控制項要說出「哪一首」──────────────────────
+ *
+ * 第 1 輪（第二十圈）第一次讓這個元件真的算繪出來（站上沒有一首詩填
+ * `videoUrl`，所以它從來沒有出現在產出裡）。把整頁的按鈕與連結列出來看：
+ *
+ *   目前是直排，按一下改為橫排
+ *   載入並播放          ← 播什麼？
+ *   聽朗讀              ← 聽誰的？而且它會離開這個站
+ *   標記為「唐詩」
+ *   較舊 〈烏衣巷〉
+ *
+ * 這一頁上其他每一個控制項都說出了目標（標籤是第 1 輪〔第十八圈〕補的），
+ * 只有影片這兩個沒有。
+ *
+ * ## 為什麼用 aria-labelledby 而不是 aria-label
+ *
+ * 標題那串字永遠是中文（〈詩名〉作者），而 `aria-label` 是一個**沒有語言的
+ * 字串** —— 塞進去就把下面那個 `lang="zh-Hant"` 的修法抵銷掉了，
+ * 英文頁上會用英文語音唸〈靜夜思〉。
+ * `aria-labelledby` 串接的是**元素**，每一段各自保留自己的語言。
+ */
+const ids = { play: `facade-${videoId}-play`, listen: `facade-${videoId}-listen`, title: `facade-${videoId}-title` };
+---
+
+<figure class="facade" data-video-id={videoId} data-title={title}>
+  <div class="facade__frame">
+    {poster ? (
+      <img class="facade__poster" src={poster} alt="" loading="lazy" decoding="async" width="1280" height="720" />
+    ) : (
+      <div class="facade__poster facade__poster--drawn" aria-hidden="true">
+        <span class="facade__glyph">狐</span>
+      </div>
+    )}
+
+    <button
+      class="facade__play ui"
+      type="button"
+      data-facade-play
+      aria-labelledby={`${ids.play} ${ids.title}`}
+    >
+      <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+        <path d="M8 5.5v13l11-6.5z" fill="currentColor" />
+      </svg>
+      <span id={ids.play}>{t('external.loadEmbed')}</span>
+    </button>
+  </div>
+
+  <figcaption class="facade__caption">
+    {/*
+      標題永遠是「〈詩名〉作者」—— 不管頁面是哪個語言，那串字都是中文。
+      英文頁上不標語言的話，螢幕閱讀器會用英文語音唸〈靜夜思〉李白。
+      跟 PoemBlock 的 .poem__original 用同一個標籤（古典漢文）。
+    */}
+    <span class="facade__title" id={ids.title} lang="zh-Hant">{title}</span>
+    <span class="facade__notice faint">{t('external.embedBlocked')}</span>
+    <a
+      class="facade__fallback ui"
+      href={watchUrl}
+      target="_blank"
+      rel={externalLinkRel}
+      aria-labelledby={`${ids.listen} ${ids.title}`}
+    >
+      <span id={ids.listen}>{t('poem.listen')}</span> <span aria-hidden="true">↗</span>
+    </a>
+  </figcaption>
+</figure>
+
+<style>
+  .facade {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-3);
+  }
+
+  .facade__frame {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    border-radius: var(--r-md);
+    overflow: hidden;
+    background: var(--c-bg-sunken);
+    border: 1px solid var(--c-rule);
+  }
+
+  .facade__poster {
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+  }
+
+  /* 沒有封面圖時自己畫一個：狐火色的暈染 + 一個「狐」字 */
+  .facade__poster--drawn {
+    display: grid;
+    place-items: center;
+    background:
+      radial-gradient(60% 80% at 30% 20%, var(--c-flame-wash), transparent 70%),
+      radial-gradient(50% 70% at 80% 90%, var(--c-moss-wash), transparent 70%),
+      var(--c-bg-sunken);
+  }
+
+  .facade__glyph {
+    font-family: var(--f-serif);
+    font-size: clamp(3rem, 12vw, 6rem);
+    color: var(--c-flame);
+    opacity: 0.28;
+    user-select: none;
+  }
+
+  .facade__play {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    inline-size: fit-content;
+    block-size: fit-content;
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    padding: var(--s-3) var(--s-5);
+    background: var(--c-bg-raised);
+    color: var(--c-ink);
+    border: 1px solid var(--c-edge);
+    border-radius: 999px;
+    font-size: var(--t-sm);
+    box-shadow: var(--shadow-lift);
+    transition: transform var(--dur) var(--ease), color var(--dur-fast) var(--ease);
+  }
+
+  .facade__play:hover {
+    transform: scale(1.03);
+    color: var(--c-flame-ink);
+  }
+
+  .facade__caption {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-1);
+    font-size: var(--t-sm);
+  }
+
+  .facade__title { font-weight: 600; }
+
+  .facade__notice {
+    line-height: var(--lh-snug);
+    max-inline-size: 52ch;
+  }
+
+  .facade__fallback {
+    font-size: var(--t-xs);
+    color: var(--c-ink-soft);
+    text-decoration: none;
+    align-self: flex-start;
+  }
+
+  .facade__fallback:hover { color: var(--c-flame-ink); }
+
+  .facade__frame:has(iframe) .facade__play,
+  .facade__frame:has(iframe) .facade__poster { display: none; }
+
+  .facade iframe {
+    position: absolute;
+    inset: 0;
+    inline-size: 100%;
+    block-size: 100%;
+    border: 0;
+  }
+</style>
+
+<script>
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-facade-play]')) {
+    button.addEventListener('click', () => {
+      const figure = button.closest<HTMLElement>('.facade');
+      const frame = button.closest<HTMLElement>('.facade__frame');
+      const videoId = figure?.dataset.videoId;
+      if (!frame || !videoId) return;
+
+      const iframe = document.createElement('iframe');
+      // nocookie 網域 + 不帶相關影片推薦，把送出去的東西壓到最少
+      iframe.src =
+        `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}` +
+        '?autoplay=1&rel=0&modestbranding=1';
+      iframe.title = figure?.dataset.title ?? 'YouTube';
+      // title 會變成這個 iframe 的無障礙名稱，而它是中文。
+      // 屬性沒辦法包一層 <span lang> 來救，只能標在元素自己身上。
+      iframe.lang = 'zh-Hant';
+      iframe.allow = 'accelerometer; autoplay; encrypted-media; picture-in-picture; fullscreen';
+      iframe.referrerPolicy = 'strict-origin-when-cross-origin';
+      iframe.loading = 'lazy';
+      frame.append(iframe);
+      iframe.focus();
+    });
+  }
+</script>

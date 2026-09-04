@@ -1,0 +1,72 @@
+---
+import Base from '@layouts/Base.astro';
+import PageHeader from '@components/layout/PageHeader.astro';
+import { localePaths } from '@i18n/paths';
+import { getSyndication, getActivePlatforms, lastSyncedAt } from '@lib/syndication';
+import { useTranslations } from '@i18n/utils';
+import { formatDate } from '@lib/dates';
+import type { Locale } from '@config/site';
+import PlatformGrid from '@components/content/PlatformGrid.astro';
+import SyndicationList from '@components/content/SyndicationList.astro';
+import SectionHeading from '@components/ui/SectionHeading.astro';
+import EmptyState from '@components/ui/EmptyState.astro';
+
+export const getStaticPaths = () => localePaths();
+
+const { locale } = Astro.props as { locale: Locale };
+const t = useTranslations(locale);
+
+const platforms = await getActivePlatforms();
+/*
+ * 這一頁是「最近在別處發表了什麼」的概覽，不是完整清單 ——
+ * 完整的在 /elsewhere/{platform}，那些頁面自從第 3 輪（第二圈）加了分頁
+ * 之後就裝得下任意多筆了。
+ *
+ * 為什麼是 20 而不是原本的 60：用**長度校準過的**假資料實測，
+ * 60 筆時這一頁 gzip 23.3 KB，是單頁預算的 166%。
+ * 上一圈檢查時說它「有 limit: 60，不受影響」—— 那是用當時
+ * 壓縮率 23:1 的假資料量的，數字完全失真。
+ *
+ *   60 筆 → 23.3 KB（166%）   30 筆 → 15.4 KB（110%）
+ *   20 筆 → 12.7 KB（ 90%）   12 筆 → 10.3 KB（ 74%）
+ */
+const items = await getSyndication({ limit: 20 });
+const synced = lastSyncedAt();
+---
+
+<Base locale={locale} title={t('elsewhere.title')} description={t('elsewhere.intro')} class="wrap--wide">
+  <PageHeader
+    title={t('elsewhere.title')}
+    lead={t('elsewhere.intro')}
+    count={synced ? t('elsewhere.lastSynced', { date: formatDate(synced, locale) }) : undefined}
+  />
+
+  {platforms.length > 0 && (
+    <section class="els__section" aria-label={t('elsewhere.byPlatform')}>
+      <SectionHeading title={t('elsewhere.byPlatform')} headingLevel="h2" />
+      <PlatformGrid entries={platforms} locale={locale} />
+    </section>
+  )}
+
+  <section class="els__section" aria-label={t('elsewhere.timeline')}>
+    {/*
+      訂閱入口放在這裡而不是頁尾：頁尾那個 RSS 是 /rss.xml（只有站上的文章），
+      而這一頁的東西**只有 /rss-all.xml 載得到**。想追這些的人正好站在這裡。
+    */}
+    <SectionHeading
+      title={t('elsewhere.timeline')}
+      headingLevel="h2"
+      href="/rss-all.xml"
+      linkText={t('elsewhere.subscribeAll')}
+    />
+    {items.length > 0 ? (
+      <SyndicationList items={items} locale={locale} />
+    ) : (
+      <EmptyState title={t('elsewhere.notSyncedYet')} body={t('elsewhere.emptyBody')} />
+    )}
+  </section>
+</Base>
+
+<style>
+  .els__section + .els__section { margin-block-start: var(--s-8); }
+</style>

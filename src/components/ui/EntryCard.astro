@@ -1,0 +1,126 @@
+---
+/**
+ * 站內文章的列表項。
+ *
+ * 三種內容（文章／詩詞／短札）共用同一個卡片，只用一個小標記區分類型。
+ * 讓時間軸看起來是連續的，而不是三個各自為政的清單。
+ */
+import type { AnyEntry, WritingCollection } from '@lib/content';
+import { entryUrl } from '@lib/content';
+import { formatDate, isoDate } from '@lib/dates';
+import { useTranslations } from '@i18n/utils';
+import type { Locale } from '@config/site';
+import TagList from '@components/ui/TagList.astro';
+
+interface Props {
+  collection: WritingCollection;
+  entry: AnyEntry;
+  locale: Locale;
+  /** 顯示類型標記；同質的列表頁可以關掉 */
+  showType?: boolean;
+  /**
+   * 標題要用哪一級。
+   * 這不是樣式問題 —— 螢幕閱讀器靠標題層級建立頁面大綱，跳級（h1 直接到 h3）
+   * 會讓大綱出現斷層。
+   *   首頁：上面有 h2 的「最近」，所以卡片用 h3
+   *   列表頁：h1 底下直接就是卡片，要用 h2
+   */
+  headingLevel?: 'h2' | 'h3';
+}
+
+const { collection, entry, locale, showType = true, headingLevel = 'h3' } = Astro.props;
+// 注意：這個 prop 不能叫 `as` —— `as` 是 TypeScript 的運算子關鍵字，
+// 拿來當 prop 名稱會讓 Astro 推不出 Props 型別，Astro.props 整個變成 any。
+const Heading = headingLevel;
+const t = useTranslations(locale);
+
+const typeLabel = {
+  posts: t('type.post'),
+  poems: t('type.poem'),
+  notes: t('type.note'),
+}[collection];
+
+const href = entryUrl(collection, entry);
+const data = entry.data;
+
+// 詩詞的摘要用詩題與作者，比用 description 更有資訊量
+const poem = 'poem' in data ? data.poem : undefined;
+const subtitle = poem ? `${poem.author}${poem.dynasty ? `・${poem.dynasty}` : ''}` : undefined;
+---
+
+<article class="entry">
+  <a class="entry__link" href={href}>
+    <Heading class="entry__title" data-featured={data.featured ? '' : undefined}>
+      {poem ? poem.title : data.title}
+    </Heading>
+  </a>
+
+  <div class="entry__meta ui">
+    <time datetime={isoDate(data.publishedAt)}>{formatDate(data.publishedAt, locale)}</time>
+    {showType && <><span aria-hidden="true">·</span><span>{typeLabel}</span></>}
+    {subtitle && <><span aria-hidden="true">·</span><span>{subtitle}</span></>}
+  </div>
+
+  {data.description && <p class="entry__desc muted">{data.description}</p>}
+
+  <TagList tags={data.tags} locale={locale} max={4} />
+</article>
+
+<style>
+  .entry {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-2);
+    padding-block: var(--s-5);
+    border-block-end: var(--border-thin);
+  }
+
+  .entry:last-child { border-block-end: 0; }
+
+  .entry__link { text-decoration: none; }
+
+  .entry__title {
+    font-size: var(--t-md);
+    font-weight: 600;
+    line-height: var(--lh-snug);
+    transition: color var(--dur-fast) var(--ease);
+  }
+
+  .entry__link:hover .entry__title { color: var(--c-flame-ink); }
+
+  /*
+   * 置頂的星號。原本是 `<span aria-hidden="true">✦</span>` 放在標題**裡面**。
+   *
+   * 第 1 輪（第十一圈）做過控制實驗：`aria-hidden` 會被排除在**連結**的
+   * 可及名稱之外，但**標題**的名稱仍然含著它（那是瀏覽器還是工具的行為，
+   * 那一輪查不出來，所以只記著沒有當成發現）。同一輪也量到另一件事：
+   * **CSS `::after` 產生的內容不會進到可及名稱裡**（量過三頁，一個都沒有）。
+   *
+   * 第 1 輪（第十二圈）用標題導覽讀了一次全站的大綱，那個星號就出現在
+   * 「靜夜思✦」裡 —— 而標題導覽正好是那個不確定性會咬到的地方。
+   * 改用 `::after` 之後，兩種解釋下它都不在名稱裡，而畫面完全沒有變。
+   *
+   * （這個星號本身不承載資訊 —— 第 1 輪〔第十一圈〕查過，`featured`
+   * 只影響排序。所以拿掉它的發音不會遺失任何東西。）
+   */
+  .entry__title[data-featured]::after {
+    content: "✦";
+    color: var(--c-flame);
+    font-size: 0.7em;
+    vertical-align: 0.3em;
+    margin-inline-start: 0.3em;
+  }
+
+  .entry__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45em;
+    font-size: var(--t-xs);
+    color: var(--c-ink-faint);
+  }
+
+  .entry__desc {
+    max-inline-size: 62ch;
+    line-height: var(--lh-snug);
+  }
+</style>

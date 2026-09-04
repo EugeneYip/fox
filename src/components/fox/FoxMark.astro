@@ -1,0 +1,78 @@
+---
+/**
+ * 狐狸標記 —— 全站唯一的圖形符號。
+ *
+ * 幾何化的狐狸頭，用最少的線條交代耳朵、臉、眼睛。
+ * 用 currentColor，所以放在哪裡就跟著那裡的文字顏色走，
+ * 深淺色主題都不用另外處理。
+ *
+ * 注意：Astro 的 scoped style 不會穿進子元件，所以在外面寫
+ * `<FoxMark class="x" />` 搭配 `.x { color: ... }` 是沒有用的。
+ * 要換顏色請包一層容器，把 color 設在容器上，讓它繼承下來。
+ */
+interface Props {
+  size?: number | string;
+  /** 'solid' 實心，適合小尺寸與 favicon；'line' 線條，適合大尺寸 */
+  variant?: 'solid' | 'line';
+  /** 有意義的圖才給 title；純裝飾留空會自動加 aria-hidden */
+  title?: string;
+  class?: string;
+}
+
+const { size = 40, variant = 'solid', title, class: className } = Astro.props;
+const decorative = !title;
+---
+
+<svg
+  class:list={['fox-mark', `fox-mark--${variant}`, className]}
+  width={size}
+  height={size}
+  viewBox="0 0 64 64"
+  fill="none"
+  xmlns="http://www.w3.org/2000/svg"
+  role={decorative ? 'presentation' : 'img'}
+  aria-hidden={decorative ? 'true' : undefined}
+  aria-label={title}
+>
+  {title && <title>{title}</title>}
+
+  {variant === 'solid' ? (
+    <>
+      <path
+        d="M10 3 L7.5 25 C7.5 36 13 44 32 62 C51 44 56.5 36 56.5 25 L54 3 L38.5 19.5 L25.5 19.5 Z"
+        fill="currentColor"
+      />
+      {/* 眼睛與鼻頭用底色挖空，這樣不管背景是什麼顏色都乾淨 */}
+      <path d="M17 29 L25.5 32.5 L19.5 36 Z" fill="var(--c-bg)" />
+      <path d="M47 29 L38.5 32.5 L44.5 36 Z" fill="var(--c-bg)" />
+      <path d="M32 47 L28.5 51.5 L35.5 51.5 Z" fill="var(--c-bg)" />
+    </>
+  ) : (
+    <>
+      <path
+        d="M10 3 L7.5 25 C7.5 36 13 44 32 62 C51 44 56.5 36 56.5 25 L54 3 L38.5 19.5 L25.5 19.5 Z"
+        stroke="currentColor"
+        stroke-width="3"
+        stroke-linejoin="round"
+      />
+      <path d="M17 29 L25.5 32.5 L19.5 36 Z" fill="currentColor" />
+      <path d="M47 29 L38.5 32.5 L44.5 36 Z" fill="currentColor" />
+      <path d="M32 47 L28.5 51.5 L35.5 51.5 Z" fill="currentColor" />
+    </>
+  )}
+</svg>
+
+<style>
+  .fox-mark {
+    flex: none;
+    /* 眼睛微微跟著游標「醒過來」—— 只在支援 hover 的裝置上 */
+    transition: transform var(--dur) var(--ease);
+  }
+
+  @media (hover: hover) {
+    :global(a:hover) > .fox-mark,
+    :global(button:hover) > .fox-mark {
+      transform: rotate(-4deg) scale(1.04);
+    }
+  }
+</style>

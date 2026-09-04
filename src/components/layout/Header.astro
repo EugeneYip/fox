@@ -1,0 +1,245 @@
+---
+import { site, nav, DEFAULT_LOCALE, type Locale } from '@config/site';
+import { useTranslations, localizePath, pick } from '@i18n/utils';
+import FoxMark from '@components/fox/FoxMark.astro';
+import ThemeToggle from '@components/layout/ThemeToggle.astro';
+import LanguageSwitcher from '@components/layout/LanguageSwitcher.astro';
+
+interface Props { locale: Locale; availableLocales?: readonly Locale[] }
+const { locale, availableLocales } = Astro.props;
+const t = useTranslations(locale);
+
+const here = Astro.url.pathname.replace(/\/$/, '') || '/';
+const isCurrent = (href: string) => {
+  const full = localizePath(href, locale);
+  return here === full || here.startsWith(full + '/');
+};
+
+/*
+ * 導覽刻意不做漢堡選單。項目只有五個，手機上讓它橫向捲動就好 ——
+ * 少一層互動、少一段 JavaScript，也少一個無障礙上容易出錯的地方。
+ */
+---
+
+<header class="site-header">
+  <div class="wrap site-header__inner">
+    <a class="brand" href={localizePath('/', locale)}>
+      <FoxMark size={30} />
+      <span class="brand__text">
+        <span class="brand__name">{pick(site.name, locale) ?? site.name[DEFAULT_LOCALE]}</span>
+        <span class="brand__tagline faint">{pick(site.tagline, locale)}</span>
+      </span>
+    </a>
+
+    <nav class="site-nav ui" aria-label={t('nav.menu')}>
+      <ul>
+        {nav.map((item) => (
+          <li>
+            <a
+              href={localizePath(item.href, locale)}
+              aria-current={isCurrent(item.href) ? 'page' : undefined}
+            >
+              {pick(item.label, locale)}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+
+    <div class="site-header__tools">
+      <LanguageSwitcher locale={locale} available={availableLocales} />
+      <ThemeToggle
+        label={t('nav.theme')}
+        states={{ system: t('theme.system'), light: t('theme.light'), dark: t('theme.dark') }}
+        next={{
+          template: t('theme.next'),
+          system: t('theme.nameSystem'),
+          light: t('theme.nameLight'),
+          dark: t('theme.nameDark'),
+        }}
+        join={t('theme.join')}
+      />
+    </div>
+  </div>
+</header>
+
+<style>
+  .site-header {
+    border-block-end: var(--border-thin);
+    /*
+     * ── 這一行是 fallback，不要刪 ──────────────────
+     *
+     * `color-mix()` 不支援的話**整條宣告會被丟掉**（實測：
+     * 用一個不合法的色彩空間去設，`style.background` 回空字串）。
+     * 而這是 `position: sticky` 的頁首 —— 沒有背景就等於
+     * 導覽列的字直接印在捲過去的內文上，兩邊都讀不了。
+     * 第 1 輪（第二十二圈）截圖看過那個樣子。
+     *
+     * tokens.css 對每一個 `light-dark()` 都寫了一行單值 fallback，
+     * 而 `color-mix()` 沒有 —— 同一套紀律只用在其中一個上。
+     * （`check:contrast` 現在兩個都守。）
+     */
+    background: var(--c-bg);
+    background: color-mix(in srgb, var(--c-bg) 88%, transparent);
+    backdrop-filter: blur(10px);
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 20;
+  }
+
+  .site-header__inner {
+    display: flex;
+    align-items: center;
+    gap: var(--s-5);
+    min-block-size: 4rem;
+    padding-block: var(--s-3);
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+    text-decoration: none;
+    flex: none;
+  }
+
+  .brand__text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+  }
+
+  .brand__name {
+    font-size: var(--t-md);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  .brand__tagline {
+    font-family: var(--f-sans);
+    font-size: var(--t-xs);
+  }
+
+  .site-nav {
+    flex: 1;
+    min-inline-size: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .site-nav::-webkit-scrollbar { display: none; }
+
+  .site-nav ul {
+    display: flex;
+    gap: var(--s-5);
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .site-nav li { margin: 0; }
+
+  .site-nav a {
+    display: block;
+    white-space: nowrap;
+    font-size: var(--t-sm);
+    text-decoration: none;
+    padding-block: var(--s-2);
+    color: var(--c-ink-soft);
+    position: relative;
+  }
+
+  .site-nav a:hover { color: var(--c-ink); }
+
+  /* 目前所在的頁面：底下一道狐火色的短線 */
+  .site-nav a[aria-current="page"] {
+    color: var(--c-ink);
+  }
+
+  .site-nav a[aria-current="page"]::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    inset-block-end: 0;
+    block-size: 2px;
+    background: var(--c-flame);
+    border-radius: 1px;
+  }
+
+  .site-header__tools {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    flex: none;
+  }
+
+  @media (max-width: 52rem) {
+    .brand__tagline { display: none; }
+    .site-header__inner { gap: var(--s-4); }
+  }
+
+  @media (max-width: 34rem) {
+    .site-header__inner {
+      flex-wrap: wrap;
+      row-gap: var(--s-2);
+    }
+    /*
+     * 窄螢幕時導覽換到第二列。
+     *
+     * ## 這會讓 Tab 順序跟畫面順序對不起來
+     *
+     * 第 1 輪（第五圈）實測 375px：
+     *
+     *   DOM 順序    brand → nav（5 個連結）→ tools（語言、主題）
+     *   畫面順序    brand、tools（第一列）→ nav（第二列）
+     *
+     * 所以鍵盤使用者會：brand →（跳到第二列）nav →（跳回第一列）語言、主題。
+     * 45 個可聚焦元素裡有 7 個的順序不一致，全部在 header。
+     *
+     * ## 為什麼沒有改
+     *
+     * **這不是 WCAG 2.4.3 的違規** —— 那一條要求的是「順序保留意義與可操作性」，
+     * 而「主要導覽在次要控制項之前」本來就是有意義的順序。
+     *
+     * 而且沒有免費的修法：DOM 只有一種順序，桌面版與手機版的視覺順序不同，
+     * 讓其中一邊對齊就會讓另一邊對不齊。要真的解決得改設計
+     * （例如手機版把 tools 也放到第二列、接在 nav 後面），那是站主的決定。
+     *
+     * 量測的方式記在 REVIEW-LOG.md 第 1 輪（第五圈）：
+     * 用真的 .focus() 測可聚焦性，再比對 DOM 順序與視覺座標。
+     * **要在多個視窗寬度各量一次** —— 第四圈只量了桌面，所以沒看到這件事。
+     */
+    .site-nav {
+      order: 3;
+      flex-basis: 100%;
+      margin-inline: calc(var(--gutter) * -1);
+      /*
+       * 留白放在**捲動內容**（ul）上，不放在捲動容器（nav）上。
+       *
+       * 第 8 輪（第十八圈）在真的瀏覽器裡量到：padding 放在 .site-nav 上時，
+       * 320px 的英文導覽會超出 13px（五個英文項目比中文寬），
+       * 而**捲到底時最後一項「About」的右緣落在 320.2px** —— 貼著螢幕邊緣，
+       * 左邊卻有 20px。原因是捲動容器的尾端 padding 不算進 scrollWidth，
+       * 那一邊的 20px 等於不存在。
+       *
+       * 改放在 ul 上之後，那段留白是捲動內容的一部分，捲到底仍然留得住。
+       * 中文在 320px 下原本就有 73px 餘裕，這個改動對它沒有影響。
+       */
+      padding-inline: 0;
+    }
+
+    /*
+     * `inline-size: max-content` 是關鍵：ul 預設會被拉成 nav 的寬度（100%），
+     * 那時項目是**溢出**它的內容盒，尾端的 padding 一樣留不住。
+     * 讓 ul 跟著內容長，那段留白才會變成真的可捲寬度。
+     * `min-inline-size: 100%` 讓內容不夠寬時維持原樣（中文就是這一種）。
+     */
+    .site-nav ul {
+      padding-inline: var(--gutter);
+      inline-size: max-content;
+      min-inline-size: 100%;
+    }
+    .site-header__tools { margin-inline-start: auto; }
+  }
+</style>

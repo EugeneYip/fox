@@ -1,0 +1,455 @@
+@import "./tokens.css";
+
+/* ─────────────────────────────────────────────────────
+ * 基底
+ * ───────────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: var(--s-7);
+  /* 中文字型在 macOS 上預設抗鋸齒偏粗，調細一點比較接近紙本 */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: var(--c-bg);
+  color: var(--c-ink);
+  font-family: var(--f-serif);
+  font-size: var(--t-base);
+  line-height: var(--lh-body);
+  letter-spacing: var(--ls-body);
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  text-rendering: optimizeLegibility;
+  /*
+   * 中文可以在任何字之間斷行，**拉丁文的一個字不行**。
+   * 中文句子裡夾一個像 `localStorage` 這樣的長字時，那個字要嘛整個放進去、
+   * 要嘛把整段推出去 —— 而窄欄或大字級之下就是後者。
+   *
+   * 第 1 輪（第二十二圈）實測：視窗 320px、根字級 32px，隱私頁那句
+   * 「⋯都存在你自己的瀏覽器裡（localStorage）⋯」把整頁推出去 16px。
+   *
+   * `break-word` 只在「這個字整個放不下」時才拆，正常的排版完全不受影響。
+   * （行內 `code` 用的是更強的 `anywhere`，理由見那裡。）
+   */
+  overflow-wrap: break-word;
+}
+
+::selection {
+  background: var(--c-selection);
+  color: var(--c-ink);
+}
+
+/* ─────────────────────────────────────────────────────
+ * 文字
+ * ───────────────────────────────────────────────────── */
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--f-serif);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  letter-spacing: var(--ls-tight);
+  text-wrap: balance;
+}
+
+h1 { font-size: var(--t-xl); }
+h2 { font-size: var(--t-lg); }
+h3 { font-size: var(--t-md); }
+h4, h5, h6 { font-size: var(--t-base); }
+
+p {
+  text-wrap: pretty;
+}
+
+a {
+  color: inherit;
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+  text-decoration-color: var(--c-rule-strong);
+  transition: color var(--dur-fast) var(--ease),
+              text-decoration-color var(--dur-fast) var(--ease);
+}
+
+a:hover {
+  color: var(--c-flame-ink);
+  text-decoration-color: currentColor;
+}
+
+:focus-visible {
+  outline: 2px solid var(--c-focus);
+  outline-offset: 3px;
+  border-radius: var(--r-sm);
+}
+
+/* 滑鼠點擊不要出現外框，鍵盤操作才要 —— 這是無障礙的基本禮貌 */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+strong, b { font-weight: 700; }
+
+small { font-size: var(--t-sm); }
+
+code, pre, kbd, samp {
+  font-family: var(--f-mono);
+  font-size: 0.9em;
+}
+
+code {
+  background: var(--c-bg-sunken);
+  padding: 0.1em 0.35em;
+  border-radius: var(--r-sm);
+  /*
+   * 行內的 code 常常是一整串不能斷的東西（`fox-poem-orientation`、
+   * `rel="noreferrer"`），而預設的 `overflow-wrap: normal` 不會斷它們 ——
+   * 它們就直接把整頁推出去。
+   *
+   * 第 1 輪（第二十二圈）實測：視窗 320px、根字級 32px（使用者把瀏覽器
+   * 預設字級調成兩倍），隱私頁橫向多出 **99px** —— 而 16px 下是 0。
+   * 本機看不出來，因為本機的字級是預設值。
+   *
+   * `anywhere` 而不是 `break-word`：後者只在「整個字放不下」時才生效，
+   * 對含連字號與引號的那種串斷得不夠。`pre` 底下的不套用（見下面），
+   * 那裡是刻意要保留原樣、用捲動看的。
+   */
+  overflow-wrap: anywhere;
+}
+
+pre {
+  background: var(--c-bg-sunken);
+  padding: var(--s-4);
+  border-radius: var(--r-md);
+  overflow-x: auto;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  /* 程式碼區塊要保留原本的斷行，用捲動看 —— 不要跟著行內的 code 亂斷 */
+  overflow-wrap: normal;
+}
+
+blockquote {
+  border-inline-start: 2px solid var(--c-flame);
+  padding-inline-start: var(--s-4);
+  color: var(--c-ink-soft);
+  font-style: normal; /* 中文不用斜體 */
+}
+
+hr {
+  border: 0;
+  border-top: var(--border-thin);
+  margin-block: var(--s-7);
+}
+
+ul, ol {
+  padding-inline-start: 1.4em;
+}
+
+li + li {
+  margin-top: var(--s-2);
+}
+
+img, picture, svg, video {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-sm);
+}
+
+th, td {
+  text-align: start;
+  padding: var(--s-2) var(--s-3);
+  border-bottom: var(--border-thin);
+}
+
+th {
+  font-weight: 600;
+  color: var(--c-ink-soft);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+input, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+
+/* ─────────────────────────────────────────────────────
+ * 版面工具
+ * ───────────────────────────────────────────────────── */
+
+.wrap {
+  width: 100%;
+  max-width: var(--w-full);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+.wrap--content { max-width: calc(var(--w-content) + var(--gutter) * 2); }
+.wrap--prose { max-width: calc(var(--w-prose) + var(--gutter) * 2); }
+.wrap--wide { max-width: calc(var(--w-wide) + var(--gutter) * 2); }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/*
+ * 「跳到主要內容」—— 鍵盤使用者按下第一個 Tab 時遇到的東西。
+ *
+ * 這裡必須用 fixed 而不是 absolute。absolute 的定位基準是**文件**，
+ * 所以頁面一旦捲動過，這個連結就停在文件頂端，取得焦點時人在畫面外
+ * 看不到它 —— 等於整個功能失效，而且完全沒有徵兆。實測過：
+ * 捲到頁面中段再 Tab，它的 getBoundingClientRect().top 是 -1561。
+ *
+ * 藏起來的方式用 transform 而不是改 inset：只動合成層，不重排，
+ * 而且不管視窗多高都一定藏得完全。
+ */
+.skip-link {
+  position: fixed;
+  inset-inline-start: var(--s-4);
+  inset-block-start: var(--s-4);
+  z-index: 100;
+  background: var(--c-bg-raised);
+  color: var(--c-ink);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--c-edge);
+  border-radius: var(--r-md);
+  text-decoration: none;
+  box-shadow: var(--shadow-lift);
+  transform: translateY(calc(-100% - var(--s-5)));
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+/* 用 :focus 而不是 :focus-visible —— 這個連結只有鍵盤會碰到，一律要現身 */
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+/* 給次要文字用；顏色對比較低，不要拿來放重要資訊 */
+.muted {
+  color: var(--c-ink-soft);
+  font-size: var(--t-sm);
+}
+
+.faint {
+  color: var(--c-ink-faint);
+  font-size: var(--t-sm);
+}
+
+/* 用 sans 的地方：介面元件、標籤、日期 —— 跟正文的 serif 區分開 */
+.ui {
+  font-family: var(--f-sans);
+  letter-spacing: 0;
+}
+
+/* ─────────────────────────────────────────────────────
+ * 正文排版（文章內容）
+ * ───────────────────────────────────────────────────── */
+
+.prose {
+  --flow: var(--s-5);
+  font-size: var(--t-md);
+  line-height: var(--lh-body);
+}
+
+.prose > * + * { margin-top: var(--flow); }
+
+.prose h2 {
+  margin-top: var(--s-7);
+  padding-top: var(--s-2);
+}
+
+.prose h3 { margin-top: var(--s-6); }
+
+.prose h2 + *,
+.prose h3 + * { margin-top: var(--s-4); }
+
+.prose a {
+  text-decoration-color: var(--c-flame);
+}
+
+.prose img {
+  border-radius: var(--r-md);
+  margin-inline: auto;
+}
+
+.prose figure { margin-block: var(--s-6); }
+
+.prose figcaption {
+  margin-top: var(--s-2);
+  font-size: var(--t-sm);
+  color: var(--c-ink-soft);
+  text-align: center;
+  font-family: var(--f-sans);
+}
+
+/*
+ * 直排的樣式在 components/content/PoemBlock.astro 裡，不在這裡。
+ * 這邊本來有一組通用的 .vertical 工具類，但詩詞頁需要的是連詩節排列方向
+ * 都一起處理的完整邏輯，通用類幫不上忙，所以拿掉了 —— 沒有任何地方用它。
+ */
+
+/* ─────────────────────────────────────────────────────
+ * 動態偏好
+ * ───────────────────────────────────────────────────── */
+
+/*
+ * 只有 JS 才有用的控制項，沒有 JS 就不要畫出來。
+ * 標記由 <head> 那段繪製前的腳本設定（見 Base.astro 的說明）。
+ *
+ * ── 搜尋表單也是其中一個（第 2 輪〔第十八圈〕從讀者那一側量到的）──
+ *
+ * 那個 form **沒有 action**：沒有 JS 的時候按下 Enter 只會重新載入這一頁，
+ * 什麼都不會發生。而 `<noscript>` 那句「搜尋需要 JavaScript」印在**表單後面**
+ * —— 讀者是先看到一個看起來能用的搜尋框，試過之後才讀到那句話。
+ *
+ * 藏掉表單之後，沒有 JS 的讀者看到的就只有那句說明與它給的替代路徑
+ *（彙整、標籤）。`.search__status` 與 `.search__results` 是空的容器，
+ * 畫不出東西，所以不用管。
+ */
+html:not([data-js]) .theme-toggle,
+html:not([data-js]) .poem__toggle,
+html:not([data-js]) .search {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────
+ * 列印 —— 詩是會被印出來貼在牆上的
+ * ───────────────────────────────────────────────────── */
+
+@media print {
+  /*
+   * 先把整份文件切回淺色。
+   *
+   * 顏色是用 light-dark() 定義的，所以這一行會讓**所有**顏色 token
+   * 一次全部解析成淺色那一邊 —— 不只下面手動列出的三個。
+   *
+   * 沒有這一行的話：使用者在深色模式下列印，底色與正文被下面三行改成
+   * 黑白了，但狐火色、注解的顏色、分隔線仍然是深色模式那一套
+   * （那是為了深底調的），印在白紙上會淡到看不清楚。
+   *
+   * ## 為什麼要把三個選擇器都列出來
+   *
+   * 第 8 輪（第一圈）只寫了 `:root`，而那**沒有生效** ——
+   * tokens.css 的 `:root[data-theme="dark"]` 權重是 (0,1,1)，
+   * 這裡的 `:root` 只有 (0,1,0)，而**媒體查詢不增加權重**。
+   * 結果是：手動選了深色的人列印時，除了下面硬改的三個 token 之外
+   * 全部仍然是深色那一套。
+   *
+   * 這個 bug 活了兩圈才被發現，因為列印樣式從來沒有真的驗過 ——
+   * 第 8 輪（第三圈）才想到可以用 CSSOM 把 `@media print` 改成 `all`
+   * 來實際套用（注入 <style> 會被 CSP 擋掉）。
+   */
+  :root,
+  :root[data-theme="light"],
+  :root[data-theme="dark"] {
+    color-scheme: light;
+  }
+
+  :root {
+
+    /* 紙上不需要宣紙的米色，純白省墨也更銳利 */
+    --c-bg: #fff;
+    --c-ink: #000;
+    --c-ink-soft: #333;
+  }
+
+  body { font-size: 11pt; }
+
+  .site-header,
+  .site-footer { display: none !important; }
+
+  /*
+   * 紙上沒有「按一下」這回事。
+   *
+   * header 與 footer 拿掉之後，主要內容區裡還剩兩個互動控制項會被印出來
+   * （第二圈第 8 輪實際掃過每一種頁面才發現的）：
+   *
+   *   .poem__toggle —— 詩詞頁的「橫排／直排」按鈕。這一頁正是最常被印的，
+   *                    而按鈕在紙上只是一塊沒有意義的框
+   *   .pager        —— 列表頁與平臺頁的分頁列。93px 高，印出來是
+   *                    「← 上一頁 1 2 3 下一頁 →」，在紙上完全沒有用
+   *
+   * 直排／橫排維持列印當下畫面上的樣子 —— 那正是使用者按下列印時看到的東西。
+   */
+  .poem__toggle,
+  .pager { display: none !important; }
+
+  a { text-decoration: none; }
+
+  .prose a::after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+    color: #555;
+  }
+
+  h2, h3 { break-after: avoid; }
+
+  /*
+   * 不要讓一首詩被分頁切成兩半。
+   *
+   * `break-inside: avoid` 是**提示不是保證** —— 元素比一頁還高的時候，
+   * 瀏覽器只能照切。第 8 輪（第四圈）量出了那個門檻：
+   *
+   *   A4 可用高度（96dpi 扣 0.5in 邊界）  約 1027px
+   *   橫排時每句約                        56px
+   *   → 一個 .poem__stanza 超過 **18 句**就切得下去了
+   *
+   * 直排不受影響：`max-inline-size` 把高度鎖在 201px，長詩是往旁邊長的。
+   *
+   * `.poem__original` 也掛著 avoid，而它會隨詩長大（琵琶行節選橫排時 619px）。
+   * 超過一頁之後那條就形同虛設；在那之前，如果頁面剩餘空間不夠，
+   * 整首詩會被推到下一頁而留下空白。**沒有改** ——
+   * 目前最長的詩是 10 句，而「哪一種印出來比較好看」沒有印表機驗不了。
+   * 真的要調的話，做法是只留 .poem__stanza 那一層。
+   */
+  blockquote, figure, .poem__original, .poem__stanza { break-inside: avoid; }
+}

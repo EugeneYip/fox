@@ -1,0 +1,49 @@
+---
+/**
+ * 印章 —— 一個「狐」字的朱文印。
+ *
+ * 中文系的網站放一枚印，比放一個 logo 更對味。
+ * 用在頁尾與文章結束處，像是蓋在紙上的落款。
+ */
+interface Props {
+  /** 印面文字，一到四個字最好看 */
+  char?: string;
+  size?: number;
+  class?: string;
+}
+
+const { char = '狐', size = 44, class: className } = Astro.props;
+---
+
+<span
+  class:list={['seal', className]}
+  style={`--seal-size:${size}px`}
+  aria-hidden="true"
+>
+  <span class="seal__char">{char}</span>
+</span>
+
+<style>
+  .seal {
+    display: inline-grid;
+    place-items: center;
+    inline-size: var(--seal-size);
+    block-size: var(--seal-size);
+    background: var(--c-seal);
+    color: var(--c-bg);
+    border-radius: var(--r-seal);
+    font-family: var(--f-serif);
+    font-weight: 600;
+    /* 印泥不是均勻的，加一點雜訊讓它不要太乾淨 */
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
+    user-select: none;
+  }
+
+  .seal__char {
+    font-size: calc(var(--seal-size) * 0.62);
+    line-height: 1;
+    /* 印章的字通常比一般字更方正 */
+    letter-spacing: 0;
+    transform: translateY(0.02em);
+  }
+</style>

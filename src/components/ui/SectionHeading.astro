@@ -1,0 +1,101 @@
+---
+/** 區塊標題，右邊可以放一個「看全部」的連結 */
+interface Props {
+  title: string;
+  href?: string;
+  linkText?: string;
+  /** 連結的可及名稱（畫面上仍然只顯示 linkText）。同一頁有兩個「看全部」時要給 */
+  linkLabel?: string;
+  headingLevel?: 'h2' | 'h3';
+}
+// 不要在這裡寫 `as Props`：那會蓋掉 Astro 從 Props 介面推導出的元件型別，
+// 呼叫端就會變成「不接受任何 prop」。ts(6196) 的提示是誤報，忽略即可。
+/*
+ * ── 「看全部→」的可及名稱要帶上它屬於哪一區 ──────────
+ *
+ * 第 1 輪（第十八圈）從讀者那一側量：首頁有兩個「看全部→」
+ * （最近 → /archive、在別處 → /elsewhere），而螢幕閱讀器的「連結清單」
+ * 會把連結抽出來排在一起、**沒有上下文** —— 兩個一模一樣的名字。
+ *
+ * 呼叫端用 `home.viewAllOf` 組好再傳進來（`linkLabel`）——
+ * 標點與語序放在 ui.ts，不要寫在這裡的模板字串裡：
+ * 寫死一個全形冒號的話，英文頁會出現全形標點（`fullwidth-in-english` 當場抓到）。
+ * 畫面上的字沒有變。
+ */
+const { title, href, linkText, linkLabel, headingLevel = 'h2' } = Astro.props;
+const Tag = headingLevel;
+---
+
+<div class="section-heading">
+  <Tag>{title}</Tag>
+  {href && linkText && (
+        <a class="section-heading__link ui" href={href} aria-label={linkLabel}>
+      {linkText}<span aria-hidden="true">&#8239;→</span>
+    </a>
+  )}
+</div>
+
+<style>
+  .section-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    /*
+     * 放不下就換行。標題與「看全部」原本擠在同一行，而右邊那個是
+     * `white-space: nowrap` ＋ `flex: none` —— 兩個加起來等於「絕不讓步」。
+     *
+     * 第 1 輪（第二十二圈）實測：視窗 320px、根字級 32px（使用者把瀏覽器
+     * 預設字級調成兩倍），英文版的 "See all →" 把整頁推出去 38px。
+     * 中文版看不出來，因為「看全部」比較短 —— 兩個語言的門檻不一樣。
+     */
+    flex-wrap: wrap;
+    gap: var(--s-4);
+    padding-block-end: var(--s-3);
+    border-block-end: var(--border-thin);
+    margin-block-end: var(--s-5);
+  }
+
+  .section-heading :is(h2, h3) {
+    font-size: var(--t-lg);
+    font-weight: 600;
+  }
+
+  .section-heading__link {
+    /*
+     * `flex: none`（= `0 0 auto`）拿掉了。
+     *
+     * 它讓這個連結**不能縮**，而 flex 項目的基準寬度是 max-content ——
+     * 所以就算把 `white-space: nowrap` 拿掉、也讓它換到自己一行，
+     * 它還是 326px 寬（實測），比 320px 的視窗寬。
+     * 兩件事要一起改才有用：能換行（`white-space`）＋ 能縮（`flex`）。
+     *
+     * 寬螢幕上不受影響：東西放得下的時候，`flex: 0 1 auto` 跟 `none` 一樣。
+     */
+    font-size: var(--t-sm);
+    color: var(--c-ink-soft);
+    text-decoration: none;
+    /*
+     * `nowrap` 拿掉了。
+     *
+     * 它本來是為了不讓箭頭自己掉到下一行 —— 但代價是整個連結變成一個
+     * 不能斷的東西。第 1 輪（第二十二圈）實測：英文版的
+     * 「Subscribe (all platforms) →」在根字級 32px 下是 **322px**，
+     * 比 320px 的視窗還寬，就算 `flex-wrap: wrap` 讓它自己一行也還是凸出去。
+     *
+     * 中文版看不出來（「訂閱全部」四個字），所以這是英文版才會發生的事。
+     * 改成只把**最後一個字與箭頭**綁在一起（下面的 `white-space: nowrap`
+     * 只套在箭頭那個 span 上，加一個不斷行空格），文字本身就能正常折行。
+     */
+  }
+
+  .section-heading__link:hover { color: var(--c-flame-ink); }
+
+  .section-heading__link span {
+    display: inline-block;
+    /* 箭頭不要自己掉到下一行 —— 綁在它前面那個字後面就好 */
+    white-space: nowrap;
+    transition: transform var(--dur-fast) var(--ease);
+  }
+
+  .section-heading__link:hover span { transform: translateX(2px); }
+</style>

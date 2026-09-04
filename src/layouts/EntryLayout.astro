@@ -1,0 +1,232 @@
+---
+/**
+ * 單篇內容的版型（文章與短札共用）。
+ * 詩詞有自己的頁面，因為結構差太多。
+ */
+import Base from '@layouts/Base.astro';
+import { formatDate, isoDate } from '@lib/dates';
+import { useTranslations, localizePath } from '@i18n/utils';
+import { externalLinkRel } from '@config/privacy';
+import { platformOrFallback } from '@config/platforms';
+import type { Locale } from '@config/site';
+import TagList from '@components/ui/TagList.astro';
+import FoxSeal from '@components/fox/FoxSeal.astro';
+import CoverImage from '@components/content/CoverImage.astro';
+import SeriesNav from '@components/content/SeriesNav.astro';
+import type { CollectionEntry } from 'astro:content';
+
+interface Props {
+  locale: Locale;
+  title: string;
+  description?: string;
+  publishedAt: Date;
+  updatedAt?: Date;
+  tags?: string[];
+  readingMinutes?: number;
+  series?: string;
+  /** 同系列的其他文章，已依 seriesOrder 排好 */
+  seriesEntries?: CollectionEntry<'posts'>[];
+  /** 這一篇在系列中的 id，用來標出「你在這裡」 */
+  currentId?: string;
+  /** 這一篇真的存在的語言（沒有翻譯的話就只有自己這一種） */
+  availableLocales?: readonly Locale[];
+  cover?: ImageMetadata;
+  coverAlt?: string;
+  canonicalUrl?: string;
+  alsoOn?: Array<{ platform: string; url: string }>;
+  neighbors?: {
+    newer?: { id: string; data: { title: string } };
+    older?: { id: string; data: { title: string } };
+  };
+  /** 上／下篇連結的路徑前綴，例如 '/writing' */
+  basePath: string;
+}
+
+const {
+  locale, title, description, publishedAt, updatedAt, tags = [], availableLocales,
+  readingMinutes, series, seriesEntries = [], currentId, cover, coverAlt,
+  canonicalUrl, alsoOn = [], neighbors, basePath,
+} = Astro.props;
+
+const t = useTranslations(locale);
+---
+
+<Base
+  locale={locale}
+  title={title}
+  description={description}
+  type="article"
+  availableLocales={availableLocales}
+  publishedAt={publishedAt}
+  updatedAt={updatedAt}
+  tags={tags}
+  canonicalOverride={canonicalUrl}
+  class="wrap--prose"
+>
+  <article class="article">
+    <header class="article__head">
+      {series && <p class="article__series ui">{series}</p>}
+      <h1 class="article__title">{title}</h1>
+
+      <div class="article__meta ui faint">
+        <time datetime={isoDate(publishedAt)}>{formatDate(publishedAt, locale)}</time>
+        {readingMinutes && (
+          <><span aria-hidden="true">·</span><span>{t('list.readingTime', { n: readingMinutes })}</span></>
+        )}
+      </div>
+
+      {description && <p class="article__lead">{description}</p>}
+    </header>
+
+    {cover && <CoverImage src={cover} alt={coverAlt} />}
+
+    {series && seriesEntries.length > 1 && (
+      <SeriesNav
+        series={series}
+        entries={seriesEntries}
+        currentId={currentId}
+        locale={locale}
+        basePath={basePath}
+      />
+    )}
+
+    <div class="prose">
+      <slot />
+    </div>
+
+    <footer class="article__foot">
+      <FoxSeal char="狐" size={34} />
+
+      {tags.length > 0 && <TagList tags={tags} locale={locale} />}
+
+      {alsoOn.length > 0 && (
+        <div class="article__also ui">
+          <span class="faint">{t('home.elsewhere')}</span>
+          <ul>
+            {alsoOn.map((link) => (
+              <li>
+                <a href={link.url} target="_blank" rel={externalLinkRel}>
+                  {platformOrFallback(link.platform).name[locale] ?? link.platform}{' '}
+                  {/* 箭頭是裝飾，不要進可及名稱 —— 站上其他三處都是這樣寫的 */}
+                  <span aria-hidden="true">↗</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </footer>
+
+    {(neighbors?.newer || neighbors?.older) && (
+      <nav class="article__nav ui" aria-label={t('nav.adjacent')}>
+        {neighbors.newer ? (
+          <a class="article__nav-link" href={localizePath(`${basePath}/${neighbors.newer.id}`, locale)}>
+            <span class="faint"><span aria-hidden="true">←</span> {t('list.newer')}</span>
+            <span>{neighbors.newer.data.title}</span>
+          </a>
+        ) : <span />}
+        {neighbors.older && (
+          <a class="article__nav-link article__nav-link--end" href={localizePath(`${basePath}/${neighbors.older.id}`, locale)}>
+            <span class="faint">{t('list.older')} <span aria-hidden="true">→</span></span>
+            <span>{neighbors.older.data.title}</span>
+          </a>
+        )}
+      </nav>
+    )}
+  </article>
+</Base>
+
+<style>
+  .article__head {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-3);
+    margin-block-end: var(--s-7);
+  }
+
+  .article__series {
+    font-size: var(--t-xs);
+    letter-spacing: var(--ls-wide);
+    color: var(--c-flame-ink);
+    text-transform: uppercase;
+  }
+
+  .article__title {
+    font-size: var(--t-xl);
+    font-weight: 600;
+    line-height: var(--lh-tight);
+  }
+
+  .article__meta {
+    display: flex;
+    gap: 0.45em;
+    font-size: var(--t-xs);
+  }
+
+  .article__lead {
+    font-size: var(--t-md);
+    color: var(--c-ink-soft);
+    line-height: var(--lh-snug);
+  }
+
+  .article__foot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--s-4);
+    margin-block-start: var(--s-8);
+    padding-block-start: var(--s-6);
+    border-block-start: var(--border-thin);
+  }
+
+  .article__also {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--s-2);
+    font-size: var(--t-xs);
+  }
+
+  .article__also ul {
+    display: flex;
+    gap: var(--s-4);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .article__also li { margin: 0; }
+
+  .article__also a { text-decoration: none; color: var(--c-ink-soft); }
+  .article__also a:hover { color: var(--c-flame-ink); }
+
+  .article__nav {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--s-4);
+    margin-block-start: var(--s-7);
+    padding-block-start: var(--s-5);
+    border-block-start: var(--border-thin);
+  }
+
+  .article__nav-link {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-1);
+    font-size: var(--t-sm);
+    text-decoration: none;
+    line-height: var(--lh-snug);
+  }
+
+  .article__nav-link--end {
+    text-align: end;
+    grid-column: 2;
+  }
+
+  .article__nav-link:hover { color: var(--c-flame-ink); }
+
+  @media (max-width: 34rem) {
+    .article__nav { grid-template-columns: 1fr; }
+    .article__nav-link--end { grid-column: 1; text-align: start; }
+  }
+</style>

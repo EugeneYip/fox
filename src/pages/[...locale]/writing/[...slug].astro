@@ -1,0 +1,49 @@
+---
+import { render, type CollectionEntry } from 'astro:content';
+import EntryLayout from '@layouts/EntryLayout.astro';
+import { entryPaths } from '@i18n/paths';
+import { getEntries, getNeighbors, getSeries, estimateReadingTime, getTranslations } from '@lib/content';
+import type { Locale } from '@config/site';
+
+export async function getStaticPaths() {
+  return entryPaths(await getEntries('posts'));
+}
+
+const { entry, locale } = Astro.props as { entry: CollectionEntry<'posts'>; locale: Locale };
+const { Content, remarkPluginFrontmatter } = await render(entry);
+const neighbors = await getNeighbors('posts', entry);
+/*
+ * 這一篇真的有哪幾種語言。`getTranslations()`（靠 `translationKey` 串同一篇的
+ * 不同語言版本）從第一圈就寫好了，但**從來沒有人用過** —— 第 7 輪（第十一圈）
+ * 量到語言鈕與 hreflang 都指向不存在的網址，才把它接上。
+ */
+const availableLocales = [locale, ...(await getTranslations('posts', entry)).map((tr) => tr.lang)];
+
+const seriesEntries = entry.data.series ? await getSeries(entry.data.series, locale) : [];
+
+const minutes =
+  (remarkPluginFrontmatter?.readingMinutes as number | undefined) ??
+  estimateReadingTime(entry, entry.body);
+---
+
+<EntryLayout
+  locale={locale}
+  availableLocales={availableLocales}
+  title={entry.data.title}
+  description={entry.data.description}
+  publishedAt={entry.data.publishedAt}
+  updatedAt={entry.data.updatedAt}
+  tags={entry.data.tags}
+  readingMinutes={minutes}
+  series={entry.data.series}
+  seriesEntries={seriesEntries}
+  currentId={entry.id}
+  cover={entry.data.cover}
+  coverAlt={entry.data.coverAlt}
+  canonicalUrl={entry.data.canonicalUrl}
+  alsoOn={entry.data.alsoOn}
+  neighbors={neighbors}
+  basePath="/writing"
+>
+  <Content />
+</EntryLayout>

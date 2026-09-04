@@ -1,0 +1,96 @@
+---
+import { site, footerNav, DEFAULT_LOCALE, type Locale } from '@config/site';
+import { useTranslations, localizePath, pick } from '@i18n/utils';
+import FoxSeal from '@components/fox/FoxSeal.astro';
+import { year } from '@lib/dates';
+
+interface Props { locale: Locale }
+const { locale } = Astro.props;
+const t = useTranslations(locale);
+
+/*
+ * 版權年份也用臺北時間 —— 這是一個臺灣的站。
+ * `getFullYear()` 讀的是建置機器的時區（站主的機器在美東，CI 在 UTC），
+ * 所以跨年那幾個小時三台機器會給三個答案。見 lib/dates.ts 的說明。
+ */
+const thisYear = year(new Date());
+const years = thisYear > site.since ? `${site.since}–${thisYear}` : String(site.since);
+const penName = pick(site.penName, locale) ?? site.penName[DEFAULT_LOCALE];
+---
+
+<footer class="site-footer">
+  <div class="wrap site-footer__inner">
+    <div class="site-footer__mark">
+      <FoxSeal char="狐" size={40} />
+    </div>
+
+    <div class="site-footer__body ui">
+      <nav aria-label={t('footer.builtWith')}>
+        <ul>
+          {footerNav.map((item) => (
+            <li>
+              <a href={item.href.startsWith('/rss') ? item.href : localizePath(item.href, locale)}>
+                {pick(item.label, locale)}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      <p class="site-footer__legal faint">
+        <span>© {years} {penName}</span>
+      </p>
+    </div>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    border-block-start: var(--border-thin);
+    padding-block: var(--s-6) var(--s-7);
+    margin-block-start: auto;
+  }
+
+  .site-footer__inner {
+    display: flex;
+    gap: var(--s-5);
+    align-items: flex-start;
+  }
+
+  .site-footer__mark { flex: none; }
+
+  .site-footer__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-3);
+  }
+
+  .site-footer nav ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2) var(--s-4);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .site-footer nav li { margin: 0; }
+
+  .site-footer nav a {
+    font-size: var(--t-sm);
+    text-decoration: none;
+    color: var(--c-ink-soft);
+  }
+
+  .site-footer nav a:hover {
+    color: var(--c-flame-ink);
+  }
+
+  .site-footer__legal {
+    font-size: var(--t-xs);
+  }
+
+  @media (max-width: 34rem) {
+    .site-footer__inner { flex-direction: column; }
+  }
+</style>

@@ -1,0 +1,12 @@
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.woff2 binary
+
+# 這份是機器產生的，在 PR diff 裡摺疊起來
+src/data/syndication.json linguist-generated=true
+docs/PLATFORMS.md         linguist-generated=true

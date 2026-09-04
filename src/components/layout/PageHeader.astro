@@ -1,0 +1,40 @@
+---
+interface Props {
+  title: string;
+  lead?: string;
+  count?: string;
+}
+const { title, lead, count } = Astro.props;
+---
+
+<header class="pagehead">
+  <h1 class="pagehead__title">{title}</h1>
+  {lead && <p class="pagehead__lead">{lead}</p>}
+  {count && <p class="pagehead__count ui faint">{count}</p>}
+  <slot />
+</header>
+
+<style>
+  .pagehead {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-3);
+    padding-block-end: var(--s-5);
+    margin-block-end: var(--s-5);
+    border-block-end: var(--border-thin);
+  }
+
+  .pagehead__title {
+    font-size: var(--t-xl);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+
+  .pagehead__lead {
+    color: var(--c-ink-soft);
+    max-inline-size: 52ch;
+    font-size: var(--t-md);
+  }
+
+  .pagehead__count { font-size: var(--t-xs); }
+</style>

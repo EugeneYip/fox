@@ -1,0 +1,450 @@
+---
+/**
+ * 詩詞展示。
+ *
+ * 這是全站最花心思的元件，因為它是「狐說八道」的本體。
+ *
+ * 直排是預設。中文詩詞本來就是直著寫、右起左行的，直排讀起來
+ * 節奏對、斷句自然。但直排在窄螢幕上會變成要橫向捲動，所以
+ * 48rem 以下自動切回橫排（CSS 處理，不需要 JS）。
+ * 使用者也可以手動切換，選擇會被記住。
+ */
+import { useTranslations } from '@i18n/utils';
+import type { Locale } from '@config/site';
+
+interface Annotation { term: string; gloss: string }
+
+interface Props {
+  poem: {
+    title: string;
+    author: string;
+    dynasty?: string;
+    form?: string;
+    source?: string;
+    original: string;
+  };
+  plain?: string;
+  annotations?: Annotation[];
+  vertical?: boolean;
+  locale: Locale;
+}
+
+const { poem, plain, annotations = [], vertical = true, locale } = Astro.props;
+const t = useTranslations(locale);
+
+// 空行分段，單行斷句 —— 讓 frontmatter 裡的原文格式直接決定排版
+const stanzas = poem.original
+  .trim()
+  .split(/\n{2,}/)
+  .map((block) => block.split('\n').map((line) => line.trim()).filter(Boolean))
+  .filter((block) => block.length > 0);
+
+/*
+ * 直排的詩是往左邊長的，長到超出容器時靠外層橫向捲動 —— 螢幕上沒問題，
+ * 但**紙上沒有捲軸**，超出的部分不是捲不到，是根本不會被印出來，
+ * 而且讀的人完全不會知道少了東西。
+ *
+ * 第 8 輪（第五圈）實測（20 句的測試詩、CSSOM 把 @media print 改成 all）：
+ *
+ *   列印版面寬 717px（A4 直式 + Chrome 預設邊界）→ 橫排，645px，沒截斷
+ *   列印版面寬 780px                              → 直排，容器 702、內容 1035，**截掉 333px**
+ *   列印版面寬 1046px（A4 橫式）                   → 直排，容器 736、內容 1114，**截掉 378px**
+ *
+ * 容器在 1046px 的紙上仍然只有 736px —— 被 --w-content（46rem）鎖住，
+ * 所以**門檻跟紙張大小無關**，固定在 736 ÷ 每句 56px ≈ 13 句。
+ *
+ * 第 2 輪（第十二圈）補量了一件那時候沒問的事：**這個數字跟字型有沒有關係？**
+ * 直排時「每句的寬度」就是 line-height，而 `line-height: 2.1` 是**無單位的
+ * 倍數**（乘字級，不是乘字型的度量），加上中文字在這些字型裡都是全形（1em），
+ * 所以答案是**沒有關係**。實測六種字型（Songti TC／Songti SC／STSong／
+ * Hiragino Mincho ProN／PingFang TC／generic serif）：
+ *
+ *   每句 55.37px、內容總寬 618px、容器放得下 13.29 句 —— 六個一模一樣
+ *
+ * 也就是說 56 ≈ 55.37，而 13 句這個門檻在換字型時不會漂移。
+ *
+ * 順帶記下量測的條件（這個 repo 反覆學到的事：留數字也要留條件）：
+ * 那台機器的 `--f-serif` 實際落在**第三順位的 Songti TC** ——
+ * Noto Serif TC 與 Source Han Serif TC 都沒有裝。用畫布把「衣」畫出來
+ * 比對像素才問得出這件事：`document.fonts.check()` 對每一個字型都回 true，
+ * 而「換兩個 generic 比寬度」的常用招數對中文無效（兩個 generic 會落到
+ * 同一個系統字型）。
+ *
+ * 小於 768px 的版面被下面 @media (max-width: 48rem) 的「窄螢幕一律橫排」
+ * 救到了，這也是為什麼 A4 直式印起來是好的、這個 bug 一直沒被看見。
+ * 一旦是橫式、大一點的紙、或使用者把邊界調小，就會踩到。
+ *
+ * 所以超過門檻的詩在列印時退回橫排：橫排是往下長的，會自然分頁，不會掉字。
+ * 目前站上最長的詩是 10 句，還沒踩到 —— 但註解裡點名的〈長恨歌〉有 120 句。
+ */
+const PRINT_VERTICAL_MAX_LINES = 13;
+const lineCount = stanzas.reduce((n, block) => n + block.length, 0);
+const printOverflows = lineCount > PRINT_VERTICAL_MAX_LINES;
+
+/*
+ * 最長的一句有幾個字 —— 直排時這決定「一行至少要多長，句子才不會被折斷」。
+ *
+ * 第 8 輪（第十二圈）實測到的問題：一行的長度上限是 `min(21rem, 52vh)`，
+ * 而 52vh 在**橫放的手機**上很小。812×375（iPhone X／12 mini 這一代橫放，
+ * 812 > 768 所以走的是直排）：上限 195px，而一句七言需要 199px ——
+ * 差 4px，於是〈烏衣巷〉四句**每一句都折成兩截**、〈琵琶行〉十句全折。
+ * 五言的〈靜夜思〉剛好躲過。折斷的七言看起來像另一種格律，不是排版瑕疵
+ * 而已。
+ *
+ * 用字數算得出來：中文字是全形（1em），letter-spacing 0.14em 每個字後面
+ * 都加，所以 N 個字佔 N × 1.14em。實測 7 字 ＋ 字級 24.884px＝199px，
+ * 算出來 198.5px，對得上。
+ *
+ * 用 [...] 展開而不是 .length：古典詩詞會用到 BMP 以外的罕用字，
+ * .length 會把那種字算成兩個。
+ */
+const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
+---
+
+{/* 有名字的 section 才是有用的地標；沒有名字的話地標清單裡會出現一堆「region」 */}
+<section
+  class="poem"
+  aria-label={t('poem.region', { title: poem.title })}
+  data-default-orientation={vertical ? 'vertical' : 'horizontal'}
+  data-print-overflows={printOverflows ? 'true' : undefined}
+>
+  <header class="poem__head">
+    <h1 class="poem__title">〈{poem.title}〉</h1>
+    <p class="poem__byline ui">
+      {poem.dynasty && <span>{poem.dynasty}</span>}
+      <span class="poem__author">{poem.author}</span>
+      {poem.form && <span class="faint">{poem.form}</span>}
+    </p>
+
+    {/*
+      按鈕上「看得見的字」是要切換去的模式（直排時顯示「橫排」），
+      但螢幕閱讀器需要知道的是**現在是什麼**加上**按下去會怎樣**。
+
+      原本這裡是 aria-pressed={vertical}：直排時 pressed=true，可是可及名稱
+      取自可見文字「橫排」，於是唸出來是「橫排、切換鈕、已按下」——
+      名稱與狀態互相矛盾，剛好講反。
+
+      改成跟主題切換鈕同一個做法：動態 aria-label 說清楚，並拿掉 aria-pressed
+      （這是模式切換，不是開關，pressed 的語意本來就套不上）。
+    */}
+    <button
+      class="poem__toggle ui"
+      type="button"
+      data-poem-toggle
+      aria-label={vertical ? t('poem.nowVertical') : t('poem.nowHorizontal')}
+      data-label-vertical={t('poem.nowVertical')}
+      data-label-horizontal={t('poem.nowHorizontal')}
+    >
+      <span aria-hidden="true" data-when="vertical">{t('poem.horizontal')}</span>
+      <span aria-hidden="true" data-when="horizontal">{t('poem.vertical')}</span>
+    </button>
+  </header>
+
+  <div class="poem__scroll">
+    <div class="poem__original" lang="zh-Hant" style={`--poem-longest-line:${longestLine}`}>
+      {stanzas.map((lines) => (
+        <p class="poem__stanza">
+          {lines.map((line, i) => (
+            <>
+              {i > 0 && <br />}
+              <span class="poem__line">{line}</span>
+            </>
+          ))}
+        </p>
+      ))}
+    </div>
+  </div>
+
+  {poem.source && <p class="poem__source faint ui">{poem.source}</p>}
+
+  {annotations.length > 0 && (
+    <div class="poem__section">
+      <h2 class="poem__section-title ui">{t('poem.notes')}</h2>
+      <dl class="poem__annotations">
+        {annotations.map((a) => (
+          <div class="poem__annotation">
+            <dt>{a.term}</dt>
+            <dd>{a.gloss}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  )}
+
+  {plain && (
+    <div class="poem__section">
+      <h2 class="poem__section-title ui">{t('poem.plain')}</h2>
+      <p class="poem__plain">{plain}</p>
+    </div>
+  )}
+</section>
+
+<style>
+  .poem {
+    --poem-orientation: vertical;
+  }
+
+  .poem__head {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--s-2);
+    text-align: center;
+    margin-block-end: var(--s-6);
+  }
+
+  .poem__title {
+    font-size: var(--t-xl);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+  }
+
+  .poem__byline {
+    display: flex;
+    gap: var(--s-3);
+    font-size: var(--t-sm);
+    color: var(--c-ink-soft);
+  }
+
+  .poem__author { font-weight: 600; }
+
+  .poem__toggle {
+    margin-block-start: var(--s-2);
+    font-size: var(--t-xs);
+    color: var(--c-ink-faint);
+    /* 這是按鈕，邊界要看得出來 */
+    border: 1px solid var(--c-edge);
+    border-radius: 999px;
+    padding: 0.2em 0.9em;
+    transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  }
+
+  .poem__toggle:hover {
+    color: var(--c-flame-ink);
+    border-color: var(--c-flame);
+  }
+
+  /* 按鈕上顯示的是「切換到哪個模式」，所以跟目前狀態相反 */
+  .poem__toggle [data-when="horizontal"] { display: none; }
+
+  .poem[data-orientation="horizontal"] .poem__toggle [data-when="vertical"] { display: none; }
+  .poem[data-orientation="horizontal"] .poem__toggle [data-when="horizontal"] { display: inline; }
+
+  /* ── 原文 ───────────────────────────────────────── */
+
+  .poem__scroll {
+    /* 直排時內容往左邊長出去，需要能橫向捲動 */
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-block: var(--s-4);
+    scrollbar-width: thin;
+    display: flex;
+  }
+
+  .poem__original {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+
+    /*
+     * 直排時軸向會反過來，這裡很容易寫錯：
+     *   inline 軸是「垂直」的 —— 字往下流，所以 inline-size 是一行的「長度」（高度）
+     *   block  軸是「水平」的 —— 新的一行往左疊，所以 block-size 是整體的寬度
+     *
+     * 因此限制的是 max-inline-size：一行最多寫這麼長，超過就自動折到左邊。
+     * 水平方向不設限，讓〈長恨歌〉這種長詩能一路往左長，由外層橫向捲動。
+     *
+     * 下限是第 8 輪（第十二圈）加的：52vh 在橫放的手機上只有 195px，
+     * 而一句七言要 199px，於是每一句都被折成兩截（量測與理由寫在
+     * frontmatter 的 longestLine 旁邊）。下限從詩自己最長的一句算出來，
+     * 不是猜一個數字 —— 換一首字數不同的詩會自己跟著變。
+     * 0.5em 是留給字型度量與四捨五入的餘裕（七言實測只差 4px 就折了）。
+     *
+     * 外層仍然是 min(21rem, …)：21rem ÷ 最大字級 28px ≈ 12 個字，
+     * 也就是**超過 12 字的句子在任何螢幕上都還是會折**。
+     * 目前站上最長的一句是 7 字，碰不到；記在待辦裡。
+     */
+    max-inline-size: min(
+      21rem,
+      max(52vh, calc(var(--poem-longest-line, 7) * 1.14em + 0.5em))
+    );
+
+    /* 在 flex 容器裡用 auto margin 置中：內容短的時候置中，
+       長到超出容器時兩邊都還捲得到（用 justify-content: center 會捲不到開頭） */
+    margin: auto;
+    flex: none;
+
+    font-size: var(--t-lg);
+    line-height: 2.1;
+    letter-spacing: 0.14em;
+
+    /*
+     * flex 的 column 方向跟著 block 軸走，所以這一行在兩種模式下都對：
+     *   直排（vertical-rl）→ block 軸是水平由右往左，詩節一節一節往左排
+     *   橫排（horizontal-tb）→ block 軸是垂直由上往下，詩節一節一節往下排
+     * 用 row 的話直排時詩節會往下疊，整首詩就散掉了。
+     */
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-6);
+  }
+
+  .poem__stanza { margin: 0; }
+
+  /*
+   * 橫排：直接把 writing-mode 換掉，其餘沿用。
+   *
+   * 三個選擇器對應「這首詩現在是橫排」的三種到達方式，缺一個就會跳版：
+   *
+   *   1. 下面那段 module 已經跑完，把 data-orientation 設好了
+   *   2. module 還沒跑，但使用者存過「橫排」——
+   *      <head> 的 inline script 已經把偏好寫在 :root 上（第 2 輪〔第十圈〕加的）
+   *   3. module 還沒跑、也沒有存過偏好，而**這首詩本身的預設就是橫排**
+   *      （`vertical: false`）。目前三首詩都是 true，所以這條打不到 ——
+   *      但 schema 允許，而少了它的話那種詩每個訪客都會看到跳版，
+   *      不只是存過偏好的人。順帶也讓關掉 JS 的人拿到對的方向。
+   *
+   * `:not([data-orientation])` 讓 2、3 只在 module 接手前生效。
+   */
+  .poem[data-orientation="horizontal"] .poem__original,
+  :root[data-poem-orientation="horizontal"] .poem:not([data-orientation]) .poem__original,
+  :root:not([data-poem-orientation])
+    .poem[data-default-orientation="horizontal"]:not([data-orientation])
+    .poem__original {
+    writing-mode: horizontal-tb;
+    text-orientation: mixed;
+    max-inline-size: 100%;
+    text-align: center;
+    line-height: 2.2;
+    letter-spacing: 0.1em;
+  }
+
+  .poem__source {
+    text-align: center;
+    font-size: var(--t-xs);
+    margin-block-start: var(--s-2);
+  }
+
+  /* 窄螢幕一律橫排 —— 直排在手機上要側著頭看，不合理 */
+  @media (max-width: 48rem) {
+    .poem__original,
+    .poem[data-orientation="vertical"] .poem__original {
+      writing-mode: horizontal-tb !important;
+      text-orientation: mixed;
+      max-inline-size: 100%;
+      text-align: center;
+      font-size: var(--t-md);
+    }
+
+    .poem__toggle { display: none; }
+  }
+
+  /*
+   * 列印：超過 13 句的直排詩退回橫排。
+   *
+   * 理由與實測數字寫在最上面 frontmatter 的 PRINT_VERTICAL_MAX_LINES 旁邊。
+   * 一句話：紙上沒有捲軸，直排長詩超出容器的部分會**無聲地印不出來**。
+   *
+   * 用 !important 是為了跟上面那條窄螢幕規則對齊 —— 兩條做的是同一件事
+   * （在放不下直排的地方退回橫排），權重寫法不一致以後很容易改壞其中一條。
+   *
+   * overflow 改成 visible：紙上「可捲動」沒有意義，而 auto 會多一層裁切邊界。
+   * 退回橫排之後理論上不會再溢出，這一行是萬一真的溢出時少裁掉一點。
+   */
+  @media print {
+    .poem[data-print-overflows] .poem__original,
+    .poem[data-print-overflows][data-orientation="vertical"] .poem__original {
+      writing-mode: horizontal-tb !important;
+      max-inline-size: 100% !important;
+      text-align: center;
+    }
+
+    .poem__scroll { overflow: visible; }
+  }
+
+  /* ── 注與白話 ────────────────────────────────────── */
+
+  .poem__section {
+    margin-block-start: var(--s-7);
+    padding-block-start: var(--s-5);
+    border-block-start: var(--border-thin);
+  }
+
+  .poem__section-title {
+    font-size: var(--t-xs);
+    font-weight: 600;
+    letter-spacing: var(--ls-wide);
+    color: var(--c-ink-faint);
+    text-transform: uppercase;
+    margin-block-end: var(--s-4);
+  }
+
+  .poem__annotations {
+    display: grid;
+    gap: var(--s-3);
+    margin: 0;
+  }
+
+  .poem__annotation {
+    display: grid;
+    grid-template-columns: minmax(5rem, 9.5rem) 1fr;
+    gap: var(--s-4);
+    align-items: baseline;
+  }
+
+  .poem__annotation dt {
+    font-weight: 600;
+    color: var(--c-flame-ink);
+  }
+
+  .poem__annotation dd {
+    margin: 0;
+    color: var(--c-ink-soft);
+    font-size: var(--t-sm);
+    line-height: var(--lh-snug);
+  }
+
+  .poem__plain {
+    font-size: var(--t-md);
+    line-height: var(--lh-body);
+    color: var(--c-ink-soft);
+    padding-inline-start: var(--s-4);
+    border-inline-start: 2px solid var(--c-flame);
+  }
+
+  @media (max-width: 34rem) {
+    .poem__annotation {
+      grid-template-columns: 1fr;
+      gap: var(--s-1);
+    }
+  }
+</style>
+
+<script>
+  const KEY = 'fox-poem-orientation';
+
+  for (const poem of document.querySelectorAll<HTMLElement>('.poem')) {
+    const fallback = poem.dataset.defaultOrientation ?? 'vertical';
+    let saved: string | null = null;
+    try { saved = localStorage.getItem(KEY); } catch { /* 無痕模式 */ }
+    poem.dataset.orientation = saved === 'horizontal' || saved === 'vertical' ? saved : fallback;
+
+    const button = poem.querySelector<HTMLButtonElement>('[data-poem-toggle]');
+
+    /** 讓 aria-label 跟著實際狀態走 —— 文案在 build 時就放進 data 屬性了 */
+    const syncLabel = () => {
+      if (!button) return;
+      const key = poem.dataset.orientation === 'vertical' ? 'labelVertical' : 'labelHorizontal';
+      const label = button.dataset[key];
+      if (label) button.setAttribute('aria-label', label);
+    };
+
+    // 進站時 orientation 可能被 localStorage 改掉，label 要跟著對齊
+    syncLabel();
+
+    button?.addEventListener('click', () => {
+      poem.dataset.orientation = poem.dataset.orientation === 'vertical' ? 'horizontal' : 'vertical';
+      syncLabel();
+      try { localStorage.setItem(KEY, poem.dataset.orientation); } catch { /* 無痕模式 */ }
+    });
+  }
+</script>

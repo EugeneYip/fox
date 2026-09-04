@@ -1,0 +1,93 @@
+---
+/**
+ * 標籤頁的第 2 頁以後。第 1 頁在 ../../[tag].astro。
+ *
+ * 跟站內其他分頁一樣：頁碼進標題、第二頁起 noindex、head 放 rel=prev/next。
+ */
+import Base from '@layouts/Base.astro';
+import PageHeader from '@components/layout/PageHeader.astro';
+import Pagination from '@components/ui/Pagination.astro';
+import EntryCard from '@components/ui/EntryCard.astro';
+import { localePaths } from '@i18n/paths';
+import { getAllWriting, getTagCloud, tagSlug, paginate, extraPageNumbers } from '@lib/content';
+import { useTranslations, localizePath } from '@i18n/utils';
+import { site, type Locale } from '@config/site';
+
+export async function getStaticPaths() {
+  /*
+   * 跟 `tags/[tag].astro` 一樣要先知道每個標籤在哪幾種語言底下存在，
+   * 語言鈕與 hreflang 才不會指到不存在的頁（第 7 輪〔第十一圈〕）。
+   *
+   * 這條路由今天產生 0 頁（沒有標籤超過一頁的量），所以那個 bug 在這裡
+   * 還沒有發生過 —— 但它跟隔壁那支是同一個形狀，一起補起來。
+   */
+  const byLocale: Array<{
+    entry: ReturnType<typeof localePaths>[number];
+    tags: Awaited<ReturnType<typeof getTagCloud>>;
+    all: Awaited<ReturnType<typeof getAllWriting>>;
+  }> = [];
+  for (const entry of localePaths()) {
+    byLocale.push({
+      entry,
+      tags: await getTagCloud(entry.props.locale),
+      all: await getAllWriting({ lang: entry.props.locale }),
+    });
+  }
+  const localesWithSlug = (slug: string) =>
+    byLocale.filter((b) => b.tags.some((x) => x.slug === slug)).map((b) => b.entry.props.locale);
+
+  const paths = [];
+  for (const { entry, tags, all } of byLocale) {
+    for (const { tag, slug } of tags) {
+      const n = all.filter(({ entry: e }) => e.data.tags.some((x) => tagSlug(x) === slug)).length;
+      for (const pageNumber of extraPageNumbers(n)) {
+        paths.push({
+          params: { ...entry.params, tag: slug, page: String(pageNumber) },
+          props: { ...entry.props, tag, slug, pageNumber, availableLocales: localesWithSlug(slug) },
+        });
+      }
+    }
+  }
+  return paths;
+}
+
+const { locale, tag, slug, pageNumber, availableLocales } = Astro.props as {
+  locale: Locale;
+  tag: string;
+  slug: string;
+  pageNumber: number;
+  availableLocales: Locale[];
+};
+const t = useTranslations(locale);
+
+const all = await getAllWriting({ lang: locale });
+const matches = all.filter(({ entry }) => entry.data.tags.some((x) => tagSlug(x) === slug));
+const basePath = `/tags/${slug}`;
+const page = paginate(matches, pageNumber, basePath);
+const abs = (path: string) => new URL(localizePath(path, locale), site.url).toString();
+---
+
+<Base
+  locale={locale}
+  availableLocales={availableLocales}
+  title={t('tags.taggedWith', { tag }) +
+    t('page.titleSuffix', { current: page.current, total: page.total })}
+  noindex={true}
+  class="wrap--content"
+>
+  <Fragment slot="head">
+    {page.prevUrl && <link rel="prev" href={abs(page.prevUrl)} />}
+    {page.nextUrl && <link rel="next" href={abs(page.nextUrl)} />}
+  </Fragment>
+
+  <PageHeader
+    title={t('tags.taggedWith', { tag })}
+    count={t('list.range', { from: page.from, to: page.to, total: page.totalItems })}
+  />
+
+  {page.items.map(({ collection, entry }) => (
+    <EntryCard collection={collection} entry={entry} locale={locale} headingLevel="h2" />
+  ))}
+
+  <Pagination page={page} locale={locale} basePath={basePath} />
+</Base>

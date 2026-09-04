@@ -1,0 +1,55 @@
+---
+/**
+ * 對外連結。
+ *
+ * 統一在這裡處理三件事，免得每個地方各寫各的：
+ *   - rel 依 privacy.strictReferrerPolicy 決定要不要加 noreferrer
+ *   - 新分頁開啟，並給螢幕閱讀器一句提示
+ *   - 一個小小的外連圖示，讓人知道會離開這個站
+ */
+import { externalLinkRel } from '@config/privacy';
+import { useTranslations } from '@i18n/utils';
+import type { Locale } from '@config/site';
+
+interface Props {
+  href: string;
+  locale: Locale;
+  class?: string;
+  /** 純圖示連結時關掉，避免重複朗讀 */
+  showIcon?: boolean;
+}
+
+const { href, locale, class: className, showIcon = true } = Astro.props;
+const t = useTranslations(locale);
+---
+
+<a
+  href={href}
+  target="_blank"
+  rel={externalLinkRel}
+  class:list={['ext', className]}
+>
+  <slot />
+  {showIcon && (
+    <svg class="ext__icon" width="10" height="10" viewBox="0 0 12 12" aria-hidden="true" fill="none">
+      <path d="M4.5 1.5h6v6M10.5 1.5 4 8M8.5 7.5v3h-7v-7h3"
+        stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  )}
+  <span class="sr-only">{t('external.opensNewTab')}</span>
+</a>
+
+<style>
+  .ext {
+    display: inline;
+  }
+
+  .ext__icon {
+    display: inline-block;
+    vertical-align: 0.05em;
+    margin-inline-start: 0.25em;
+    opacity: 0.55;
+  }
+
+  .ext:hover .ext__icon { opacity: 1; }
+</style>

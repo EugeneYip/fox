@@ -1,0 +1,74 @@
+---
+import { localizePath, useTranslations } from '@i18n/utils';
+import { tagSlug } from '@lib/content';
+import type { Locale } from '@config/site';
+
+interface Props {
+  tags: string[];
+  locale: Locale;
+  max?: number;
+}
+const { tags, locale, max } = Astro.props;
+const t = useTranslations(locale);
+/*
+ * ── 標籤連結為什麼要有 aria-label ────────────────────
+ *
+ * 第 1 輪（第十八圈）從讀者那一側量：螢幕閱讀器的「連結清單」會把連結
+ * 抽出來排在一起、沒有上下文。標籤連結叫「詩詞」，而導覽列也有一個
+ * 叫「詩詞」的連結（去 /poems）—— 清單裡兩個一模一樣的名字、不同的去處。
+ *
+ * 用既有的 tags.taggedWith 唸成「標記為「詩詞」」：分得開，也講得出這是什麼。
+ * 畫面上的字沒有變。
+ */
+const shown = max ? tags.slice(0, max) : tags;
+const overflow = max && tags.length > max ? tags.length - max : 0;
+---
+
+{shown.length > 0 && (
+  <ul class="taglist ui">
+    {shown.map((tag) => (
+      <li>
+        <a
+          href={localizePath(`/tags/${encodeURIComponent(tagSlug(tag))}`, locale)}
+          aria-label={t('tags.taggedWith', { tag })}
+        >{tag}</a>
+      </li>
+    ))}
+    {overflow > 0 && <li class="taglist__more">+{overflow}</li>}
+  </ul>
+)}
+
+<style>
+  .taglist {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .taglist li { margin: 0; }
+
+  .taglist a {
+    display: inline-block;
+    font-size: var(--t-xs);
+    padding: 0.15em 0.6em;
+    border: 1px solid var(--c-rule);
+    border-radius: 999px;
+    color: var(--c-ink-soft);
+    text-decoration: none;
+    transition: border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+
+  .taglist a:hover {
+    border-color: var(--c-flame);
+    color: var(--c-flame-ink);
+  }
+
+  .taglist__more {
+    font-size: var(--t-xs);
+    color: var(--c-ink-faint);
+    align-self: center;
+  }
+</style>

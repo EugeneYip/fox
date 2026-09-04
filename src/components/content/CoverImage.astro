@@ -1,0 +1,82 @@
+---
+/**
+ * 文章的封面圖。
+ *
+ * 之前 content.config.ts 宣告了 `cover` 欄位、CONTENT.md 也教了怎麼填，
+ * 但沒有任何頁面會渲染它 —— 填了等於沒填，而且沒有任何錯誤訊息。
+ * 這個元件補上那一塊。
+ *
+ * 兩個刻意的決定：
+ *
+ * 1. 一定要輸出 width / height。瀏覽器在圖片載入前就能算出它會佔多高，
+ *    才不會在載入的瞬間把下面的文字推開（CLS）。第 2 輪量到全站 CLS 是 0，
+ *    加圖片是最容易把它弄壞的一步。Astro 的 <Image> 會從 ImageMetadata
+ *    自動帶上尺寸，所以只要用它就好，不要退回原生 <img>。
+ *
+ * 2. **用 `widths` ＋ `sizes`，不用 `densities`。**
+ *
+ *    第 8 輪（第二十圈）第一次在瀏覽器裡看真的封面圖才發現的：
+ *    `densities={[1,2]}` 產出的 srcset 是 `… 1x, … 2x`，**沒有 `sizes`**，
+ *    所以瀏覽器只看裝置像素比，不看版面寬度。實測 320px 的視窗、DPR 2：
+ *
+ *      版面上那張圖  280px 寬
+ *      瀏覽器選的檔  **1800px 寬那一個**（6.4 倍的像素）
+ *
+ *    也就是**最小的螢幕拿到最大的檔案**。第 2 輪（第二十圈）量到那個 2x
+ *    檔在細節照片上是 267 KB —— 手機正好是最不該收到它的地方。
+ *
+ *    改成 `widths` ＋ `sizes` 之後，瀏覽器按版面寬度挑。
+ *
+ * 3. 沒有填 alt 就當作純裝飾（alt=""）。
+ *    寧可讓螢幕閱讀器跳過，也不要唸出一段沒有意義的檔名。
+ *    真的需要描述的圖，就在 frontmatter 補 coverAlt。
+ */
+import { Image } from 'astro:assets';
+
+interface Props {
+  src: ImageMetadata;
+  alt?: string;
+  /** 詩詞頁的封面窄一點，文章頁滿版 */
+  width?: number;
+  caption?: string;
+}
+
+const { src, alt, width = 900, caption } = Astro.props;
+const decorative = !alt?.trim();
+---
+
+<figure class="cover">
+  <Image
+    src={src}
+    alt={alt ?? ''}
+    width={width}
+    widths={[400, 800, 1200, 1600]}
+    sizes={`(max-width: 40rem) 100vw, ${width}px`}
+    loading="eager"
+    fetchpriority="high"
+    decoding="async"
+    role={decorative ? 'presentation' : undefined}
+  />
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style>
+  .cover {
+    margin: 0 0 var(--s-6);
+  }
+
+  .cover :global(img) {
+    inline-size: 100%;
+    block-size: auto;
+    border-radius: var(--r-md);
+    background: var(--c-bg-sunken);
+  }
+
+  .cover figcaption {
+    margin-block-start: var(--s-2);
+    font-family: var(--f-sans);
+    font-size: var(--t-sm);
+    color: var(--c-ink-soft);
+    text-align: center;
+  }
+</style>

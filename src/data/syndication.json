@@ -1,0 +1,178 @@
+{
+  "$schema": "./syndication.schema.json",
+  "generatedAt": "2026-09-02T16:53:37.689Z",
+  "itemCount": 9,
+  "sources": {
+    "youtube-foxpoetry": {
+      "status": "ok",
+      "platform": "youtube",
+      "itemCount": 9,
+      "lastSuccessAt": "2026-09-02T16:53:37.689Z",
+      "message": null
+    }
+  },
+  "items": [
+    {
+      "id": "youtube-foxpoetry--uyor3t6hnzu",
+      "sourceId": "youtube-foxpoetry",
+      "platform": "youtube",
+      "media": "video",
+      "title": "王昌齡〈出塞〉「秦時明月漢時關，萬里長征人未還」邊塞征戰，壯志與悲愁交織。你是否也對長年戍守在外的戰士們心生敬意？",
+      "url": "https://www.youtube.com/watch?v=UYor3t6HnzU",
+      "publishedAt": "2024-10-26T06:23:28.000Z",
+      "summary": "王昌齡的〈出塞〉是唐代邊塞詩的經典之作，首句情景交融，粗略地描寫邊疆景色，帶給人們一種孤寂與蒼涼。 詩裡流露了對久戍戰士的同情，面對胡人經常進犯，邊關經常戰事未斷，百姓亦難得安寧。 從前有李廣、衛青等驍勇善戰的將軍保家衛國，不使家國受到侵犯，多麼希望現世也能有這樣的將帥奮力抵禦外敵。",
+      "lang": "zh-TW",
+      "tags": [
+        "詩詞",
+        "朗讀"
+      ],
+      "thumbnail": "https://i2.ytimg.com/vi/UYor3t6HnzU/hqdefault.jpg",
+      "externalId": "UYor3t6HnzU",
+      "firstSeenAt": "2026-09-02T16:46:46.028Z"
+    },
+    {
+      "id": "youtube-foxpoetry--y4l9-5r7ege",
+      "sourceId": "youtube-foxpoetry",
+      "platform": "youtube",
+      "media": "video",
+      "title": "杜甫〈月夜〉「今夜鄜州月，閨中只獨看。」詩人戰亂中思念家人，月下情思更濃。中華文化總是對「月」有離不開的情思，你是否也曾在夜裡對月思念遠方的人？",
+      "url": "https://www.youtube.com/watch?v=y4l9-5r7EgE",
+      "publishedAt": "2024-10-23T15:13:47.000Z",
+      "summary": "杜甫的〈月夜〉是難得的一首情誼綿長之作。不言自身，而是以妻子的角度描寫，卻表達了對妻子的深切思念。 「香霧雲鬟濕，清輝玉臂寒。」刻畫得非常細緻，因為看著月亮的同時也在思念著對方，時間不知不覺流逝，夜深露重的濕氣才會濕了秀髮，雙臂也因此而冰涼。 這首詩展現了戰亂時期的離愁傷懷與對妻兒的深厚情感。",
+      "lang": "zh-TW",
+      "tags": [
+        "詩詞",
+        "朗讀"
+      ],
+      "thumbnail": "https://i2.ytimg.com/vi/y4l9-5r7EgE/hqdefault.jpg",
+      "externalId": "y4l9-5r7EgE",
+      "firstSeenAt": "2026-09-02T16:46:46.028Z"
+    },
+    {
+      "id": "youtube-foxpoetry--uunhmqrrxtm",
+      "sourceId": "youtube-foxpoetry",
+      "platform": "youtube",
+      "media": "video",
+      "title": "杜牧〈山行〉「遠上寒山石徑斜，白雲生處有人家。」秋日山行的美景，如詩如畫，你是否也想在秋天的山間漫步？",
+      "url": "https://www.youtube.com/watch?v=UunHmQRRXTM",
+      "publishedAt": "2024-10-21T16:51:45.000Z",
+      "summary": "杜牧的〈山行〉以細膩的筆觸描繪了山間的美景，帶我們走進一幅秋日畫卷。石徑蜿蜒、白雲飄渺，詩中流露出詩人對大自然的熱愛與陶醉，停下腳步，只因深秋時節的楓林景致讓人捨不得離去。",
+      "lang": "zh-TW",
+      "tags": [
+        "詩詞",
+        "朗讀"
+      ],
+      "thumbnail": "https://i2.ytimg.com/vi/UunHmQRRXTM/hqdefault.jpg",
+      "externalId": "UunHmQRRXTM",
+      "firstSeenAt": "2026-09-02T16:46:46.028Z"
+    },
+    {
+      "id": "youtube-foxpoetry--pe8xg6wtycc",
+      "sourceId": "youtube-foxpoetry",
+      "platform": "youtube",
+      "media": "video",
+      "title": "劉禹錫〈秋詞〉「自古逢秋悲寂寥，我言秋日勝春朝。」劉禹錫以樂觀的心態迎接秋天，你也喜歡秋天的景色與詩意嗎？",
+      "url": "https://www.youtube.com/watch?v=PE8Xg6WtyCc",
+      "publishedAt": "2024-10-20T15:46:23.000Z",
+      "summary": "劉禹錫的〈秋詞〉以樂觀的態度對待秋天，打破了傳統的悲秋情懷。「我言秋日勝春朝」成為千古名句，展現了詩人積極的人生觀與對秋天的熱愛。這首詩讓我們重新審視秋天的美與活力。",
+      "lang": "zh-TW",
+      "tags": [
+        "詩詞",
+        "朗讀"
+      ],
+      "thumbnail": "https://i1.ytimg.com/vi/PE8Xg6WtyCc/hqdefault.jpg",
+      "externalId": "PE8Xg6WtyCc",
+      "firstSeenAt": "2026-09-02T16:46:46.028Z"
+    },
+    {
+      "id": "youtube-foxpoetry--whzkes08zu0",
+      "sourceId": "youtube-foxpoetry",
+      "platform": "youtube",
+      "media": "video",
+      "title": "王昌齡〈芙蓉樓送辛漸〉「寒雨連江夜入吳，平明送客楚山孤。」在江南的細雨中，送別好友，心中滿是離愁。你是否也曾經歷過這樣難忘的離別？",
+      "url": "https://www.youtube.com/watch?v=whZkES08ZU0",
+      "publishedAt": "2024-10-19T11:07:58.000Z",
+      "summary": "王昌齡的〈芙蓉樓送辛漸〉描繪了於江南送別好友辛漸的場景，因離情而徹夜難眠，因此感知到外面雨勢連綿，下了整夜。詩中景物寄託著深深的離愁與依依不捨，展現出友情的珍貴與人生的無奈。這首詩至今仍讓人感懷離別之情。",
+      "lang": "zh-TW",
+      "tags": [
+        "詩詞",
+        "朗讀"
+      ],
+      "thumbnail": "https://i4.ytimg.com/vi/whZkES08ZU0/hqdefault.jpg",
+      "externalId": "whZkES08ZU0",
+      "firstSeenAt": "2026-09-02T16:46:46.028Z"
+    },
+    {
+      "id": "youtube-foxpoetry--aiasc5pzsa8",
+      "sourceId": "youtube-foxpoetry",
+      "platform": "youtube",
+      "media": "video",
+      "title": "李白〈靜夜思〉「舉頭望明月，低頭思故鄉。」夜深人靜時，思鄉的情感愈發濃烈。你是否也曾在月下想起遠方的家？",
+      "url": "https://www.youtube.com/watch?v=aIAsc5PZsa8",
+      "publishedAt": "2024-10-19T10:40:40.000Z",
+      "summary": "李白的〈靜夜思〉以簡潔的語言表達了對故鄉的深深思念。詩人在寂靜的夜晚，抬頭望著皎潔的明月，思緒不由得飛向了故鄉。這首詩至今仍深刻地觸動著離家遊子們的心。",
+      "lang": "zh-TW",
+      "tags": [
+        "詩詞",
+        "朗讀"
+      ],
+      "thumbnail": "https://i2.ytimg.com/vi/aIAsc5PZsa8/hqdefault.jpg",
+      "externalId": "aIAsc5PZsa8",
+      "firstSeenAt": "2026-09-02T16:46:46.028Z"
+    },
+    {
+      "id": "youtube-foxpoetry--z75c5ujso9k",
+      "sourceId": "youtube-foxpoetry",
+      "platform": "youtube",
+      "media": "video",
+      "title": "杜甫〈月夜憶舍弟〉「戍鼓斷人行，邊秋一雁聲。」在戰亂中與親人分離，月夜思念更濃。你也曾在寂靜的夜晚想起遠方的家人嗎？",
+      "url": "https://www.youtube.com/watch?v=Z75C5uJSo9k",
+      "publishedAt": "2024-10-16T17:28:27.000Z",
+      "summary": "杜甫的〈月夜憶舍弟〉描繪了戰亂時期，詩人對親人的掛念。 秋夜月下，戍鼓聲斷，孤雁哀鳴襯托了詩人的孤寂，思鄉情感湧上心頭。這份對家人的掛念，是否也曾觸動過你的心？",
+      "lang": "zh-TW",
+      "tags": [
+        "詩詞",
+        "朗讀"
+      ],
+      "thumbnail": "https://i3.ytimg.com/vi/Z75C5uJSo9k/hqdefault.jpg",
+      "externalId": "Z75C5uJSo9k",
+      "firstSeenAt": "2026-09-02T16:46:46.028Z"
+    },
+    {
+      "id": "youtube-foxpoetry--rohhwc-xknm",
+      "sourceId": "youtube-foxpoetry",
+      "platform": "youtube",
+      "media": "video",
+      "title": "王之涣〈登鸛雀樓〉「白日依山盡，黃河入海流。」站在高樓遠眺，天地遼闊，意境深遠。你是否也曾因壯麗的景色而心生感慨？",
+      "url": "https://www.youtube.com/watch?v=rOhHwC_XknM",
+      "publishedAt": "2024-10-16T14:38:55.000Z",
+      "summary": "王之涣的〈登鸛雀樓〉以短短四句描繪出雄偉壯麗的自然景色，詩人立足高樓，遠眺日落與黃河，寓意著人生追求的更高境界。這首詩給我們啟示：欲窮千里目，更上一層樓。",
+      "lang": "zh-TW",
+      "tags": [
+        "詩詞",
+        "朗讀"
+      ],
+      "thumbnail": "https://i3.ytimg.com/vi/rOhHwC_XknM/hqdefault.jpg",
+      "externalId": "rOhHwC_XknM",
+      "firstSeenAt": "2026-09-02T16:46:46.028Z"
+    },
+    {
+      "id": "youtube-foxpoetry--85wyxn4nvbc",
+      "sourceId": "youtube-foxpoetry",
+      "platform": "youtube",
+      "media": "video",
+      "title": "王維〈九月九日憶山東兄弟〉「獨在異鄉為異客，每逢佳節倍思親。」重陽節倍感思鄉，兄弟登高，茱萸遍插，唯少我一人。你也曾在佳節想念親人嗎？",
+      "url": "https://www.youtube.com/watch?v=85wyXn4Nvbc",
+      "publishedAt": "2024-10-15T10:31:49.000Z",
+      "summary": "王維的〈九月九日憶山東兄弟〉道出重陽節思鄉之情。「獨在異鄉為異客，每逢佳節倍思親」，佳節登高卻少了一人，流露出濃厚的鄉愁。你是否也曾在節日中想起遠方的親人？",
+      "lang": "zh-TW",
+      "tags": [
+        "詩詞",
+        "朗讀"
+      ],
+      "thumbnail": "https://i1.ytimg.com/vi/85wyXn4Nvbc/hqdefault.jpg",
+      "externalId": "85wyXn4Nvbc",
+      "firstSeenAt": "2026-09-02T16:46:46.028Z"
+    }
+  ]
+}

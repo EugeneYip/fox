@@ -1,0 +1,100 @@
+---
+import Base from '@layouts/Base.astro';
+import PageHeader from '@components/layout/PageHeader.astro';
+import { localePaths } from '@i18n/paths';
+import { getTagCloud, getAllWriting } from '@lib/content';
+import { useTranslations, localizePath } from '@i18n/utils';
+import type { Locale } from '@config/site';
+import EmptyState from '@components/ui/EmptyState.astro';
+
+export const getStaticPaths = () => localePaths();
+
+const { locale } = Astro.props as { locale: Locale };
+const t = useTranslations(locale);
+const tags = await getTagCloud(locale);
+
+/*
+ * 空的時候指路 —— 理由同 ListPage.astro。
+ * 這裡指的是另一個語言的 /archive 而不是 /tags：標籤是從內容長出來的，
+ * 「那邊有幾篇」是確定的事實，「那邊有幾個標籤」則要另外算，而且對讀者沒有用。
+ */
+const otherLocale: Locale = locale === 'zh-TW' ? 'en' : 'zh-TW';
+const otherEntries = tags.length === 0 ? (await getAllWriting({ lang: otherLocale })).length : 0;
+
+/*
+ * 出現次數決定字級：常寫的主題自然大一點。
+ *
+ * ## 為什麼是對數而不是直接除以最大值
+ *
+ * 第 3 輪（第十九圈）用**偏斜**的假資料量到的（500 篇、274 個標籤、
+ * 最常用的出現 85 次、中位數 4、51 個只出現一次）：
+ *
+ *   線性（n / max）　　**90% 的標籤落在 0.98–1.00rem** ——
+ *                      一個巨大的標籤配兩百多個一模一樣的小字，
+ *                      字級等於沒有傳達任何東西
+ *   對數　　　　　　　 中位數那一群落在 1.17rem，長尾才有分別
+ *
+ * 真實的標籤分佈是長尾的（幾個常用的佔一大半），而線性刻度的分母是
+ * 最大值 —— 長尾整個被壓在下界。平均分配的假資料量不到這件事，
+ * 那也是為什麼產生器同一輪改成偏斜的。
+ *
+ * 站上現在 14 個標籤、最多 3 次，兩種刻度看起來都正常。
+ */
+const max = Math.max(1, ...tags.map((tag) => tag.count));
+const spread = Math.log(max) || 1; // 只有一個標籤時 log(1) = 0，別除以零
+const scale = (n: number) => 0.9 + (Math.log(n) / spread) * 0.85;
+---
+
+<Base locale={locale} title={t('tags.title')} class="wrap--content">
+  <PageHeader title={t('tags.title')} count={t('tags.count', { n: tags.length })} />
+
+  {tags.length > 0 ? (
+    <ul class="cloud ui">
+      {tags.map(({ tag, slug, count }) => (
+        <li>
+          <a href={localizePath(`/tags/${encodeURIComponent(slug)}`, locale)} style={`font-size:${scale(count)}rem`}>
+            {tag}<sub>{count}</sub>
+          </a>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <EmptyState title={t('list.empty')}>
+      {otherEntries > 0 && (
+        <a class="ui" href={localizePath('/archive', otherLocale)}>
+          {t('list.otherLang', { n: otherEntries })}{' '}
+          <span aria-hidden="true">→</span>
+        </a>
+      )}
+    </EmptyState>
+  )}
+</Base>
+
+<style>
+  .cloud {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-3) var(--s-4);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    align-items: baseline;
+  }
+
+  .cloud li { margin: 0; }
+
+  .cloud a {
+    text-decoration: none;
+    color: var(--c-ink-soft);
+    line-height: 1.4;
+  }
+
+  .cloud a:hover { color: var(--c-flame-ink); }
+
+  .cloud sub {
+    font-size: 0.6em;
+    color: var(--c-ink-faint);
+    margin-inline-start: 0.2em;
+    vertical-align: baseline;
+  }
+</style>

@@ -1,0 +1,144 @@
+---
+/**
+ * 深淺色切換。
+ *
+ * 三段循環：跟隨系統 → 淺色 → 深色 → 跟隨系統。
+ * 「跟隨系統」是預設，也是最該保留的選項 —— 很多人是在系統層設定的，
+ * 網站不應該擅自蓋掉。
+ */
+interface Props {
+  label: string;
+  /** 三個狀態各自的說法，由 Header 傳進來（元件本身不碰 i18n，才好在別處重用） */
+  states: { system: string; light: string; dark: string };
+  /** 「按一下改為 X」的句型與三個狀態的名字 */
+  next: { template: string; system: string; light: string; dark: string };
+  /** 兩句之間的分隔。中文是全形逗號，英文是半形逗號加空格 */
+  join: string;
+}
+const { label, states, next, join } = Astro.props;
+
+// 交給 client script 用，避免在 JS 裡再寫一份文案
+const i18n = JSON.stringify({ states, next, join });
+---
+
+<button
+  class="theme-toggle"
+  type="button"
+  aria-label={label}
+  title={label}
+  data-theme-i18n={i18n}
+>
+  <svg viewBox="0 0 20 20" width="17" height="17" aria-hidden="true" fill="none">
+    {/* 太陽 */}
+    <g class="icon icon--light" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+      <circle cx="10" cy="10" r="3.6" />
+      <path d="M10 1.6v2M10 16.4v2M18.4 10h-2M3.6 10h-2M15.9 4.1l-1.4 1.4M5.5 14.5l-1.4 1.4M15.9 15.9l-1.4-1.4M5.5 5.5L4.1 4.1" />
+    </g>
+    {/* 月 */}
+    <g class="icon icon--dark">
+      <path d="M16.3 12.4A7 7 0 0 1 7.6 3.7a7 7 0 1 0 8.7 8.7Z" fill="currentColor" />
+    </g>
+    {/* 系統：半明半暗 */}
+    <g class="icon icon--system" stroke="currentColor" stroke-width="1.6">
+      <circle cx="10" cy="10" r="6.4" />
+      <path d="M10 3.6a6.4 6.4 0 0 1 0 12.8Z" fill="currentColor" stroke="none" />
+    </g>
+  </svg>
+</button>
+
+{/*
+  切換之後把新狀態唸出來。
+  只改 aria-label 不夠可靠 —— 有些螢幕閱讀器不會重讀焦點上的元素標籤，
+  所以另外放一個 live region，變更時主動播報一次。
+*/}
+<span class="sr-only" role="status" aria-live="polite" data-theme-status></span>
+
+<style>
+  .theme-toggle {
+    display: grid;
+    place-items: center;
+    inline-size: 2.1rem;
+    block-size: 2.1rem;
+    border-radius: var(--r-md);
+    color: var(--c-ink-soft);
+    transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+  }
+
+  .theme-toggle:hover {
+    color: var(--c-flame-ink);
+    background: var(--c-bg-sunken);
+  }
+
+  .icon { display: none; }
+
+  :global(html[data-theme-pref="system"]) .icon--system,
+  :global(html[data-theme-pref="light"]) .icon--light,
+  :global(html[data-theme-pref="dark"]) .icon--dark {
+    display: block;
+  }
+</style>
+
+<script>
+  const ORDER = ['system', 'light', 'dark'] as const;
+  type Pref = (typeof ORDER)[number];
+
+  interface ThemeI18n {
+    states: Record<Pref, string>;
+    next: { template: string } & Record<Pref, string>;
+    join: string;
+  }
+
+  function apply(pref: Pref) {
+    const root = document.documentElement;
+    root.dataset.themePref = pref;
+    if (pref === 'system') {
+      delete root.dataset.theme;
+      try { localStorage.removeItem('fox-theme'); } catch { /* 無痕模式 */ }
+    } else {
+      root.dataset.theme = pref;
+      try { localStorage.setItem('fox-theme', pref); } catch { /* 無痕模式 */ }
+    }
+  }
+
+  function current(): Pref {
+    const value = document.documentElement.dataset.themePref;
+    return (ORDER as readonly string[]).includes(value ?? '') ? (value as Pref) : 'system';
+  }
+
+  const nextOf = (pref: Pref): Pref => ORDER[(ORDER.indexOf(pref) + 1) % ORDER.length]!;
+
+  /**
+   * 「目前是深色，按一下改為跟隨系統」—— 狀態與後果都講清楚。
+   * 分隔符號從文案來，不能寫死：英文用全形逗號會變成
+   * 「Currently light，press to switch to dark」，螢幕閱讀器也會唸出中文標點。
+   */
+  function describe(i18n: ThemeI18n, pref: Pref): string {
+    const willBe = i18n.next.template.replace('{next}', i18n.next[nextOf(pref)]);
+    return `${i18n.states[pref]}${i18n.join}${willBe}`;
+  }
+
+  for (const button of document.querySelectorAll<HTMLButtonElement>('.theme-toggle')) {
+    let i18n: ThemeI18n;
+    try {
+      i18n = JSON.parse(button.dataset.themeI18n ?? '');
+    } catch {
+      continue; // 沒有文案就維持原本的靜態 aria-label，不要讓按鈕壞掉
+    }
+
+    const status = button.parentElement?.querySelector<HTMLElement>('[data-theme-status]');
+
+    const sync = (announce: boolean) => {
+      const text = describe(i18n, current());
+      button.setAttribute('aria-label', text);
+      button.setAttribute('title', text);
+      if (announce && status) status.textContent = text;
+    };
+
+    sync(false); // 進站時先把 label 補成正確的狀態，但不播報
+
+    button.addEventListener('click', () => {
+      apply(nextOf(current()));
+      sync(true);
+    });
+  }
+</script>

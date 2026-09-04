@@ -1,0 +1,207 @@
+/*
+ * 設計語彙 —— 狐狸 × 中文系
+ *
+ * 顏色取自兩個地方：宣紙與墨的溫度，以及狐狸的毛色。
+ * 刻意避開一般個人網站的冷灰藍；這個站應該像一本書，不像一個 dashboard。
+ *
+ *   宣    紙的底色，微微偏黃
+ *   墨    正文的黑，帶一點暖，不是純黑
+ *   狐火  橘紅，重點色。傳說中狐狸口中吐出的光
+ *   印泥  更深的紅，用在印章與強調
+ *   苔    青綠，用在次要標記
+ *
+ * 所有顏色都定義了淺色與深色兩套；深色不是把淺色反轉，而是重新調過，
+ * 因為直接反轉會讓暖色變髒。
+ */
+
+:root {
+  /*
+   * 顏色一律用 light-dark(淺, 深) 寫成一行。
+   *
+   * 為什麼不是「淺色一個區塊、深色一個區塊」：那樣寫深色的值會出現兩次
+   * （手動選深色一次、跟隨系統一次），而 CSS 沒辦法讓一組值同時掛在兩個
+   * 選擇器上。兩份不同步時只有「跟隨系統」的使用者會踩到，開發時幾乎
+   * 不可能用眼睛發現 —— 第 1 輪為此寫了一個比對兩塊的檢查。
+   *
+   * light-dark() 讓一個 token 的兩個值寫在同一行，**漂移在結構上不可能發生**，
+   * 那個檢查也就不需要了。
+   *
+   * 每個 token 寫兩次：第一行是給不支援 light-dark() 的舊瀏覽器的 fallback
+   * （它會忽略第二行）。少了第一行，那些瀏覽器會拿到 unset，整站沒有顏色。
+   *
+   * 深色不是把淺色反轉，是另外調過的一套 —— 直接反轉會讓暖色變髒。
+   */
+  color-scheme: light dark;
+
+  /* ── 底與墨 ─────────────────────────────────────── */
+  --c-bg: #faf6ee;
+  --c-bg: light-dark(#faf6ee, #14120f);
+  --c-bg-raised: #fffdf8;
+  --c-bg-raised: light-dark(#fffdf8, #1d1a16);
+  --c-bg-sunken: #f2ecdf;
+  --c-bg-sunken: light-dark(#f2ecdf, #0e0d0b);
+
+  --c-ink: #1f1c18;
+  --c-ink: light-dark(#1f1c18, #ebe3d5);
+  --c-ink-soft: #55504a;
+  --c-ink-soft: light-dark(#55504a, #b0a696);
+  /*
+   * 最淡的一階。它會用在日期、註記這些**小字**上，所以仍然要滿足 4.5:1。
+   * 淺色原本是 #857c70，實測只有 3.81:1，不合格，已調深到 4.94:1。
+   * 三階的層次是 15.74 → 7.40 → 4.94，還是分得出來。
+   */
+  --c-ink-faint: #726a60;
+  --c-ink-faint: light-dark(#726a60, #8a8171);
+
+  /* ── 線 ─────────────────────────────────────────── */
+  /* 分隔線。純裝飾，沒有對比度要求 */
+  --c-rule: #e5dcca;
+  --c-rule: light-dark(#e5dcca, #2f2a23);
+  /* 有陰影或底色撐著的浮起表面外框（下拉選單、卡片 hover） */
+  --c-rule-strong: #d3c7ae;
+  --c-rule-strong: light-dark(#d3c7ae, #443d33);
+  /*
+   * 互動元件的邊界 —— 輸入框、按鈕。
+   * 空的輸入框「看不看得出來可以打字」全靠這條線，
+   * 所以要滿足 WCAG 1.4.11 的 3:1。rule-strong 只有 1.55:1，不能拿來用。
+   */
+  --c-edge: #8f877e;
+  --c-edge: light-dark(#8f877e, #6f6554);
+
+  /* ── 重點色 ─────────────────────────────────────── */
+  --c-flame: #d2622a;
+  --c-flame: light-dark(#d2622a, #e8834a);
+  /* flame-ink 是「可以拿來當文字」的狐火色，對比 ≥ 4.5:1 */
+  --c-flame-ink: #b04d1c;
+  --c-flame-ink: light-dark(#b04d1c, #f0966a);
+  --c-flame-wash: #fbeee3;
+  --c-flame-wash: light-dark(#fbeee3, #2a1d14);
+  --c-seal: #a93226;
+  --c-seal: light-dark(#a93226, #cd6154);
+  --c-moss: #56684c;
+  --c-moss: light-dark(#56684c, #93a884);
+  --c-moss-wash: #eef1e8;
+  --c-moss-wash: light-dark(#eef1e8, #1b201a);
+
+  --c-selection: #f6ddc6;
+  --c-selection: light-dark(#f6ddc6, #4a3221);
+  --c-focus: #b04d1c;
+  --c-focus: light-dark(#b04d1c, #f0966a);
+
+  /* ── 字體 ───────────────────────────────────────
+   * 全部走系統字型。沒有 Google Fonts、沒有任何 CDN —— 訪客的瀏覽器
+   * 不會因為讀這個網站而向第三方發出請求。代價是不同裝置上長得不完全
+   * 一樣，但對一個以文字為主的站來說，這個交換是划算的。
+   */
+  --f-serif:
+    "Noto Serif TC", "Source Han Serif TC", "Songti TC", "Songti SC", "STSong",
+    "PMingLiU", "MS Mincho", "Hiragino Mincho ProN", Georgia, "Times New Roman", serif;
+  --f-sans:
+    "Noto Sans TC", "PingFang TC", "PingFang SC", "Hiragino Sans",
+    "Microsoft JhengHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", sans-serif;
+  --f-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Noto Sans Mono CJK TC",
+    monospace;
+
+  /* ── 字級：流體尺度，用 clamp 讓小螢幕自動縮 ────── */
+  --t-xs: clamp(0.75rem, 0.72rem + 0.15vw, 0.8125rem);
+  --t-sm: clamp(0.8125rem, 0.78rem + 0.18vw, 0.9375rem);
+  --t-base: clamp(1rem, 0.96rem + 0.2vw, 1.0625rem);
+  --t-md: clamp(1.125rem, 1.05rem + 0.35vw, 1.25rem);
+  --t-lg: clamp(1.35rem, 1.2rem + 0.7vw, 1.75rem);
+  --t-xl: clamp(1.7rem, 1.4rem + 1.4vw, 2.5rem);
+  --t-2xl: clamp(2.1rem, 1.6rem + 2.4vw, 3.5rem);
+  --t-display: clamp(2.6rem, 1.7rem + 4vw, 5rem);
+
+  --lh-tight: 1.25;
+  --lh-snug: 1.45;
+  --lh-body: 1.85;   /* 中文行距要比英文寬，1.85 讀起來才不擠 */
+  --lh-loose: 2.1;
+
+  /* 中文字距微調：正文加一點點，標題不加 */
+  --ls-body: 0.015em;
+  --ls-tight: 0;
+  --ls-wide: 0.12em;
+
+  /* ── 間距：8px 為基準的尺度 ─────────────────────── */
+  --s-1: 0.25rem;
+  --s-2: 0.5rem;
+  --s-3: 0.75rem;
+  --s-4: 1rem;
+  --s-5: 1.5rem;
+  --s-6: 2rem;
+  --s-7: 3rem;
+  --s-8: 4rem;
+  --s-9: 6rem;
+  --s-10: 8rem;
+
+  /* ── 版面寬度 ───────────────────────────────────── */
+  /*
+   * 正文欄寬。實測（第 8 輪）：
+   *   768px 視窗 → 段落寬 544px、字級 19.5px → 每行 27 個中文字
+   *   1440px     → 段落寬 544px、字級 20px   → 每行 26 個中文字
+   *
+   * 這裡本來寫「約 30–35 個中文字」，那是估的，跟實際差了一截。
+   * 要真的到 35 字需要約 44rem，整個版面的節奏會跟著變 ——
+   * 而 26–27 字本來就在中文閱讀的舒適區間內，所以維持 34rem，改的是註解。
+   */
+  --w-prose: 34rem;
+  --w-content: 46rem;
+  --w-wide: 64rem;
+  --w-full: 78rem;
+  --gutter: clamp(1.25rem, 5vw, 3rem);
+
+  /* ── 其他 ───────────────────────────────────────── */
+  --r-sm: 2px;
+  --r-md: 4px;
+  --r-lg: 8px;
+  --r-seal: 3px;
+
+  /*
+   * 陰影。light-dark() 只吃 <color>，不能包整串 box-shadow，
+   * 所以把四個顏色抽出來各自用 light-dark()，再組合成陰影。
+   *
+   * 淺色用帶暖的墨色低透明度（純黑在宣紙上會顯得髒），
+   * 深色用純黑但濃度高很多（深底上要更重才看得出層次）。
+   */
+  --shadow-soft-near: rgb(31 28 24 / 0.04);
+  --shadow-soft-near: light-dark(rgb(31 28 24 / 0.04), rgb(0 0 0 / 0.3));
+  --shadow-soft-far: rgb(31 28 24 / 0.05);
+  --shadow-soft-far: light-dark(rgb(31 28 24 / 0.05), rgb(0 0 0 / 0.28));
+  --shadow-lift-near: rgb(31 28 24 / 0.06);
+  --shadow-lift-near: light-dark(rgb(31 28 24 / 0.06), rgb(0 0 0 / 0.35));
+  --shadow-lift-far: rgb(31 28 24 / 0.09);
+  --shadow-lift-far: light-dark(rgb(31 28 24 / 0.09), rgb(0 0 0 / 0.45));
+
+  --shadow-soft: 0 1px 2px var(--shadow-soft-near), 0 4px 16px var(--shadow-soft-far);
+  --shadow-lift: 0 2px 4px var(--shadow-lift-near), 0 12px 32px var(--shadow-lift-far);
+
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-fast: 120ms;
+  --dur: 220ms;
+  --dur-slow: 480ms;
+
+  --border-thin: 1px solid var(--c-rule);
+}
+
+/* ── 手動切換主題 ───────────────────────────────────
+ *
+ * 這兩行取代了原本的兩個 60 行區塊。
+ *
+ * 因為顏色是用 light-dark() 定義的，「換主題」不再是換掉一整組變數，
+ * 而是改變這個文件的 color-scheme —— light-dark() 會自己挑另一邊的值。
+ *
+ * 沒有 data-theme 時，:root 的 `color-scheme: light dark` 讓它跟隨系統。
+ * ThemeToggle 的 JavaScript 完全不用改：它本來就只是設 data-theme。
+ *
+ * 附帶好處：color-scheme 也會讓瀏覽器把捲軸、表單控制項的預設外觀
+ * 一起換成對應的明暗，那是換變數做不到的。
+ */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}

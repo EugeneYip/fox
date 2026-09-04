@@ -1,0 +1,33 @@
+{
+  "extends": "astro/tsconfigs/strict",
+  "include": [".astro/types.d.ts", "**/*"],
+  "exclude": ["dist", "node_modules"],
+  "compilerOptions": {
+    /*
+     * 只列「跟 astro/tsconfigs/strict 不一樣」的設定。
+     * strictNullChecks 已經包含在 strict: true 裡、allowJs 已經在 base.json 裡，
+     * 重複寫只會讓人以為那是刻意的自訂。
+     *
+     * checkJs 全開（第 7 輪，第三圈）。
+     *
+     * 在那之前是 false，因為 scripts/ 底下的工具沒寫 JSDoc，全開有 155 個
+     * implicit any。第 7 輪（第二圈）先量了那 155 個，確認裡面**沒有真的 bug**，
+     * 然後分兩輪逐檔補上型別，21 支全部補完。
+     *
+     * 為什麼要全開而不是繼續逐檔 // @ts-check：逐檔的方式**新檔案預設不檢查**，
+     * 要靠人記得加。全開之後新腳本一寫出來就在檢查範圍內 ——
+     * 第 6 輪（第三圈）寫 check-copy.mjs 時它當場就報了兩個沒寫型別的參數。
+     */
+    "checkJs": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@components/*": ["src/components/*"],
+      "@layouts/*": ["src/layouts/*"],
+      "@lib/*": ["src/lib/*"],
+      "@config/*": ["src/config/*"],
+      "@i18n/*": ["src/i18n/*"],
+      "@styles/*": ["src/styles/*"]
+    }
+  }
+}

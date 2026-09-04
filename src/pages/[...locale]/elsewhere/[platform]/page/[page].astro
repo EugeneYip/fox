@@ -1,0 +1,100 @@
+---
+/**
+ * 某個平臺收錄的第 2 頁以後。第 1 頁在 ../../[platform].astro。
+ *
+ * 網址是 /elsewhere/youtube/page/2 —— 跟 /poems/page/2 同一個形狀，
+ * 多一層 page/ 的理由也一樣：平臺 id 跟頁碼住在同一層有機會撞到。
+ *
+ * 這裡把 ListPage 對分頁做的三件事都照做了（頁碼進標題、第二頁起 noindex、
+ * head 裡放 rel=prev/next）。少做任何一件，這一批分頁在搜尋結果裡
+ * 會長得一模一樣並互相稀釋 —— 站內其他列表沒有這個問題，只有這裡會。
+ */
+import Base from '@layouts/Base.astro';
+import PageHeader from '@components/layout/PageHeader.astro';
+import Pagination from '@components/ui/Pagination.astro';
+import SyndicationList from '@components/content/SyndicationList.astro';
+import { localePaths } from '@i18n/paths';
+import { getSyndication } from '@lib/syndication';
+import { paginate, extraPageNumbers, SYNDICATION_PAGE_SIZE } from '@lib/content';
+import { useTranslations, localizePath } from '@i18n/utils';
+import { externalLinkRel } from '@config/privacy';
+import { sources } from '@config/sources.mjs';
+import { platformOrFallback, type Platform } from '@config/platforms';
+import { site, type Locale } from '@config/site';
+import type { SyndicatedItem } from '@lib/syndication';
+
+export async function getStaticPaths() {
+  const all = await getSyndication();
+  const ids = [...new Set(all.map((i) => i.platform.id))];
+  const paths = [];
+
+  for (const { params, props } of localePaths()) {
+    for (const id of ids) {
+      const count = all.filter((i) => i.platform.id === id).length;
+      for (const n of extraPageNumbers(count, SYNDICATION_PAGE_SIZE)) {
+        paths.push({
+          params: { ...params, platform: id, page: String(n) },
+          props: { ...props, platformId: id, pageNumber: n },
+        });
+      }
+    }
+  }
+  return paths;
+}
+
+const { locale, platformId, pageNumber } = Astro.props as {
+  locale: Locale;
+  platformId: string;
+  pageNumber: number;
+};
+const t = useTranslations(locale);
+
+const platform: Platform = platformOrFallback(platformId);
+const all: SyndicatedItem[] = await getSyndication({ platform: platformId });
+const page = paginate(all, pageNumber, `/elsewhere/${platformId}`, SYNDICATION_PAGE_SIZE);
+
+const source = sources.find((s) => s.platform === platformId && s.enabled);
+const homeUrl =
+  source?.homeUrl ?? platform.homeTemplate?.replaceAll('{handle}', source?.handle ?? '');
+
+const name = platform.name[locale] ?? platform.name['zh-TW'];
+const abs = (path: string) => new URL(localizePath(path, locale), site.url).toString();
+---
+
+<Base
+  locale={locale}
+  title={name + t('page.titleSuffix', { current: page.current, total: page.total })}
+  noindex={true}
+  class="wrap--content"
+>
+  <Fragment slot="head">
+    {page.prevUrl && <link rel="prev" href={abs(page.prevUrl)} />}
+    {page.nextUrl && <link rel="next" href={abs(page.nextUrl)} />}
+  </Fragment>
+
+  <PageHeader
+    title={name}
+    count={t('list.range', { from: page.from, to: page.to, total: page.totalItems })}
+  >
+    {homeUrl && (
+      <p class="ui">
+        <a class="els-visit" href={homeUrl} target="_blank" rel={externalLinkRel}>
+          {t('elsewhere.readOn', { platform: name })} <span aria-hidden="true">↗</span>
+        </a>
+      </p>
+    )}
+  </PageHeader>
+
+  <SyndicationList items={page.items} locale={locale} showPlatform={false} headingLevel="h2" />
+
+  <Pagination page={page} locale={locale} basePath={`/elsewhere/${platformId}`} />
+</Base>
+
+<style>
+  .els-visit {
+    font-size: var(--t-sm);
+    text-decoration: none;
+    color: var(--c-ink-soft);
+  }
+  .els-visit:hover { color: var(--c-flame-ink); }
+</style>
