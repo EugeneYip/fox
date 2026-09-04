@@ -56,6 +56,7 @@ const RULE_IDS = [
   'gate-missing-in-check',
   'needs-dist-before-build',
   'test-file-not-run',
+  'machine-path-in-config',
 ];
 
 if (process.argv.includes('--list-rules')) {
@@ -231,6 +232,62 @@ for (const required of DEPLOY_MUST_RUN) {
  * 第 7 輪（第七圈）實測當下兩份是一致的（六道、順序也一樣），
  * 所以這條規則加的是「以後也不會分岔」。
  */
+/*
+ * ── 設定檔裡有沒有「只在一台機器上成立」的絕對路徑 ──────
+ *
+ * 2026-09-04 第一次把這個 repo 推上 GitHub，第一個 workflow 就死在
+ * `npm ci`：
+ *
+ *     npm error EACCES: permission denied, mkdir '/Volumes'
+ *     npm error ⋯ /Volumes/Projects/.npm-cache/_logs
+ *
+ * 版控裡的 `.npmrc` 有一行 `cache=<站主那台 Mac 的外接碟路徑>` ——
+ * 那是為了解決他家目錄磁碟很緊才設的，完全正確，但它**不該進版控**。
+ * runner 上沒有那個路徑，而且 npm 連寫 log 都寫不出去。
+ *
+ * 本機看不出來（路徑當然存在），六道關卡也看不出來（它們不跑 npm ci）。
+ * 只有真的在別人的機器上跑才會現形 —— 而這個專案的 workflow 在那之前
+ * 一次都沒跑過。
+ *
+ * ## 判準
+ *
+ * 只看**會被執行的設定檔**，而且**跳過註解行**。
+ * 註解裡寫出那個路徑是為了解釋這條規則本身 —— 這個 repo 已經第十一次
+ * 撞到「解釋一條規則，就會需要寫出它禁止的東西」，這次在出貨前就看到了。
+ */
+{
+  const CONFIGS = [
+    '.npmrc',
+    '.nvmrc',
+    'package.json',
+    ...files.map((f) => `.github/workflows/${f}`),
+  ];
+  /** `/Volumes/x`、`/Users/x`、`/home/x` —— 都是某一台機器才有的 */
+  const MACHINE_PATH = /(?:^|[\s=:'"(])(\/(?:Volumes|Users|home)\/[A-Za-z0-9._-]+)/;
+
+  saw('machine-path-in-config', CONFIGS.length);
+  for (const rel of CONFIGS) {
+    const text = await readFile(resolve(ROOT, rel), 'utf8').catch(() => null);
+    if (text === null) continue;
+    for (const [i, raw] of text.split('\n').entries()) {
+      /* 註解不是設定 —— 在註解裡講那個路徑是可以的 */
+      const line = raw.trim();
+      if (line.startsWith('#') || line.startsWith('//') || line.startsWith('*')) continue;
+      const m = MACHINE_PATH.exec(raw);
+      if (!m) continue;
+      add(
+        rel,
+        i + 1,
+        'machine-path-in-config',
+        `這一行有一個只在一台機器上成立的絕對路徑：\`${m[1]}\`。\n` +
+          '      設定檔會被別的機器執行 —— CI 上那個路徑不存在，通常整步直接失敗。\n' +
+          '      改法：機器專屬的設定放 ~/.npmrc（或對應的使用者層設定），' +
+          '專案的設定檔只放在任何機器上都成立的東西。',
+      );
+    }
+  }
+}
+
 /*
  * ── scripts/test-*.mjs 有沒有人跑 ────────────────────
  *

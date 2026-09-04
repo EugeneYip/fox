@@ -279,6 +279,18 @@ const CASES = {
   },
 
   /*
+   * ── 設定檔裡有只在一台機器上成立的路徑 ──
+   *
+   * 2026-09-04 第一次推上 GitHub，第一個 workflow 就死在 npm ci：
+   * 版控裡的 .npmrc 有一行 cache=<某台 Mac 的外接碟路徑>，
+   * runner 上沒有那個路徑，連 npm 的 log 都寫不出去。
+   * 本機看不出來，六道關卡也看不出來（它們不跑 npm ci）。
+   */
+  'machine-path-in-config': {
+    '.npmrc': 'cache=/Volumes/SomeDisk/.npm-cache\nfund=false\n',
+  },
+
+  /*
    * ── 有測試檔，但沒有人跑它 ──
    *
    * 「這個專案有哪些測試」寫在檔案系統與 package.json 兩個地方。
@@ -373,6 +385,24 @@ try {
       failed++;
       console.log(out.split('\n').map((l) => '        ' + l).join('\n'));
     }
+  }
+
+  /*
+   * 反向：那個路徑寫在**註解**裡不算 —— 那是在解釋這條規則。
+   *
+   * 這個 repo 第十一次撞到「解釋一條規則，就會需要寫出它禁止的東西」，
+   * 而這一次是在出貨前看到的：`.npmrc` 的註解裡就有那個路徑。
+   */
+  {
+    const dir = await build('machine-path-comment', {
+      ...base(),
+      '.npmrc': '# 不要在這裡設 cache=/Volumes/SomeDisk/.npm-cache\nfund=false\n',
+    });
+    const out = await check(dir);
+    const ok = !out.includes('[machine-path-in-config]');
+    if (!ok) failed++;
+    console.log(`  ${ok ? '✓' : 'X'} 那個路徑寫在註解裡不算（反向案例）`);
+    if (!ok) console.log('        ' + out.split('\n').filter((l) => l.includes('machine-path')).join('\n        '));
   }
 
   // 加規則沒加案例就失敗
