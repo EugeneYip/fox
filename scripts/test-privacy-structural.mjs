@@ -1126,7 +1126,8 @@ console.log('─'.repeat(64));
   const dir = await build({});
   const plain = await audit(dir, {});
 
-  const okScope = /掃了 \d+ 個檔案、\d+ 條規則/.test(plain.out);
+  /* 中間那個「（另外 N 個在豁免名單上）」是第 5 輪（第三十五圈）加的，允許它在或不在 */
+  const okScope = /掃了 \d+ 個檔案(?:（[^）]*）)?、\d+ 條規則/.test(plain.out);
   if (!okScope) failed++;
   console.log(`  ${okScope ? '✓' : 'X'} 說得出掃了幾個檔案、幾條規則`);
   if (!okScope) console.log('        ' + plain.out.split('\n').filter(Boolean).slice(-5).join(' | '));
@@ -1250,12 +1251,12 @@ console.log('─'.repeat(64));
    *
    * 少了這一句，突變「只掃其中一個檔案」照樣全綠 —— 掃到 1 條、1 個等級、
    * 沒有分岔。**掃得不夠跟真的沒問題長得一樣。**
-   * 數字問腳本自己要（`掃了 N 個檔案、M 條規則`），不另外寫一份清單。
+   * 數字問腳本自己要（`掃了 N 個檔案（⋯）、M 條規則`），不另外寫一份清單。
    */
   const dir = await build({});
   const { out } = await audit(dir, {});
   await rm(dir, { recursive: true, force: true });
-  const declared = Number(/掃了 \d+ 個檔案、(\d+) 條規則/.exec(out)?.[1] ?? 0);
+  const declared = Number(/掃了 \d+ 個檔案(?:（[^）]*）)?、(\d+) 條規則/.exec(out)?.[1] ?? 0);
 
   const split = [...levels.entries()].filter(([, v]) => v.size > 1);
   const okOne = sites > 0 && split.length === 0 && declared > 0 && levels.size === declared;
@@ -1298,6 +1299,49 @@ console.log('─'.repeat(64));
           : `沒有記數的：${noSaw.join('、')}　它們會被當成「站上沒有這種東西」`),
     );
   }
+}
+
+/*
+ * ── 「掃了 N 個檔案」是豁免之後的數字 ──────────
+ *
+ * 第 5 輪（第三十五圈）用第二種算法數：`filesToScan()` 走出 185 個，
+ * 扣掉 9 個豁免正好 176 —— 跟這一支印的一字不差。**數字是對的。**
+ * 但那一行原本只說 176，讀起來像全部，而被跳過的那 9 個
+ * 正是唯一可能藏著真值的那幾個。現在同一行也會說豁免了幾個。
+ *
+ * 兩格：那一行要同時給得出兩個數字（而且豁免數不是 0 ——
+ * 0 的話那個子句等於沒說），以及**加一個檔案時 scanned 要 +1**
+ * （不然「176」可能是寫死的）。
+ */
+{
+  const dir = await build({});
+  const first = (await audit(dir, {})).out;
+  const m1 = /掃了 (\d+) 個檔案（另外 (\d+) 個在豁免名單上，沒掃）、(\d+) 條規則/.exec(first);
+
+  const okShape = m1 !== null && Number(m1[2]) > 0;
+  if (!okShape) failed++;
+  console.log(
+    `  ${okShape ? '\u2713' : 'X'} 「掃了 N 個檔案」同一行說得出豁免了幾個` +
+      (m1 ? `（掃 ${m1[1]}、豁免 ${m1[2]}）` : ''),
+  );
+  if (!okShape) {
+    console.log('        ' + (first.split('\n').find((l) => l.includes('掃了')) ?? '（那一行沒印）'));
+  }
+
+  /* 加一個會被掃到的檔案 —— scanned 應該剛好多 1，豁免數不動 */
+  await mkdir(join(dir, 'docs'), { recursive: true });
+  await writeFile(join(dir, 'docs', 'extra-probe.md'), '# 一個普通的檔案\n', 'utf8');
+  const second = (await audit(dir, {})).out;
+  const m2 = /掃了 (\d+) 個檔案（另外 (\d+) 個在豁免名單上，沒掃）/.exec(second);
+  const okDelta =
+    m1 !== null && m2 !== null && Number(m2[1]) === Number(m1[1]) + 1 && m2[2] === m1[2];
+  if (!okDelta) failed++;
+  console.log(
+    `  ${okDelta ? '\u2713' : 'X'} 多一個檔案，掃過的數字就 +1、豁免數不動` +
+      (m1 && m2 ? `（${m1[1]} → ${m2[1]}，豁免 ${m1[2]} → ${m2[2]}）` : ''),
+  );
+
+  await rm(dir, { recursive: true, force: true });
 }
 
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
