@@ -1019,6 +1019,7 @@ const RULES = [
   'field-undocumented',
   'vertical-lost',
   'locale-list-drift',
+  'domain-drift',
   'search-crosslang-mute',
   'guide-field-unknown',
 ];
@@ -1267,6 +1268,72 @@ servedCss += dedupedInlineStyles(built.filter((b) => b.path.endsWith('.html')).m
     },
   ];
   const found = sources.filter((x) => x.list !== null && x.list.length > 0);
+  /*
+   * ── 網域也有三份 ──────────
+   *
+   * 跟上面語言清單一模一樣的形狀，只是這次是網域：
+   *
+   *   src/config/site.ts   url    —— 頁面文案、seo.ts 用它組絕對網址
+   *   astro.config.mjs     site   —— sitemap、RSS、og:image 的絕對網址
+   *   public/CNAME                —— GitHub Pages 真的把站掛在哪個網域
+   *
+   * `astro.config.mjs` 自己的註解就寫著「site 一定要正確，否則 sitemap、RSS、
+   * og:image 產出的絕對網址會是錯的」—— 重要性寫下來了，**一致性沒有人在看**。
+   *
+   * 三者分岔的後果各不相同而且都不會報錯：
+   *   site.ts ≠ astro.config → 頁面上寫的網域跟 canonical／sitemap 不同
+   *   兩者 ≠ CNAME           → 整站的絕對網址指到一個不是自己的網域
+   *
+   * 第 7 輪（第三十四圈）：這一圈問「這個答案系統裡已經有了嗎」——
+   * 有三份，而且上面那條 `locale-list-drift` 已經把 `site.ts` 與
+   * `astro.config.mjs` 都讀進來了。只差沒有人問它們是不是同一個網域。
+   *
+   * CNAME 的路徑從 `ASTRO_CONFIG` 的目錄推 —— 跟上面一樣，
+   * 寫死 ROOT 的話測試換不掉，這條規則就只驗得到真的 repo。
+   */
+  {
+    const host = (/** @type {string} */ raw) => {
+      const t = raw.trim();
+      if (t === '') return null;
+      try {
+        return new URL(t.includes('://') ? t : `https://${t}`).host;
+      } catch {
+        return null;
+      }
+    };
+    const cnameAt = resolve(dirname(ASTRO_CONFIG), 'public/CNAME');
+    const domains = [
+      { where: 'src/config/site.ts（url）', host: host(/url:\s*'([^']+)'/.exec(siteTs)?.[1] ?? '') },
+      { where: 'astro.config.mjs（site）', host: host(/site:\s*'([^']+)'/.exec(astroCfg)?.[1] ?? '') },
+      { where: 'public/CNAME', host: host(await readOr(cnameAt)) },
+    ];
+    const got = domains.filter((d) => d.host !== null);
+    saw('domain-drift', got.length);
+
+    if (got.length < domains.length) {
+      notes.push(
+        '網域只比對了 ' + got.length + '／' + domains.length + ' 份 —— 抽不到的：' +
+          domains.filter((d) => d.host === null).map((d) => d.where).join('、') +
+          '。\n    不是「一致」，是**沒有比對到**。',
+      );
+    }
+    for (const d of got.slice(1)) {
+      if (d.host === got[0].host) continue;
+      problems.push({
+        file: d.where.replace(/（.*/, ''),
+        id: 'domain-drift',
+        msg:
+          `網域跟 ${got[0].where} 對不起來。\n` +
+          `      ${got[0].where}：${got[0].host}\n` +
+          `      ${d.where}：${d.host}\n` +
+          '      這三份講的是同一件事（頁面文案、canonical／sitemap／RSS 的絕對網址、\n' +
+          '      以及 GitHub Pages 實際掛在哪）。不一樣不會報錯，只會讓整站的絕對網址\n' +
+          '      指到一個不是自己的網域。\n' +
+          '      改法：三個地方一起改；換網域的話 DNS 也要跟著（見 docs/DEPLOY.md）。',
+      });
+    }
+  }
+
   saw('locale-list-drift', found.length);
   if (found.length < sources.length) {
     notes.push(

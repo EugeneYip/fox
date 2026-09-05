@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 44,500 行、2.4 MB、272 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 44,600 行、2.4 MB、273 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -44486,4 +44486,114 @@ straight-quotes、halfwidth-ellipsis⋯⋯」** —— 那幾條**根本沒有�
   workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：7 — 建置與 CI**
+
+### 2026-09-05 — 第 7 輪（第三十四圈）：建置與 CI
+
+**第三十四圈問：這個答案，系統裡已經有了嗎？如果有，為什麼沒用上？**
+判準：**這個數字、這個判斷，是重新算的，還是從已經有的地方拿的？
+如果是重新算的，兩邊什麼時候會分岔？**
+
+上一輪留了一條待辦，正好落在這一輪的面向上。
+
+#### 1. 網域有三份，而沒有任何東西比對它們
+
+| 在哪 | 值 | 它決定什麼 |
+|---|---|---|
+| `src/config/site.ts` 的 `url` | `https://bellafoxy.com` | 頁面文案、`seo.ts` 組絕對網址 |
+| `astro.config.mjs` 的 `site` | `https://bellafoxy.com` | sitemap、RSS、og:image 的絕對網址 |
+| `public/CNAME` | `bellafoxy.com` | GitHub Pages 真的把站掛在哪 |
+
+三份今天一致。而 `astro.config.mjs` **自己的註解**就寫著：
+
+> `site` 一定要正確，否則 sitemap、RSS、og:image 產出的絕對網址會是錯的。
+
+**重要性寫下來了，一致性沒有人在看。** `deploy.yml` 只檢查 `dist/CNAME`
+**存在**，不看值。
+
+分岔的後果各不相同，而且都不會報錯：
+
+- `site.ts` ≠ `astro.config` → 頁面上寫的網域跟 canonical／sitemap 不同
+- 兩者 ≠ `CNAME` → 整站的絕對網址指到一個不是自己的網域
+
+#### 2. 答案早就被讀進來了
+
+`check:content` 的 `locale-list-drift`（第 3 輪〔第三十一圈〕加的）
+是一模一樣的形狀 —— 四份語言清單，不一樣就是 bug。
+而它**已經把 `site.ts` 與 `astro.config.mjs` 都讀進記憶體了**。
+
+只差沒有人問一句：這兩份講的是不是同一個網域。
+
+加一條 `domain-drift`（主體 3），就寫在那條規則的隔壁，共用同一批讀檔。
+`CNAME` 的路徑從 `--astro=` 那個檔案的目錄推 —— 跟隔壁一樣，
+寫死 ROOT 的話測試換不掉，這條規則就只驗得到真的 repo（而真的 repo 永遠一致）。
+
+#### 3. 突變
+
+| 突變 | 結果 |
+|---|---|
+| `astro.config.mjs` 的 `site` 換一個網域 | 紅 ✓ |
+| `public/CNAME` 換一個網域 | 紅 ✓ |
+| `src/config/site.ts` 的 `url` 換一個網域 | 紅 ✓（兩邊的值都印出來） |
+| **三份一起換成同一個新網域** | **綠 ✓** |
+
+第四個是重點：守的是**一致**，不是 `bellafoxy.com` 這個特定值。
+真的換網域的時候，三個一起改就會過。
+
+#### 4. 這一圈的問題，在這一層得到的答案
+
+這一層本來就有一條「不能改掉重複，就檢查它們一致」的規則
+（`locale-list-drift` 的註解原話），而且那條規則的**每一個零件都已經在手上**。
+
+沒接上的原因大概很簡單：那條規則是為了語言清單寫的，
+而**沒有人回頭問「這個檔案裡還有別的東西是三份的嗎」**。
+跟第 1 輪那個「同一段話裡的下一句也是抄的」是同一種漏法 ——
+修的時候只看了眼前那一件。
+
+| | 之前 | 現在 |
+|---|---|---|
+| 網域三份 | 沒有人比 | 對不起來就紅（主體 3） |
+| 換網域 | 改一處就會靜靜壞掉 | 三處沒一起改就擋下來 |
+| `deploy.yml` 的 CNAME 檢查 | 只看存在 | 不變（值由這條守） |
+
+### 待辦（不屬於這一輪）
+
+- **`domain-drift` 只看三份**：`package.json` 的 `description` 裡也有一次
+  `bellafoxy.com`，還有幾份文件裡有。那些不影響建置，所以沒放進去 ——
+  但也就沒有人在看（→ 7 建置與 CI）
+- 上一輪與更早的都還在（`rule-not-documented` 只守 id 不守描述、
+  `strictReferrerPolicy: false` 那條路沒有測試、`verifiedAt` 仍然手寫、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、`docs/A11Y.md` 那三個瀏覽器量的數字沒人對、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `audit:privacy` 沒有 needles 時本機 exit 0、搜尋頁的 client script 沒有自動測試、
+  我連續六次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  `test-ci-sim` 那一格在有負載時會紅、要不要讓列表顯示詩詞的 `title`、
+  `REVIEW-LOG.md` 開頭三個數字手寫、「涵蓋率：前景 N 種」那兩個數字沒人驗、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  另外幾支的 `--verbose` 數字沒人驗、乾淨基底上 10 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `check:perf` 那句「全是 favicon」是寫死的描述、7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  28 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、`related` 單向、schema 的必填／選填沒被選過、
+  11 條預算裡 5 條的上限是挑的、另外四支檢查的嚴重度、
+  `CoverImage` 的 `sizes` 用 40rem、
+  `check.yml` 跑過 0 次、`ci:sim` 只有手動跑、`ui.ts` 的 `en` 要不要必填、
+  `reveal('email')` 沒有人呼叫、4 條閒置豁免、本機 `ahead 48, behind 1`、
+  `npm run sync` 來源全失敗仍離開碼 0、排程遲了四小時只有一筆、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `VideoFacade` 一次都沒算繪過、`aria-live`／`role="status"` 沒有規則、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、`probe:served` 沒有自己的測試、
+  `--real-install` 成功路徑沒測試、視覺層 24 處實測沒重驗、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  真的開一次螢幕閱讀器聽、`CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：8 — 視覺與排版**

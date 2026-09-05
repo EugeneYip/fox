@@ -325,6 +325,26 @@ const CASES = {
     },
     args: (/** @type {string} */ dir) => [`--src=${join(dir, 'src')}`, `--astro=${join(dir, 'astro.config.mjs')}`],
   },
+  /*
+   * ── 網域三份對不起來 ──
+   *
+   * 跟上面語言清單同一個形狀。`site.ts` 與 `astro.config.mjs` 說同一個網域，
+   * 而 `public/CNAME` 是另一個 —— GitHub Pages 實際掛在哪跟站上寫的絕對網址
+   * 不一樣，整站的 canonical／sitemap／RSS 都會指到一個不是自己的網域。
+   *
+   * CNAME 的位置是從 `--astro=` 那個檔案的目錄推出來的，所以 fixture 把它
+   * 放在同一層的 `public/` 底下。
+   */
+  'domain-drift': {
+    content: { 'poems/wu-yi-xiang.md': poem() },
+    dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花') },
+    extra: {
+      'src/config/site.ts': "export const site = { url: 'https://example.test' };\n",
+      'astro.config.mjs': "export default { site: 'https://example.test' };\n",
+      'public/CNAME': 'somewhere-else.test\n',
+    },
+    args: (/** @type {string} */ dir) => [`--src=${join(dir, 'src')}`, `--astro=${join(dir, 'astro.config.mjs')}`],
+  },
   'vertical-lost': {
     content: { 'poems/wu-yi-xiang.md': poem() },
     dist: {
