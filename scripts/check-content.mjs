@@ -1375,9 +1375,15 @@ console.log('\n內容管線檢查\n' + '─'.repeat(56));
  * 同一圈第 1 輪對 `check:a11y` 做過同樣的事。這個 repo 從第二十一圈起的
  * 規矩是「綠燈不說明判斷過什麼，等於沒說」，而規則數是那句話的一半。
  */
+/*
+ * 「產出 N 個檔案」是**讀進來的**那些，不是 `dist/` 的全部 ——
+ * 這一支只讀 html／json／xml／txt（圖片、CSS、CNAME 不在裡面）。
+ * 第 3 輪（第三十五圈）拿 `find dist -type f` 對照得到 61，跟這裡的 50 差 11，
+ * 追下去差的就是這個。50 是對的，只是沒說是哪 50 個。
+ */
 console.log(
   `${entries.length} 篇內容（草稿 ${entries.filter((e) => e.draft).length} 篇）` +
-    `，產出 ${built.length} 個檔案，${RULES.length} 條規則。`,
+    `，讀了產出裡 ${built.length} 個 html／json／xml／txt，${RULES.length} 條規則。`,
 );
 
 /*
@@ -1741,8 +1747,33 @@ const SYNC_STALE_DAYS = 3;
   for (const m of servedCss.matchAll(/\(\s*(?:max-width\s*:|width\s*<=)\s*([\d.]+(?:rem|px|em))\s*\)/g)) {
     widths.set(m[1], (widths.get(m[1]) ?? 0) + 1);
   }
+  /*
+   * ── 這份清單只數 max-width ──────────
+   *
+   * 第 3 輪（第三十五圈）用第二種算法數斷點，得到跟這裡不一樣的答案
+   * （多一個 46rem、48rem 多一處）。追下去我錯了三處：語料掃了 `src/`
+   * 連註解一起（那兩個數字都寫在註解裡）、判準把 `min-width` 也算進去、
+   * 而且正則的 `[^{]*?` 會跨行配到很遠的 rem。**這裡的 12 是對的。**
+   *
+   * 但這一行沒說它只數 `max-width` —— 照著它去對的人會得到別的數字。
+   * 順手把 `min-width` 也數出來：今天是 **0 處**，也就是這個站的版面
+   * 完全是「先寬後窄」那一種寫法。那是一句免費的事實，值得說出來。
+   */
+  /** @type {Map<string, number>} */
+  const minWidths = new Map();
+  for (const m of servedCss.matchAll(/\(\s*(?:min-width\s*:|width\s*>=)\s*([\d.]+(?:rem|px|em))\s*\)/g)) {
+    minWidths.set(m[1], (minWidths.get(m[1]) ?? 0) + 1);
+  }
+  const minTotal = [...minWidths.values()].reduce((n, c) => n + c, 0);
+  const minSaid =
+    minTotal === 0
+      ? '（只數 max-width；min-width 這一輪 0 處 —— 版面全是先寬後窄那一種寫法）'
+      : `（只數 max-width；另有 ${minTotal} 處 min-width：` +
+        [...minWidths.entries()].map(([w, c]) => `${w} × ${c}`).join('、') +
+        '）';
+
   if (widths.size === 0) {
-    notes.push('版面斷點沒有檢查：送出去的 CSS 裡一個 max-width 查詢都沒有。');
+    notes.push('版面斷點沒有檢查：送出去的 CSS 裡一個 max-width 查詢都沒有。' + minSaid);
   } else {
     /*
      * 數量多的排前面；一樣多的用**碼位**比，不用 localeCompare ——
@@ -1754,6 +1785,7 @@ const SYNC_STALE_DAYS = 3;
     notes.push(
       `版面斷點：${rows.length} 種，共 ${rows.reduce((n, [, c]) => n + c, 0)} 處 —— ` +
         rows.map(([w, c]) => `${w} × ${c}`).join('、') +
+        `\n    ${minSaid}` +
         '\n    CSS 沒辦法把斷點寫成變數（媒體查詢裡不能用 custom property），所以同一個數字'
         + '是一處一處寫的。\n    這裡不判斷對錯 —— 但一個只出現一次、又跟主要斷點只差一點的數字，'
         + '通常是打錯的。',

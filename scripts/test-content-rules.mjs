@@ -1660,6 +1660,48 @@ console.log('─'.repeat(64));
   if (!okSilent) console.log('        ' + b.out.split('\n').filter((l) => /title/.test(l)).join(' ｜ '));
 }
 
+/*
+ * ── 斷點清單要說出它只數 max-width ──────────
+ *
+ * 第 3 輪（第三十五圈）用第二種算法數斷點，答案跟關卡不一樣。
+ * 追下去是我錯（掃了 `src/` 連註解、把 `min-width` 也算進去），
+ * **但那一行確實沒說它只數 `max-width`** —— 照著它去對的人會得到別的數字。
+ *
+ * 兩個方向：沒有 min-width 時要說「0 處」，有的時候要列出來。
+ * 只驗一邊的話，一句寫死的「0 處」也會過。
+ */
+{
+  const none = await build('bp-none', {
+    content: { 'poems/wu-yi-xiang.md': poem() },
+    dist: {
+      'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
+      '_astro/x.css': '@media (max-width: 34rem){.a{color:red}}.poem__original{writing-mode:vertical-rl}\n',
+    },
+  });
+  const outNone = await check(none);
+  const okZero = /min-width 這一輪 0 處/.test(outNone);
+  if (!okZero) failed++;
+  console.log(`  ${okZero ? '\u2713' : 'X'} 沒有 min-width 時說得出「0 處」`);
+  if (!okZero) console.log('        ' + (outNone.split('\n').find((l) => l.includes('斷點')) ?? '（沒印）'));
+  await rm(none, { recursive: true, force: true });
+
+  const some = await build('bp-some', {
+    content: { 'poems/wu-yi-xiang.md': poem() },
+    dist: {
+      'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
+      '_astro/x.css':
+        '@media (max-width: 34rem){.a{color:red}}@media (min-width: 30rem){.b{color:blue}}' +
+        '.poem__original{writing-mode:vertical-rl}\n',
+    },
+  });
+  const outSome = await check(some);
+  const okSome = /另有 1 處 min-width：30rem × 1/.test(outSome);
+  if (!okSome) failed++;
+  console.log(`  ${okSome ? '\u2713' : 'X'} 有 min-width 時列得出來（30rem × 1）`);
+  if (!okSome) console.log('        ' + (outSome.split('\n').find((l) => l.includes('斷點')) ?? '（沒印）'));
+  await rm(some, { recursive: true, force: true });
+}
+
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
 process.exit(failed > 0 ? 1 : 0);
 

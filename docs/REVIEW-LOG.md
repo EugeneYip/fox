@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 45,000 行、2.4 MB、276 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 45,200 行、2.4 MB、277 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -45038,4 +45038,126 @@ HTML 與文字資源被濾掉了 —— 因為那兩類**各有自己的預算**
   workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：3 — 內容結構**
+
+### 2026-09-05 — 第 3 輪（第三十五圈）：內容結構
+
+**第三十五圈問：我怎麼知道這個數字是對的？有第二種算法算過嗎？**
+判準：**這個數字有沒有被第二種方法算過一次？兩種方法給的答案一樣嗎？**
+
+`check:content` 印五份清單與一行總結。全部用第二種算法數一次。
+
+#### 1. 三個一模一樣
+
+| | 關卡 | 獨立數 |
+|---|---|---|
+| 內容篇數（草稿） | 6（1） | 6（1）✓ |
+| 元件數 | 21 | `components/**/*.astro` 21 ✓ |
+| translationKey | 3 篇／3 個 key／0 組配對 | 3／3／0 ✓ |
+
+#### 2. 兩個不一樣 —— **兩次都是我錯**
+
+**（一）版面斷點。** 關卡說「34rem × 10、48rem × 1、52rem × 1，共 12 處」，
+我數出「34rem × 9、48rem × 2、46rem × 1、52rem × 1，共 13 處」。
+
+追下去我錯了**三處**：
+
+1. **語料**：我掃 `src/`，關卡掃**送出去的 CSS**（外部 ＋ 去重後的內嵌）。
+   那個 46rem 與多出來的 48rem 全部寫在**註解**裡。
+2. **判準**：我把 `min-width` 也算進去，關卡只數 `max-width`。
+3. **正則**：我的 `@media[^{]*?([0-9.]+rem)` 那個 `[^{]*?` 會跨行配到很遠的 rem。
+
+拿關卡自己的判準跑它自己的語料：`{34rem: 10, 48rem: 1, 52rem: 1}` —— **一個字不差**。
+
+**（二）產出檔案數。** 關卡說 50，`find dist -type f` 說 61。
+差的 11 個是圖片、CSS、`CNAME`、`webmanifest` —— 這一支只讀
+`html／json／xml／txt`（44 ＋ 1 ＋ 4 ＋ 1 = 50）。**也是對的。**
+
+#### 3. 兩次都不是數字錯，是**沒說範圍**
+
+跟第 2 輪（第三十五圈）的「最大單一檔案」一模一樣：數字對，名字或句子
+沒把範圍講出來，於是拿別的方法對照的人會以為它算錯 —— 我這一輪連續兩次
+以為它算錯。
+
+改了兩行：
+
+```
+· 版面斷點：3 種，共 12 處 —— 34rem × 10、48rem × 1、52rem × 1
+  （只數 max-width；min-width 這一輪 0 處 —— 版面全是先寬後窄那一種寫法）
+
+6 篇內容（草稿 1 篇），讀了產出裡 50 個 html／json／xml／txt，19 條規則。
+```
+
+`min-width` 那個數字是順手撿到的：**這一輪是 0 處**，也就是這個站的版面
+完全是「先寬後窄」那一種寫法。免費的一句事實。
+
+#### 4. 突變與測試
+
+真的往 `global.css` 塞一個 `@media (min-width: 30rem)` 再建置：
+
+```
+（只數 max-width；另有 1 處 min-width：30rem × 1）
+```
+
+測試兩格：沒有 min-width 時說得出「0 處」、有的時候列得出來 ——
+只驗一邊的話，一句寫死的「0 處」也會過。
+
+#### 5. 這一圈的問題，在這一層得到的答案
+
+**五個數字，三個第二種算法完全一致，兩個差在範圍而不是算術。**
+`check:content` 的計數沒有問題。
+
+連續三輪同一個結論：**這個 repo 的數字很準，而它們的「範圍」常常沒寫出來。**
+第 1 輪是 script 裡的連結（掃不到）、第 2 輪是非 HTML 非文字（名字比範圍大）、
+這一輪是 max-width 與四種副檔名。三次都是我拿第二種算法去對才看見的。
+
+| | 之前 | 現在 |
+|---|---|---|
+| 5 個清單數字 | 沒有第二種算法驗過 | 全部驗過 |
+| 斷點清單 | 沒說只數 max-width | 說了，並順帶報 min-width |
+| 「產出 N 個檔案」 | 沒說是哪幾種 | 說了是 html／json／xml／txt |
+| 測試 | —— | 2 格 |
+
+### 待辦（不屬於這一輪）
+
+- **`SCHEMA_STRUCTURAL 6 個名字、3 個什麼都沒擋`與`21 個元件裡 1 個走不到`
+  還沒被第二種算法驗過**（這一輪只驗了元件總數，沒驗「走不到的是哪一個」）
+  （→ 3 內容結構）
+- 上一輪與更早的都還在（node 與 python 的 gzip 差 0.9% 沒人查過為什麼、
+  另外 22 個 a11y `--verbose` 數字還沒驗、搜尋結果的連結沒有任何無障礙檢查看過、
+  `tokens.css` 註解裡的對比值沒有東西在守、`domain-drift` 只看三份、
+  `rule-not-documented` 只守 id、`strictReferrerPolicy: false` 那條路沒有測試、
+  `verifiedAt` 仍然手寫、`field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、`docs/A11Y.md` 那三個瀏覽器量的數字沒人對、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `audit:privacy` 沒有 needles 時本機 exit 0、
+  我連續六次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  `test-ci-sim` 那一格在有負載時會紅、要不要讓列表顯示詩詞的 `title`、
+  「涵蓋率：前景 N 種」那兩個數字沒人驗、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 10 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `check:perf` 那句「全是 favicon」是寫死的描述、7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  28 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、`related` 單向、schema 的必填／選填沒被選過、
+  11 條預算裡 5 條的上限是挑的、另外四支檢查的嚴重度、
+  `CoverImage` 的 `sizes` 用 40rem、
+  `check.yml` 跑過 0 次、`ci:sim` 只有手動跑、`ui.ts` 的 `en` 要不要必填、
+  `reveal('email')` 沒有人呼叫、4 條閒置豁免、本機 `ahead 48, behind 1`、
+  `npm run sync` 來源全失敗仍離開碼 0、排程遲了四小時只有一筆、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `VideoFacade` 一次都沒算繪過、`aria-live`／`role="status"` 沒有規則、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、`probe:served` 沒有自己的測試、
+  `--real-install` 成功路徑沒測試、視覺層 24 處實測沒重驗、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  真的開一次螢幕閱讀器聽、`CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：4 — 平臺 feed 實測**
