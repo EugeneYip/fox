@@ -66,7 +66,20 @@ import { RULES } from './lib/copy-rules.mjs';
  * **就在描述這條規則的那一句裡踩到它**。
  * **描述它，不要引用它。**
  */
-const SKIP = new Set(['docs/REVIEW-LOG.md', 'CLAUDE.md']);
+/*
+ * 只剩歷史紀錄。
+ *
+ * `CLAUDE.md` 原本也在這裡，理由是「這些檔案會引用問題本身」——
+ * 第 6 輪（第二十八圈）逐條量過：它整份被豁免，**只為了一行**
+ * （`cjk-latin-space` 的反例）。而第 6 輪（第二十七圈）已經有解法了：
+ * 反例放進程式碼區塊，掃之前就會被拿掉。
+ *
+ * 換個寫法之後這條豁免就不需要了 —— 一份 200 行的規矩文件，
+ * 從「完全不檢查」回到「跟其他文件一樣被檢查」。
+ *
+ * `docs/REVIEW-LOG.md` 留著：那是歷史紀錄，裡面 6 處違規記的是當時的事實。
+ */
+const SKIP = new Set(['docs/REVIEW-LOG.md']);
 
 /** @type {{ file: string, line: number, id: string, text: string, why: string }[]} */
 const problems = [];
