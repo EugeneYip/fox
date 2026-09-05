@@ -496,6 +496,21 @@ const CASES = {
   },
   'positive-tabindex': { html: page({ body: '<button tabindex="3">插隊</button>' }) },
   /*
+   * 反向：`0` 與 `-1` 是**合法**的 tabindex，不該報。
+   *
+   * 第 1 輪（第三十二圈）實測：把邊界從 `Number(ti) <= 0` 移成 `< 0`
+   * （連 `tabindex="0"` 也報）—— **全部測試照樣綠**。
+   * 因為乾淨那一頁上一個 `tabindex` 都沒有，而這條自己的正向案例
+   * 用的是 `3`，邊界移了它照樣響。
+   *
+   * 這是「乾淨的頁面」護不到的那一種：**它只踩得到它身上有的東西。**
+   */
+  'positive-tabindex（0 與 -1 是合法的，不該報）': {
+    rule: 'positive-tabindex',
+    quiet: true,
+    html: page({ body: '<button tabindex="0">照順序</button><div tabindex="-1">程式移焦點用</div>' }),
+  },
+  /*
    * ── 第 1 輪（第三十圈）加的兩條 ────────────────────
    *
    * 兩條都是「拿掉了誰會發現」量出來的：在加它們之前，
@@ -890,11 +905,75 @@ try {
     Object.entries(CASES).filter(([, c]) => c.quiet).map(([label, c]) => c.rule ?? label),
   );
   const noQuiet = [...declared].filter((r) => !quietFor.has(r));
+  /*
+   * ── 「沒有反向案例」不等於「沒有人守」──────────────
+   *
+   * 第 1 輪（第三十二圈）問「如果第一版就寫錯，今天有沒有東西會說話」。
+   * 實測四條沒有反向案例的規則，各改成**一律會響** ——
+   * 四條全部被抓到，抓到它們的是底下那格「乾淨的頁面被誤報了」。
+   *
+   * **那一頁就是它們的反向案例**，只是沒有掛在規則名下。
+   *
+   * 但它只護得到**它身上有東西可踩的**那幾條。實測：
+   * 把 `positive-tabindex` 的邊界從 `> 0` 移成 `>= 0`
+   * （連合法的 `tabindex="0"` 也報）—— **全綠**，
+   * 因為乾淨那一頁上一個 `tabindex` 都沒有。
+   * 對照組：`html-lang` 與 `duplicate-id` 的邊界一移就紅，
+   * 因為那一頁上有 `lang` 也有 id。
+   *
+   * 所以這份名單要分成兩半，而且加起來等於沒有反向案例的總數 ——
+   * 「乾淨頁護得到的」跟「真的沒有人守的」是兩件事。
+   */
+  const cleanSubjects = await (async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'a11y-clean-'));
+    await writeFile(join(dir, 'index.html'), page(), 'utf8');
+    const out = await runCheck(dir, ['--verbose']);
+    await rm(dir, { recursive: true, force: true });
+    return new Map([...out.matchAll(/^\s*(\d+)\s+([a-z0-9-]+)\s*$/gm)].map((m) => [m[2], Number(m[1])]));
+  })();
   if (noQuiet.length > 0) {
+    /* 乾淨頁上有主體的 → 那一頁踩得到它的邊界；主體是 0 的 → 移一格也沒人說話 */
+    const covered = noQuiet.filter((r) => (cleanSubjects.get(r) ?? 0) > 0);
+    const bare = noQuiet.filter((r) => (cleanSubjects.get(r) ?? 0) === 0);
     console.log(
-      `\n  · 沒有反向案例的規則（${noQuiet.length}／${declared.size}）：${noQuiet.join('、')}`,
+      `\n  · 沒有反向案例的規則（${noQuiet.length}／${declared.size}）—— 但那不代表沒有人守：`,
     );
-    console.log('      它們只證明了「該響的會響」，沒有人確認過「不該響的不響」。');
+    console.log(
+      `      ${covered.length} 條由「乾淨的頁面」守著（那一頁上有它們的主體，邊界一移就紅）：${covered.join('、')}`,
+    );
+    console.log(
+      `      **${bare.length} 條真的沒有人守**（乾淨頁上主體是 0，邊界移一格也不會有人說話）：${bare.join('、')}`,
+    );
+    console.log('      要補的是後面那一批 —— 前面那一批補了也只是重複那一頁做過的事。');
+    /*
+     * 兩半要**剛好**分完，不能重疊也不能少 ——
+     * 這一句抓的是「一律算成守得到」那種壞法：covered 變成全部，
+     * 而 bare 照樣算對，兩個加起來就超過總數了。
+     */
+    const both = covered.filter((r) => bare.includes(r));
+    if (covered.length + bare.length !== noQuiet.length || both.length > 0) {
+      failed++;
+      console.log(
+        `  X 那兩半沒有剛好分完：${covered.length} ＋ ${bare.length} ≠ ${noQuiet.length}` +
+          (both.length > 0 ? `，而且 ${both.join('、')} 兩邊都算了` : ''),
+      );
+    }
+    if (cleanSubjects.size === 0) {
+      failed++;
+      console.log('  X 讀不到乾淨那一頁的主體數 —— 上面兩個數字是假的');
+    }
+    /*
+     * 那一頁**不可能**踩得到每一條規則 —— 它沒有 `<img>`、沒有表單、
+     * 沒有 `target="_blank"`。所以「全部都由乾淨頁守著」一定是分類壞了
+     * （突變「一律算成守得到」就長這樣）。
+     *
+     * 這個斷言哪天真的變成 0，不要把它放寬 —— 那表示乾淨頁被加料到
+     * 涵蓋所有元素了，那時候該重新看的是這一段本身。
+     */
+    if (noQuiet.length > 0 && bare.length === 0) {
+      failed++;
+      console.log('  X 沒有反向案例的規則「全部」都被算成乾淨頁守得到 —— 那一頁沒有 img／表單／_blank，不可能。');
+    }
   }
 
   /*
@@ -1004,9 +1083,9 @@ console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
 process.exit(failed > 0 ? 1 : 0);
 
 /** @param {string} dir */
-async function runCheck(dir) {
+async function runCheck(dir, /** @type {string[]} */ extra = []) {
   try {
-    const { stdout } = await run('node', [resolve(ROOT, 'scripts/check-a11y.mjs'), `--dir=${dir}`]);
+    const { stdout } = await run('node', [resolve(ROOT, 'scripts/check-a11y.mjs'), `--dir=${dir}`, ...extra]);
     return stdout;
   } catch (err) {
     // 有 error 時 check-a11y 會 exit 1，輸出仍然在 stdout
