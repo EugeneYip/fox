@@ -42,6 +42,20 @@ const LOCALE = z.enum(['zh-TW', 'en']).default('zh-TW');
  * 而不是說出型別對不上。
  */
 const base = z.object({
+  /**
+   * 標題。
+   *
+   * **詩詞例外：這個欄位讀者看不到。** 第 3 輪（第三十三圈）逐條數過，
+   * 六條會顯示詩名的路徑（兩份 RSS、搜尋索引、`EntryCard`、`/archive`、
+   * 詩頁的 `<h1>` 與 `<title>`）全部寫著 `poem ? … : entry.data.title`，
+   * 也就是有 `poem` 就一律用 `poem.title`。
+   *
+   * 兩個填一樣的話看不出差別，而 `npm run write` 正好兩個都填同一個答案。
+   * 實際踩到的是手寫的 `pi-pa-xing-excerpt.md`：這裡寫「琵琶行（節錄）」，
+   * 站上一次都沒出現過。`check:content` 現在會把這種不一致印出來（只說不擋）。
+   *
+   * 要讓那些字被看到，寫進 `poem.title`、`poem.source` 或 `description`。
+   */
   title: z.string({ error: '每一篇都要有 title（標題）。' }).min(1, 'title 不能是空的。'),
   /** 列表與 <meta description> 用的短描述 */
   description: z.string().max(300).optional(),

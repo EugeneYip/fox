@@ -1532,6 +1532,49 @@ console.log('─'.repeat(64));
 
 }
 
+/*
+ * ── 詩詞的 title 被 poem.title 蓋掉時要說出來 ──────────
+ *
+ * 第 3 輪（第三十三圈）：六條會顯示詩名的路徑全部用 `poem.title`，
+ * 所以詩詞的 `title` 是必填而且沒有讀者看得到。
+ * 兩個值一樣的時候完全看不出來 —— 而 `npm run write` 兩個都填同一個答案，
+ * 所以它產出的每一篇都剛好遮住這件事。
+ *
+ * 這一格要兩個方向：不一樣的時候要說，一樣的時候不能亂說。
+ * 只驗「會說」的話，一條「永遠都說」的規則也會過。
+ *
+ * 它**不擋**（離開碼 0）—— 要不要讓列表顯示 title 是站主的取捨，
+ * 所以這裡也順便釘住「只說不擋」這件事。
+ */
+{
+  const poem = (/** @type {string} */ t, /** @type {string} */ pt) =>
+    `---\ntitle: ${t}\nlang: zh-TW\npublishedAt: 2026-01-01\npoem:\n  title: ${pt}\n  author: 李白\n---\n內文。\n`;
+
+  const dirA = await build('title-shadowed', {
+    content: { 'poems/a.md': poem('琵琶行（節錄）', '琵琶行') },
+    dist: { 'poems/a/index.html': page('〈琵琶行〉白居易') },
+  });
+  const a = await checkWithCode(dirA);
+  const okSays = /title 讀者看不到/.test(a.out) && a.out.includes('琵琶行（節錄）');
+  if (!okSays) failed++;
+  console.log(`  ${okSays ? '\u2713' : 'X'} title 與 poem.title 不一樣時會說出來`);
+  if (!okSays) console.log('        ' + a.out.split('\n').filter((l) => /title/.test(l)).join(' ｜ '));
+
+  const okQuiet = a.code === 0;
+  if (!okQuiet) failed++;
+  console.log(`  ${okQuiet ? '\u2713' : 'X'} 只說不擋（離開碼 ${a.code}）`);
+
+  const dirB = await build('title-same', {
+    content: { 'poems/b.md': poem('靜夜思', '靜夜思') },
+    dist: { 'poems/b/index.html': page('〈靜夜思〉李白') },
+  });
+  const b = await checkWithCode(dirB);
+  const okSilent = !/title 讀者看不到/.test(b.out);
+  if (!okSilent) failed++;
+  console.log(`  ${okSilent ? '\u2713' : 'X'} 兩個一樣時不會亂說`);
+  if (!okSilent) console.log('        ' + b.out.split('\n').filter((l) => /title/.test(l)).join(' ｜ '));
+}
+
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
 process.exit(failed > 0 ? 1 : 0);
 

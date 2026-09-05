@@ -139,6 +139,12 @@ const entries = [];
  * 而它是一個真實存在的內容檔（`no-title` 那條規則就是為它存在的）。
  * 用 entries 當「有沒有內容」的判準，會把「一個壞掉的檔案」讀成「一個檔案都沒有」。
  */
+/*
+ * 詩詞的 `title` 與 `poem.title` 不一樣的那幾篇。
+ * 迴圈裡收集、迴圈之後才印 —— 宣告放在使用之前。
+ */
+/** @type {Array<{ file: string, title: string, poemTitle: string }>} */
+const shadowedTitles = [];
 let contentFiles = 0;
 let newestContent = 0;
 let newestBuilt = 0;
@@ -171,6 +177,7 @@ for await (const f of walk(CONTENT)) {
   if (poemTitle) {
     saw('poem-title-bracketed', 1);
     needles.push(poemTitle);
+    if (poemTitle !== title) shadowedTitles.push({ file: rel, title, poemTitle });
     /*
      * 詩題不要自己加書名號。
      *
@@ -220,6 +227,35 @@ for await (const f of walk(CONTENT)) {
     slug: parts.slice(1).join('/').replace(/\.mdx?$/, ''),
     lang: field(md, 'lang') ?? 'zh-TW',
   });
+}
+
+/*
+ * ── 詩詞的 `title` 沒有人看得到 ──────────
+ *
+ * 第 3 輪（第三十三圈）逐條數過：**每一個會顯示詩名的地方都挑 `poem.title`。**
+ * 兩份 RSS、搜尋索引、`EntryCard`（首頁與列表卡片）、`/archive`、
+ * 詩頁的 `<h1>` 與 `<title>` —— 六條路徑各自寫著 `poem ? … : entry.data.title`。
+ *
+ * 也就是說詩詞的 `title` 是**必填、而且沒有任何讀者會看到**。
+ * 上面第 169 行的註解早就知道這件事（「詩詞顯示的是 poem.title⋯不是上面那個
+ * title」），但沒有任何東西照著它說話。
+ *
+ * 兩個值一樣的時候看不出來 —— 而 `npm run write` 正好把兩個都填成同一個答案，
+ * 所以它產出的每一篇都剛好遮住這件事。實際踩到的是手寫的那一篇：
+ * `pi-pa-xing-excerpt.md` 的 `title` 是「琵琶行（節錄）」，`poem.title` 是
+ * 「琵琶行」，而「節錄」兩個字在整個 `dist/` 裡只出現 1 次 —— 還是來自
+ * `poem.source`，不是那個 title。寫的人打了「（節錄）」，讀者一次都沒看到。
+ *
+ * 這裡**只說不擋**：要不要讓列表顯示 `title`，是版面與語氣的取捨，
+ * 跟 `content.config.ts` 裡「要不要讓 EntryCard 補書名號」同一類，留給站主。
+ * 擋的話等於現在就替他決定了。
+ */
+if (shadowedTitles.length > 0) {
+  notes.push(
+    `這幾篇詩詞的 title 讀者看不到（顯示的一律是 poem.title）：` +
+      shadowedTitles.map((p) => `${p.file}「${p.title}」→ 顯示「${p.poemTitle}」`).join('；') +
+      '。　要讓那幾個字出現，得寫進 poem.title、poem.source 或 description。',
+  );
 }
 
 /**
