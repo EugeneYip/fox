@@ -2,7 +2,7 @@
 import Base from '@layouts/Base.astro';
 import PageHeader from '@components/layout/PageHeader.astro';
 import { localePaths } from '@i18n/paths';
-import { useTranslations } from '@i18n/utils';
+import { useTranslations, localizePath } from '@i18n/utils';
 import { getSyndication } from '@lib/syndication';
 import type { Locale } from '@config/site';
 
@@ -12,6 +12,28 @@ const { locale } = Astro.props as { locale: Locale };
 const t = useTranslations(locale);
 /* 只為了知道索引裡會出現哪些平臺代號，好在結果列上顯示它們的名字 */
 const syndicated = await getSyndication();
+
+/*
+ * ── 搜不到的時候，英文讀者不知道為什麼 ──────────
+ *
+ * 第 6 輪（第三十三圈）量的：索引裡 14 筆**全部是 zh-TW**，而 `score()`
+ * 只看 title／tags／description／body 四個欄位 —— 這四個欄位裡含有拉丁字母的
+ * 只有 1 筆。實測 11 個英文讀者會打的字（moon、li bai、poetry、autumn、
+ * du fu⋯⋯），**10 個回 0 筆**。
+ *
+ * 而 `search.hint` 對他說的是「Looks through titles, body text, tags, and
+ * poets’ names」—— 一個英文讀者讀完這句，理所當然會打「Li Bai」。
+ * 打完得到的是「No matches found.」，沒有任何一個字告訴他原因。
+ *
+ * 站上每一個空的英文頁面都已經接好這件事了（`/en`、`/en/poems`、
+ * `/en/writing`、`/en/notes`、`/en/archive`、`/en/tags` 都會說
+ * 「There are N in Chinese →」，第 3 輪〔第十八圈〕加的）。
+ * **只有搜尋沒有** —— 偏偏那是他唯一主動做了什麼的地方。
+ *
+ * 這裡不另外寫一句文案，直接沿用 `list.otherLang`：同一個約定只有一種說法，
+ * 而且它已經翻好、也已經有單複數。
+ */
+const otherLocale: Locale = locale === 'zh-TW' ? 'en' : 'zh-TW';
 
 /*
  * 文案在 build 時就取好，透過 data 屬性交給前端。
@@ -32,6 +54,11 @@ const strings = JSON.stringify({
   // 不傳 vars，才會拿到還留著 {n} 的樣板讓前端自己代入。
   // 傳 { n: 0 } 的話 t() 會當場把 {n} 換成 0，前端再也換不掉，永遠顯示「0 個結果」。
   countMany: t('search.resultCount'),
+  /* 跟 countOne／countMany 同一個手法：一句代好 1，一句留著 {n} 給前端代 */
+  otherLangOne: t('list.otherLang', { n: 1 }),
+  otherLangMany: t('list.otherLang'),
+  otherLangHref: localizePath('/archive', otherLocale),
+  locale,
   /*
    * 結果那一行的「類型」。第 3 輪（第十一圈）真的去搜了一次才看到：
    * 這裡原本直接印索引裡的 `k`，而 `k` 是**內部代號** ——
@@ -182,6 +209,10 @@ const strings = JSON.stringify({
     failed: string;
     countOne: string;
     countMany: string;
+    otherLangOne: string;
+    otherLangMany: string;
+    otherLangHref: string;
+    locale: string;
     kinds: Record<string, string>;
   }
   const s: Strings = JSON.parse(form.dataset.strings ?? '{}');
@@ -296,6 +327,31 @@ const strings = JSON.stringify({
       .slice(0, 40);
 
     status.textContent = hits.length ? count(hits.length) : s.none;
+
+    /*
+     * 一筆都沒有、而且索引裡**這個語言一筆都沒有**的時候，指路。
+     *
+     * 條件挑「這個語言 0 筆」而不是「這次查不到」—— 中文讀者搜一個
+     * 站上沒寫過的詞不該被叫去英文版，而英文讀者現在無論打什麼都該被指路。
+     * 有了英文內容之後這一行會自己消失，不用記得回來拿掉。
+     */
+    if (!hits.length) {
+      const mine = index.filter((i) => i.l === s.locale).length;
+      const other = index.length - mine;
+      if (mine === 0 && other > 0) {
+        const link = document.createElement('a');
+        link.className = 'ui';
+        link.href = s.otherLangHref;
+        link.textContent =
+          (other === 1 ? s.otherLangOne : s.otherLangMany.replace('{n}', String(other))) + ' ';
+        /* 箭頭是裝飾，不進可及名稱 —— 跟 ListPage 的那一個一樣 */
+        const arrow = document.createElement('span');
+        arrow.setAttribute('aria-hidden', 'true');
+        arrow.textContent = '→';
+        link.append(arrow);
+        status.append(' ', link);
+      }
+    }
 
     for (const { item } of hits) {
       const li = document.createElement('li');

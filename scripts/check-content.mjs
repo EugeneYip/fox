@@ -1019,7 +1019,77 @@ const RULES = [
   'field-undocumented',
   'vertical-lost',
   'locale-list-drift',
+  'search-crosslang-mute',
 ];
+/*
+ * ── 某個語言一篇都沒有的時候，那個語言的搜尋頁要說得出來 ──────────
+ *
+ * 第 6 輪（第三十三圈）量的：索引裡 14 筆**全部是 zh-TW**，而搜尋只比對
+ * title／tags／description／body 四個欄位 —— 這四欄含拉丁字母的只有 1 筆。
+ * 拿 11 個英文讀者會打的字實測（moon、li bai、poetry、autumn、du fu⋯⋯），
+ * **10 個回 0 筆**。而 `search.hint` 對他說的是「Looks through titles,
+ * body text, tags, and poets’ names」—— 讀完這句就會去打「Li Bai」。
+ *
+ * 站上每一個空的英文頁面都已經接好指路了（`/en`、`/en/poems`、`/en/writing`、
+ * `/en/notes`、`/en/archive`、`/en/tags`，第 3 輪〔第十八圈〕加的）。
+ * 只有搜尋沒有 —— 偏偏那是他唯一主動做了什麼的地方。
+ *
+ * 這條守的是**接線還在**：那三個字串是 build 時放進 `data-strings` 的，
+ * 少了任何一個，前端那段指路就會安靜地不出現。
+ *
+ * **它守不到判斷本身**（`mine === 0 && other > 0` 在 client script 裡，
+ * 這支腳本跑不到瀏覽器）。那一段是第 6 輪用真的瀏覽器逐一驗的：
+ * `/en/search` 打「li bai」會指路、打「李白」有 2 筆不指路、
+ * 中文頁打不存在的字則只說「沒有找到相符的東西。」不指路。
+ */
+{
+  const idx = built.find((b) => b.path === 'search-index.json');
+  /** @type {{ l?: string }[]} */
+  let items = [];
+  try {
+    items = JSON.parse(idx?.text ?? '{"items":[]}').items ?? [];
+  } catch {
+    items = [];
+  }
+
+  /* 兩個語言的搜尋頁在產出裡的位置 */
+  const pages = [
+    { locale: 'zh-TW', path: 'search/index.html' },
+    { locale: 'en', path: 'en/search/index.html' },
+  ].filter((x) => built.some((b) => b.path === x.path));
+
+  saw('search-crosslang-mute', pages.length);
+
+  if (idx && pages.length > 0) {
+    for (const { locale, path } of pages) {
+      const mine = items.filter((i) => i.l === locale).length;
+      if (mine > 0) continue; // 這個語言有東西，不需要指路
+      const html = built.find((b) => b.path === path)?.text ?? '';
+      /*
+       * 只看 `data-strings` 那個屬性裡面 —— 整頁 `includes()` 是不夠的：
+       * 這幾個鍵在頁面上出現兩次（屬性裡一次、編譯後的 client script 裡一次），
+       * 所以屬性掉了一個鍵，全頁比對照樣綠。第 6 輪（第三十三圈）的突變掃描
+       * 就是這樣抓到自己的：改掉第一處，這一格沒有反應。
+       */
+      const attr = /data-strings="([^"]*)"/.exec(html)?.[1] ?? '';
+      const missing = ['otherLangOne', 'otherLangMany', 'otherLangHref'].filter(
+        (k) => !attr.includes(k),
+      );
+      if (missing.length > 0) {
+        problems.push({
+          file: 'dist/' + path,
+          id: 'search-crosslang-mute',
+          msg:
+            `索引裡「${locale}」一筆都沒有，而這一頁少了指路用的字串（${missing.join('、')}）。` +
+            `　讀者用 ${locale} 搜尋永遠是「沒有結果」，而畫面上不會說為什麼。` +
+            '　改法：那三個是 src/pages/[...locale]/search.astro 的 strings 裡放進 data-strings 的，' +
+            '　先看那幾行還在不在；dist 比原始碼舊的話先跑 npm run build。',
+        });
+      }
+    }
+  }
+}
+
 /*
  * ── schema 說詩詞預設直排，產出裡還有那條規則嗎 ──────────
  *

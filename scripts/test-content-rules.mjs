@@ -74,6 +74,21 @@ ${draft ? 'draft: true\n' : ''}poem:
 const REAL_GUIDE = await readFile(resolve(ROOT, 'docs/CONTENT.md'), 'utf8');
 
 /**
+ * 一頁「接線完整」的搜尋頁：`data-strings` 裡有指路用的三個鍵。
+ * 宣告放在 CASES 與 CLEAN 兩個消費者之前。第一版只放到 CLEAN 前面
+ * 就以為夠了 —— CASES 在更上面，於是 ReferenceError。這一圈第六次。
+ */
+const searchPage = (/** @type {string} */ lang, /** @type {string} */ json) =>
+  `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8"><title>Search</title></head>` +
+  /* 屬性用雙引號、裡面的引號逃脫成 &quot; —— Astro 產出的就是這個形狀 */
+  `<body><main><form data-strings="${json.replaceAll('"', '&quot;')}"></form></main></body></html>`;
+
+const SEARCH_PAGE = searchPage(
+  'zh-Hant-TW',
+  '{"otherLangOne":"有 1 篇","otherLangMany":"有 {n} 篇","otherLangHref":"/archive"}',
+);
+
+/**
  * 每條規則一份假的 { content, dist }。
  * key 是規則 id，用來確認擋下來的是**那一條**。
  *
@@ -206,6 +221,20 @@ const CASES = {
    *
    * dist 裡放齊那一篇的頁面，免得 missing-page 也響。
    */
+  /*
+   * ── 某個語言一篇都沒有，而那一頁沒有指路 ──
+   *
+   * 索引裡兩筆都是 zh-TW，所以 /en/search 的讀者無論打什麼都是「沒有結果」。
+   * 那一頁的 data-strings 裡少了指路用的鍵 —— 畫面上不會說為什麼。
+   */
+  'search-crosslang-mute': {
+    content: { 'poems/wu-yi-xiang.md': poem() },
+    dist: {
+      'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
+      'search/index.html': SEARCH_PAGE,
+      'en/search/index.html': searchPage('en', '{"none":"No matches found."}'),
+    },
+  },
   'search-index-missing': {
     /* 這一格要的就是「索引不在」，所以不要自動補 */
     noIndex: true,
@@ -572,6 +601,13 @@ const CLEAN = {
         { t: '題《赤壁圖》', u: '/poems/ti-chi-bi' },
       ],
     }),
+    /*
+     * 兩頁搜尋頁，`data-strings` 裡帶齊指路用的三個鍵 ——
+     * search-crosslang-mute 的反向那一半（不該響的不響），
+     * 也讓它在這份語料上有主體，不會被列進「沒東西可看」。
+     */
+    'search/index.html': SEARCH_PAGE,
+    'en/search/index.html': SEARCH_PAGE,
     'elsewhere/index.html': page(
       '讀《文心雕龍》讀到一半想到的事｜談 &lt;文心&gt; &amp; &quot;雕龍&quot; 的 &#39;體例&#39;',
     ),
