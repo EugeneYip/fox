@@ -964,9 +964,19 @@ const RULES = [
 for (const id of RULES) if (!subjects.has(id)) subjects.set(id, 0);
 
 console.log('\n內容管線檢查\n' + '─'.repeat(56));
+/*
+ * ── 標題要說「幾條規則」，不只是「幾篇內容」 ──────────
+ *
+ * 第 3 輪（第二十九圈）問「第一次跑的人跟第一百次跑的人看到的是同一份
+ * 東西嗎」。這一行本來說「6 篇內容（草稿 1 篇），產出 50 個檔案」——
+ * 說了**掃了什麼**，沒說**用幾條規則掃的**。
+ *
+ * 同一圈第 1 輪對 `check:a11y` 做過同樣的事。這個 repo 從第二十一圈起的
+ * 規矩是「綠燈不說明判斷過什麼，等於沒說」，而規則數是那句話的一半。
+ */
 console.log(
   `${entries.length} 篇內容（草稿 ${entries.filter((e) => e.draft).length} 篇）` +
-    `，產出 ${built.length} 個檔案。`,
+    `，產出 ${built.length} 個檔案，${RULES.length} 條規則。`,
 );
 
 /*
@@ -1184,6 +1194,19 @@ for (const n of notes) console.log(`\n  · ${n}`);
 
 if (problems.length === 0) {
   console.log('\n沒有發現問題。');
+  /*
+   * ── 那個能回答「到底判斷過多少東西」的旗標，要說得出口 ──────────
+   *
+   * `--verbose` 多印 16 行「每條規則實際判斷過的東西」，
+   * 而那正是「綠燈代表什麼」的答案。
+   *
+   * 第 1 輪（第二十九圈）量到：七支關卡裡六支有 `--verbose` 而輸出從來不提它。
+   * （`check:links` 是例外 —— 它的 `--verbose` 只影響失敗那條路，
+   * 而且就在相關的地方自己講了，所以那一支不需要改。）
+   */
+  if (!VERBOSE) {
+    console.log('要看每條規則實際判斷過幾個東西：npm run check:content -- --verbose');
+  }
   console.log(idleReport + fieldReport);
   process.exit(0);
 }

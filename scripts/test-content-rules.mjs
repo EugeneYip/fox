@@ -1042,6 +1042,45 @@ try {
 }
 
 console.log('─'.repeat(64));
+/*
+ * ── 第一次跑的人看得到什麼 ──────────
+ *
+ * 第 3 輪（第二十九圈）問「第一次跑的人跟第一百次跑的人看到的是同一份
+ * 東西嗎」。這一支本來說「6 篇內容，產出 50 個檔案」——
+ * 說了掃了什麼，沒說用幾條規則掃的；而 `--verbose` 多印的那 16 行
+ * （每條規則實際判斷過幾個東西）正是「綠燈代表什麼」的答案，卻沒人看得見。
+ */
+{
+  const dir = await build('firsttime', {
+    content: { 'notes/x.md': '---\ntitle: 測試\nlang: zh-TW\n---\n內文。\n' },
+    dist: { 'notes/x/index.html': page('<h1>測試</h1>') },
+  });
+  const out = await check(dir);
+  const okRules = /\d+ 條規則/.test(out);
+  if (!okRules) failed++;
+  console.log(`  ${okRules ? '✓' : 'X'} 標題說得出用了幾條規則`);
+  if (!okRules) console.log('        ' + out.split('\n').slice(0, 6).join(' | '));
+
+  const okVerbose = /--verbose/.test(out);
+  if (!okVerbose) failed++;
+  console.log(`  ${okVerbose ? '✓' : 'X'} 綠燈時說得出怎麼看「判斷過多少東西」（--verbose）`);
+  if (!okVerbose) console.log('        ' + out.split('\n').filter(Boolean).slice(0, 8).join(' | '));
+
+  /*
+   * 反向：`--verbose` 模式自己不再提示自己。
+   *
+   * 突變掃描抓到的語料缺口：把那個判斷改成 `if (true)` 之後測試照樣全綠，
+   * 因為沒有一格跑過 verbose 那條路。在已經看得到明細的地方
+   * 再叫人去看明細，是純粹的噪音。
+   */
+  const verbose = await checkWithCode(dir, ['--verbose']);
+  const okQuiet = !/要看每條規則實際判斷過/.test(verbose.out);
+  if (!okQuiet) failed++;
+  console.log(`  ${okQuiet ? '✓' : 'X'} --verbose 模式不再提示自己（反向案例）`);
+  if (!okQuiet) console.log('        ' + verbose.out.split('\n').filter(Boolean).slice(-4).join(' | '));
+
+}
+
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
 process.exit(failed > 0 ? 1 : 0);
 
