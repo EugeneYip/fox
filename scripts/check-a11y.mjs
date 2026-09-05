@@ -147,6 +147,7 @@ const RULE_IDS = [
   'unlabelled-cjk-attr',
   'positive-tabindex',
   'img-alt',
+  'svg-unnamed',
   'button-name',
   'link-name',
   'decorative-glyph-in-name',
@@ -558,6 +559,51 @@ for await (const file of htmlFiles(DIST)) {
   }
 
   // ── 圖片 ────────────────────────────────────────────
+  /*
+   * ── 內嵌的 SVG，沒有人在看 ──────────
+   *
+   * 第 1 輪（第三十六圈）問「這道檢查的邊界外面是什麼、那裡有幾個」。
+   * 把產出裡的元素種類數出來（45 種）之後，兩種**每一頁都有**的東西
+   * 完全不在任何規則的視野裡：`<svg>` 99 個、`<details>`／`<summary>` 各 44 個。
+   *
+   * `svg` 這個字在這支腳本裡只出現在 `hasAccessibleName()` ——
+   * 那是在問「這個連結／按鈕包著的圖有沒有名字」，
+   * **不是**在看站上所有的 SVG。獨立站著的那些一個都沒被檢查過。
+   *
+   * 而 `<img>` 那條（`img-alt`）主體是 0 —— 站上一張 `<img>` 都沒有，
+   * 圖示全是內嵌 SVG。也就是說「圖片有沒有替代文字」這件事，
+   * **這個站上真正的那 99 個，剛好落在規則外面**。
+   *
+   * 現在的狀態是乾淨的：99 個全部有 `aria-hidden="true"`（實測）。
+   * 所以這條規則今天不會響 —— 它守的是下一個加圖示的人。
+   *
+   * 判準：一個 SVG 要嘛藏起來（`aria-hidden`／`role="presentation"`／`role="none"`），
+   * 要嘛有名字（`aria-label`／`aria-labelledby`／`<title>` 子元素）。
+   * 兩個都沒有的話，螢幕閱讀器會把它當成一張沒有說明的圖念出來。
+   * 沒有第三種正當寫法，所以是 error。
+   */
+  saw('svg-unnamed', (html.match(/<svg\b/gi) ?? []).length);
+  for (const m of html.matchAll(/<svg\b[^>]*>([\s\S]*?)<\/svg>/gi)) {
+    const openTag = m[0].slice(0, m[0].indexOf('>') + 1);
+    const role = (attr(openTag, 'role') ?? '').trim().toLowerCase();
+    const hidden =
+      attr(openTag, 'aria-hidden') === 'true' || role === 'presentation' || role === 'none';
+    const named =
+      Boolean(attr(openTag, 'aria-label')?.trim()) ||
+      Boolean(attr(openTag, 'aria-labelledby')?.trim()) ||
+      /<title>[^<]+<\/title>/i.test(m[1]);
+    if (hidden || named) continue;
+    add(
+      'error',
+      rel,
+      'svg-unnamed',
+      '內嵌的 <svg> 既沒有 aria-hidden="true" 也沒有名字 —— ' +
+        '螢幕閱讀器會把它當成一張沒有說明的圖念出來。' +
+        '　改法：裝飾用的加 aria-hidden="true"；' +
+        '有意義的加 aria-label="⋯" 或在裡面放一個 <title>⋯</title>。',
+    );
+  }
+
   saw('img-alt', (html.match(/<img\b/gi) ?? []).length);
   for (const m of html.matchAll(/<img\b[^>]*>/gi)) {
     /*

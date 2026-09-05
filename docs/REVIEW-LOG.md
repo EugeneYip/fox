@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 45,900 行、2.4 MB、282 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 46,000 行、2.4 MB、283 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -45860,4 +45860,144 @@ const scanned = subjects.get('possible-secret') ?? 0;
 **範圍外面那些，現在到底有幾個、是什麼？** 數得出來的就數出來，
 數不出來的就說「這裡看不到」。
 
-**下一輪：1 — 無障礙**
+
+### 2026-09-05 — 第 1 輪（第三十六圈）：無障礙
+
+**第三十六圈問：這道檢查的邊界外面是什麼？那裡現在有幾個？**
+判準：**這一支說得出「它看不到什麼」嗎？而那些東西現在有幾個？**
+
+上一圈反覆出現同一個畫面：兩種算法的差，落在涵蓋範圍的邊界上。
+這一圈直接往外看 —— 先把產出裡的**元素種類**數出來。
+
+#### 1. 45 種元素，而規則只認得其中一部分
+
+`dist/` 裡（拿掉 `<script>`／`<style>` 之後）共 **45 種元素**。
+挑幾個量大的對照 `check-a11y.mjs` 的原始碼：
+
+| 元素 | 數量 | 腳本裡提到幾次 |
+|---|---|---|
+| `<a>` | 899 | 有（四條規則） |
+| `<svg>` | **99** | **1 次，而且不是規則** |
+| `<details>`／`<summary>` | **各 44** | **0 次** |
+| `<time>` | 82 | 0 次 |
+| `<img>` | **0** | 3 次（`img-alt`） |
+
+（順帶：想用「原始碼裡有沒有出現 `<tag`」自動算出涵蓋範圍是**不行的** ——
+`header`、`h2`、`input` 都被通用樣式蓋住了（`<(nav|main|header|…)`、`<h([1-6])`）。
+所以這裡是逐個確認，不是自動推的。）
+
+#### 2. 最刺眼的那一對：`<img>` 0 個，`<svg>` 99 個
+
+`img-alt` 這條規則的主體**一直是 0** —— 站上一張 `<img>` 都沒有，
+圖示、狐狸標記、主題切換鈕的太陽月亮**全部是內嵌 SVG**。
+
+而 `svg` 這個字在整支腳本裡只出現在 `hasAccessibleName()` 裡兩行 ——
+那是在問「這個**連結或按鈕**包著的圖有沒有名字」，
+**不是**在看站上所有的 SVG。獨立站著的那些一條規則都沒看過。
+
+也就是說：**「圖有沒有替代文字」這件事，這個站上真正的那 99 個，
+剛好整批落在規則外面。**
+
+#### 3. 實際狀態是乾淨的 —— 99／99 都藏好了
+
+```
+<svg> 共 99：aria-hidden 99、有名字 0、兩者都沒有 0
+<summary> 共 44：有文字的 44
+```
+
+所以這不是「現在壞了」，是「**沒有人在守**」。
+
+#### 4. 加一條 `svg-unnamed`（主體 99）
+
+判準：一個 SVG 要嘛藏起來（`aria-hidden="true"`／`role="presentation"`／`role="none"`），
+要嘛有名字（`aria-label`／`aria-labelledby`／`<title>` 子元素）。
+兩個都沒有就是 error —— 沒有第三種正當寫法。
+
+#### 5. 突變：第一次沒紅，而那是規則對
+
+拿 `FoxMark.astro` 開刀，先把 `aria-hidden={…}` 改掉 →
+產出裡 55 個 SVG 失去 `aria-hidden`，而**關卡照樣綠**。
+
+差點就寫成「規則沒接上」。看產出才發現那些 SVG 還有 `role="presentation"` ——
+**我的規則正確地把它也當成藏起來了**，是我的突變不夠。
+
+再把 `role={…}` 也改掉，兩個都拿掉之後：
+
+```
+X [svg-unnamed] 內嵌的 <svg> 既沒有 aria-hidden="true" 也沒有名字 ⋯⋯
+      404.html
+```
+
+四格測試：該報的報，另外三格是三種合法寫法（`aria-hidden`、
+`role="presentation"`、`<title>`）都不該報。
+
+#### 6. 這一條讓兩個既有的守衛當場說話
+
+- `docs/A11Y.md` 的規則數從 28 變 29 → **第 1 輪（第三十三圈）加的那格測試紅了**，
+  照著改文件兩處。
+- `SEVERITY` 表少一條 → **第 1 輪（第三十一圈）那格**點名 `svg-unnamed`。
+
+兩個都是為了「加規則就要補這些」而存在的，今天各兌現一次。
+
+#### 7. 這一圈的問題，在這一層得到的答案
+
+邊界外面有東西，而且**是這個站最主要的一種圖**。
+`img-alt` 主體 0 那件事早就印在報告上了（「這次沒有東西可看的規則」），
+但它讀起來像「站上沒有圖」——實際上是「站上的圖不是 `<img>`」。
+
+| | 之前 | 現在 |
+|---|---|---|
+| 99 個內嵌 SVG | 一條規則都沒看過 | `svg-unnamed`（主體 99） |
+| `img-alt` 主體 0 | 讀起來像「沒有圖」 | 旁邊有一條真的在看那 99 個 |
+| 規則數 | 28 | 29 |
+
+### 待辦（不屬於這一輪）
+
+- **`<details>`／`<summary>` 各 44 個，仍然沒有任何規則在看。** 現在 44 個
+  `<summary>` 都有文字，但「只有圖示的 summary」跟「只有圖示的 button」
+  是同一種壞法，而 `button-name` 只認 `<button>`（→ 1 無障礙）
+- **`<time>` 82 個沒有人看 `datetime` 屬性**（→ 1 無障礙）
+- **涵蓋範圍算不出來**：想從原始碼自動推「哪些標籤有規則在看」會被通用樣式
+  騙過去。要能報出「邊界外面有幾種、幾個」，得讓規則自己宣告它看什麼（→ 1 無障礙）
+- 上一輪與更早的都還在（`check:workflows` 的數字沒驗、
+  「掃了 61 個檔案、13713 行」沒驗、「身分規則：8 個值」不能印內容、
+  `--patterns` 那 11 個平臺的「N 筆」沒驗、
+  `SCHEMA_STRUCTURAL` 與「走不到的是哪一個」還沒驗、
+  node 與 python 的 gzip 差 0.9% 沒人查過為什麼、
+  另外 22 個 a11y `--verbose` 數字還沒驗、搜尋結果的連結沒有任何無障礙檢查看過、
+  `tokens.css` 註解裡的對比值沒有東西在守、`domain-drift` 只看三份、
+  `rule-not-documented` 只守 id、`strictReferrerPolicy: false` 那條路沒有測試、
+  `verifiedAt` 仍然手寫、`field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、`docs/A11Y.md` 那三個瀏覽器量的數字沒人對、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `audit:privacy` 沒有 needles 時本機 exit 0、
+  我連續六次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  `test-ci-sim` 那一格在有負載時會紅、要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 10 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `check:perf` 那句「全是 favicon」是寫死的描述、7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  28 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、`related` 單向、schema 的必填／選填沒被選過、
+  11 條預算裡 5 條的上限是挑的、另外四支檢查的嚴重度、
+  `CoverImage` 的 `sizes` 用 40rem、
+  `check.yml` 跑過 0 次、`ci:sim` 只有手動跑、`ui.ts` 的 `en` 要不要必填、
+  `reveal('email')` 沒有人呼叫、4 條閒置豁免、本機 `ahead 48, behind 1`、
+  `npm run sync` 來源全失敗仍離開碼 0、排程遲了四小時只有一筆、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `VideoFacade` 一次都沒算繪過、`aria-live`／`role="status"` 沒有規則、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、`probe:served` 沒有自己的測試、
+  `--real-install` 成功路徑沒測試、視覺層 24 處實測沒重驗、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  真的開一次螢幕閱讀器聽、`CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：2 — 效能**

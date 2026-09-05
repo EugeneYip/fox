@@ -125,6 +125,7 @@ const SEVERITY = {
   'same-name-different-target': 'warn',
   'skip-link': 'error',
   'sr-only-broken': 'error',
+  'svg-unnamed': 'error',
   title: 'error',
   'unlabelled-cjk': 'error',
   'unlabelled-cjk-attr': 'error',
@@ -541,6 +542,32 @@ const CASES = {
   },
   'sr-only-broken': {
     html: page({ body: '<span class="sr-only">只給螢幕閱讀器的字</span>' }),
+  },
+  /*
+   * ── 內嵌的 SVG ──
+   *
+   * 第 1 輪（第三十六圈）：站上 99 個 `<svg>`、`<img>` 一張都沒有 ——
+   * 「圖有沒有替代文字」這件事，真正的那 99 個原本落在所有規則外面。
+   *
+   * 三個反向案例，因為藏起來與取名字各有幾種合法寫法。
+   */
+  'svg-unnamed': {
+    html: page({ body: '<svg viewBox="0 0 8 8"><path d="M0 0h8v8H0z"/></svg>' }),
+  },
+  'svg-unnamed（aria-hidden 就不報）': {
+    rule: 'svg-unnamed',
+    quiet: true,
+    html: page({ body: '<svg aria-hidden="true" viewBox="0 0 8 8"><path d="M0 0h8v8H0z"/></svg>' }),
+  },
+  'svg-unnamed（role=presentation 也算藏起來）': {
+    rule: 'svg-unnamed',
+    quiet: true,
+    html: page({ body: '<svg role="presentation" viewBox="0 0 8 8"><path d="M0 0h8v8H0z"/></svg>' }),
+  },
+  'svg-unnamed（有 title 就不報）': {
+    rule: 'svg-unnamed',
+    quiet: true,
+    html: page({ body: '<svg role="img" viewBox="0 0 8 8"><title>一隻狐狸</title><path d="M0 0h8v8H0z"/></svg>' }),
   },
   /* 反向一：定義在（而且真的在裁切）就不該報 */
   'sr-only-broken（有在裁切就不報）': {
