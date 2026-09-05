@@ -99,6 +99,75 @@ await writeFile(file, ORIGINAL, 'utf8');
   check('沒有備份時的 --restore：離開碼 1', r.code === 1 && /沒有/.test(r.out), r.out.trim());
 }
 
+/*
+ * ── 同一個檔案套用兩次：`.orig` 不能被蓋掉 ──────────
+ *
+ * 第 1 輪（第三十三圈）踩到的：連續改 `docs/A11Y.md` 兩處再 `--restore`，
+ * 印的是「已還原」，而第一次的改動**永遠留在檔案裡**了 ——
+ * 備份被第二次套用時的（已經變質的）內容覆蓋掉。
+ *
+ * 上面第 3 格守的是「什麼都沒做但看起來成功了」。
+ * 這一格守的是它的鏡像：**什麼都做了，但看起來還原了。**
+ * 那個更糟 —— 前者讓這一輪的綠燈變假，後者讓之後每一輪的基準都是髒的。
+ */
+{
+  const stackFile = join(dir, 'stacked.mjs');
+  const START = 'const a = 1;\nconst b = 2;\n';
+  await writeFile(stackFile, START, 'utf8');
+
+  await mutate([stackFile, '--from', 'const a = 1;', '--to', 'const a = 9;']);
+  const second = await mutate([stackFile, '--from', 'const b = 2;', '--to', 'const b = 9;']);
+  const both = await readFile(stackFile, 'utf8');
+  check(
+    '第二次也套用得了（兩處都變了）',
+    second.code === 0 && both.includes('a = 9') && both.includes('b = 9'),
+    both,
+  );
+
+  check('第二次會說「--restore 會一次還原掉全部」', /第二次（含以上）突變/.test(second.out), second.out);
+
+  const r = await mutate([stackFile, '--restore']);
+  const now = await readFile(stackFile, 'utf8');
+  check(
+    '還原回**最初**那一份，不是回到第一次突變之後',
+    r.code === 0 && now === START,
+    now,
+  );
+}
+
+/*
+ * ── 反斜線被 shell 吃掉時，要說得出來而不是猜 ──────────
+ *
+ * `npm run mutate -- … --from '…\d…'` 會經過一次 `sh`，
+ * 無引號的 `\d` 被讀成 `d`，腳本收到的字串裡反斜線已經不見了。
+ * 第 1 輪與第 2 輪（第三十三圈）各踩一次，兩次都只看到
+ * 「配不到通常是引號或反斜線被 shell 吃掉了」—— 那是猜的。
+ *
+ * 而這件事驗得出來：把檔案裡的反斜線拿掉再找一次，找得到就是它。
+ * 兩個方向都要驗，不然「一律說是反斜線」也會過。
+ */
+{
+  const reFile = join(dir, 'regex.mjs');
+  await writeFile(reFile, 'const re = /(\\d+) 條規則/g;\n', 'utf8');
+
+  const eaten = await mutate([reFile, '--from', '/(d+) 條規則/g', '--to', 'x']);
+  check(
+    '反斜線被吃掉：說得出「就是反斜線」，離開碼 1',
+    eaten.code === 1 && /就是反斜線被吃掉了/.test(eaten.out),
+    eaten.out,
+  );
+
+  const genuinely = await mutate([reFile, '--from', '完全不相干的一段', '--to', 'x']);
+  check(
+    '真的不在裡面時不會賴給反斜線',
+    genuinely.code === 1 && !/就是反斜線被吃掉了/.test(genuinely.out),
+    genuinely.out,
+  );
+
+  const untouched = await readFile(reFile, 'utf8');
+  check('兩次都沒動到檔案', untouched === 'const re = /(\\d+) 條規則/g;\n', untouched);
+}
+
 await rm(dir, { recursive: true, force: true });
 
 console.log('─'.repeat(56));
