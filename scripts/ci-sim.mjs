@@ -252,7 +252,23 @@ try {
    * 不講清楚的話，一個型別錯誤看起來會像三件互不相干的事同時壞掉。
    */
   let firstFailure = '';
+  /*
+   * ── 每一步花多久 ──────────────────────────────
+   *
+   * 第 7 輪（第二十九圈）問「第一次跑的人跟第一百次跑的人看到的是同一份
+   * 東西嗎」。這裡本來印的是三個光禿禿的 ✓（`test:units`、`verify:all`、
+   * `test:built`）—— **沒有時間、沒有規模**。
+   *
+   * 而這整條要跑十分鐘以上，「為什麼這麼久」正是第一次跑的人會問的。
+   * 第 7 輪（第二十七圈）在乾淨 clone 上特地量過一次：297／111／4 秒，
+   * `test:units` 佔七成 —— 那個數字要有人專門去量才有。
+   *
+   * 腳本本來就是一步一步跑的，記個時間戳就好。
+   */
+  /** @type {{ step: string, ms: number }[]} */
+  const timings = [];
   for (const step of DEPLOY_STEPS) {
+    const t0 = Date.now();
     try {
       execFileSync('npm', ['run', '--silent', step], {
         cwd: TMP,
@@ -260,13 +276,33 @@ try {
         // CI 上有這個 secret；沒有的話身分規則不會跑，那是另一種情況
         env: { ...process.env, PRIVACY_NEEDLES: process.env.PRIVACY_NEEDLES ?? '' },
       });
-      console.log(`  ✓ ${step}`);
+      const ms = Date.now() - t0;
+      timings.push({ step, ms });
+      console.log(`  ✓ ${step.padEnd(12)} ${(ms / 1000).toFixed(0).padStart(4)} 秒`);
     } catch (err) {
+      const ms = Date.now() - t0;
+      timings.push({ step, ms });
       failed++;
       if (!firstFailure) firstFailure = step;
-      console.log(`  X ${step}`);
+      console.log(`  X ${step.padEnd(12)} ${(ms / 1000).toFixed(0).padStart(4)} 秒`);
       console.log(formatStepFailure(err));
     }
+  }
+
+  /*
+   * 總時間與最慢的那一步。
+   *
+   * 十一個綠勾長得一樣的時候要點名最接近上限的那一條
+   * （第 2 輪〔第二十九圈〕），這裡是同一個道理：
+   * 三個步驟長得一樣的時候，要說出時間花在哪。
+   */
+  if (timings.length > 0) {
+    const total = timings.reduce((n, x) => n + x.ms, 0);
+    const slowest = timings.reduce((a, b) => (b.ms > a.ms ? b : a));
+    console.log(
+      `  合計 ${(total / 1000).toFixed(0)} 秒，最久的是 ${slowest.step}` +
+        `（${Math.round((slowest.ms / total) * 100)}%）`,
+    );
   }
 
   /*

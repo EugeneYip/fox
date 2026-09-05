@@ -241,5 +241,52 @@ console.log('─'.repeat(56));
   await rm(dir, { recursive: true, force: true });
 }
 
+/*
+ * ── 時間花在哪 ──────────────────────────────
+ *
+ * 第 7 輪（第二十九圈）問「第一次跑的人跟第一百次跑的人看到的是同一份
+ * 東西嗎」。這裡本來印三個光禿禿的 ✓，沒有時間也沒有規模 ——
+ * 而整條要跑十分鐘以上，「為什麼這麼久」正是第一次跑的人會問的。
+ *
+ * 第 7 輪（第二十七圈）在乾淨 clone 上特地量過一次（297／111／4 秒，
+ * test:units 佔七成）。現在每一次跑都會自己說，不用特地量。
+ *
+ * 這一格不驗秒數（那會隨機器變），驗的是**那兩件事說得出來**：
+ * 每一步有時間、而且點名最久的那一步與它的佔比。
+ */
+{
+  /*
+   * 兩步要**分得出快慢**，不然「最久的那一步」驗不到。
+   *
+   * 第一版兩步都是 `echo ok`，時間幾乎一樣 —— 於是把 `reduce` 的比較
+   * 寫反（挑成最快的）之後測試照樣綠。這個 repo 這一組圈裡第七次踩到
+   * 「判準能被別的東西滿足」。
+   *
+   * 用忙等而不是 `sleep`：不依賴外部指令，Windows 上也一樣。
+   */
+  const dir = await fakeRepo({
+    steps: ['verify:all', 'beta'],
+    scripts: {
+      'verify:all': 'node -e "const t=Date.now();while(Date.now()-t<700);"',
+      beta: 'echo ok',
+    },
+  });
+  const { out } = await sim(dir);
+
+  const okPerStep = /✓ verify:all\s+\d+ 秒/.test(out);
+  ok('每一步都說得出花了幾秒', okPerStep, out.split('\n').filter((l) => l.includes('✓')).join(' | '));
+
+  const named = /合計 \d+ 秒，最久的是 (\S+)（(\d+)%）/.exec(out);
+  /* 慢的那一步是 verify:all（忙等 700ms），beta 只是 echo */
+  const okTotal = named !== null && named[1] === 'verify:all' && Number(named[2]) >= 50;
+  ok(
+    '說得出合計與最久的那一步（而且真的是最久的那一步）',
+    okTotal,
+    out.split('\n').filter((l) => l.includes('合計') || l.includes('✓')).join(' | '),
+  );
+
+  await rm(dir, { recursive: true, force: true });
+}
+
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
 process.exit(failed > 0 ? 1 : 0);
