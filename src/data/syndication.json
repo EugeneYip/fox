@@ -1,14 +1,14 @@
 {
   "$schema": "./syndication.schema.json",
-  "generatedAt": "2026-09-05T04:08:00.287Z",
+  "generatedAt": "2026-09-05T15:00:02.519Z",
   "itemCount": 9,
   "sources": {
     "youtube-foxpoetry": {
-      "status": "error",
+      "status": "ok",
       "platform": "youtube",
       "itemCount": 9,
-      "lastSuccessAt": "2026-09-02T16:53:37.689Z",
-      "message": "RSS 失敗（HTTP 404（試了 7 次）），而且沒有 YOUTUBE_API_KEY 可以退回。　改法：**先不要當成帳號沒了** —— 這個端點會間歇性回 404（實測同一天上午全部 404、中午恢復）。過幾分鐘用 `npm run verify -- --patterns` 重驗；真的持續不通再考慮設 YOUTUBE_API_KEY。"
+      "lastSuccessAt": "2026-09-05T15:00:02.518Z",
+      "message": null
     }
   },
   "items": [
