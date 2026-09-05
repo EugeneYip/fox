@@ -13,6 +13,22 @@ const t = useTranslations(locale);
  * `getFullYear()` 讀的是建置機器的時區（站主的機器在美東，CI 在 UTC），
  * 所以跨年那幾個小時三台機器會給三個答案。見 lib/dates.ts 的說明。
  */
+/*
+ * 頁尾的「你在這裡」。
+ *
+ * 第 1 輪（第三十圈）量到：導覽列標了 aria-current，頁尾沒有 ——
+ * 同一個站的兩個 nav，一個說得出「你正在這一頁」，另一個不說。
+ * 全站 20 個「nav 裡連到自己」的連結，**10 個沒有標記，全部在頁尾**。
+ * 螢幕閱讀器使用者在 /archive 上逐一聽頁尾，聽到的是「封存，連結」，
+ * 跟其他四個一模一樣。
+ *
+ * 這裡用**完全相符**，不像 Header 那樣往下比對前綴 ——
+ * 頁尾放的是單頁的工具連結（封存、標籤、搜尋、隱私、colophon），
+ * 在 /tags/唐詩 上把 /tags 標成 `page` 是錯的：那不是同一頁。
+ * 兩個 nav 的語意本來就不同，硬要共用一個判斷反而會錯一邊。
+ */
+const here = Astro.url.pathname.replace(/\/$/, '') || '/';
+
 const thisYear = year(new Date());
 const years = thisYear > site.since ? `${site.since}–${thisYear}` : String(site.since);
 const penName = pick(site.penName, locale) ?? site.penName[DEFAULT_LOCALE];
@@ -27,13 +43,16 @@ const penName = pick(site.penName, locale) ?? site.penName[DEFAULT_LOCALE];
     <div class="site-footer__body ui">
       <nav aria-label={t('footer.builtWith')}>
         <ul>
-          {footerNav.map((item) => (
-            <li>
-              <a href={item.href.startsWith('/rss') ? item.href : localizePath(item.href, locale)}>
-                {pick(item.label, locale)}
-              </a>
-            </li>
-          ))}
+          {footerNav.map((item) => {
+            const href = item.href.startsWith('/rss') ? item.href : localizePath(item.href, locale);
+            return (
+              <li>
+                <a href={href} aria-current={href.replace(/\/$/, '') === here ? 'page' : undefined}>
+                  {pick(item.label, locale)}
+                </a>
+              </li>
+            );
+          })}
         </ul>
       </nav>
 

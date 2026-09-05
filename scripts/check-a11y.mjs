@@ -131,6 +131,8 @@ const findings = [];
  * 兩邊不可能默默分岔。
  */
 const RULE_IDS = [
+  'current-page-unmarked',
+  'sr-only-broken',
   'html-lang',
   'title',
   'h1',
@@ -721,6 +723,50 @@ for await (const file of htmlFiles(DIST)) {
     }
   }
 
+  /*
+   * ── nav 裡連到自己的那個連結，要說得出「你在這裡」 ──
+   *
+   * 第 1 輪（第三十圈）問「這件事如果整個拿掉，會有誰發現」。
+   * 把導覽列的 `aria-current` 整條刪掉、重建、跑完
+   * **六道關卡加兩套測試 —— 全綠**。沒有任何東西發現它不見了。
+   *
+   * 而且它不只是無障礙：頁首的 CSS 是 `a[aria-current="page"]::after`，
+   * 所以那個屬性一走，**看得見的「目前頁」記號也跟著消失**。
+   *
+   * 同一輪量到的另一半：全站 20 個「nav 裡連到自己」的連結，
+   * 10 個沒有標記，全部在頁尾。同一個站的兩個 nav，一個說得出、
+   * 一個不說 —— 而沒有任何東西分得出這兩種情況。
+   *
+   * 判準只認**完全相符**的自我連結。前綴（在 /poems/xyz 上看 /poems）
+   * 是「你在這個區段」，那是設計選擇，不是這條規則管的事。
+   */
+  {
+    const own = ('/' + rel.replace(/(^|\/)index\.html$/, '').replace(/\.html$/, '')).replace(/\/$/, '') || '/';
+    /** @type {{ href: string, tag: string }[]} */
+    const selfLinks = [];
+    for (const nav of html.matchAll(/<nav\b[^>]*>([\s\S]*?)<\/nav>/gi)) {
+      for (const a of nav[1].matchAll(/<a\b([^>]*)>/gi)) {
+        /* attr() 沒有那個屬性時回的是 null，不是 undefined —— 型別關卡抓過這一次 */
+        const href = attr('<a' + a[1] + '>', 'href');
+        if (href == null) continue;
+        if ((href.replace(/\/$/, '') || '/') !== own) continue;
+        selfLinks.push({ href, tag: a[0] });
+      }
+    }
+    saw('current-page-unmarked', selfLinks.length);
+    for (const l of selfLinks) {
+      if (/\saria-current\s*=/i.test(l.tag)) continue;
+      add(
+        'error',
+        rel,
+        'current-page-unmarked',
+        'nav 裡有一個連到這一頁自己的連結（' + l.href + '），卻沒有 aria-current —— ' +
+          '螢幕閱讀器把它唸成跟旁邊四個一樣的普通連結，聽不出「你正在這一頁」。' +
+          '　改法：那個 <a> 上加 aria-current="page"。',
+      );
+    }
+  }
+
   // ── 新分頁 ──────────────────────────────────────────
   saw('blank-rel', (html.match(/<a\b[^>]*\starget\s*=\s*"_blank"/gi) ?? []).length);
   for (const m of html.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)) {
@@ -974,6 +1020,56 @@ for await (const file of htmlFiles(DIST)) {
             '。鍵盤使用者會看不到自己在哪裡，而用滑鼠測完全看不出問題。',
         );
       }
+    }
+  }
+
+  /*
+   * ── 只給螢幕閱讀器的字，真的還藏著嗎 ──────────────
+   *
+   * 同一輪的第二個「拿掉了誰會發現」：把 `global.css` 的 `.sr-only`
+   * 改名（等於整條定義消失）、重建、跑完六道關卡加兩套測試 —— **全綠**。
+   *
+   * 那個類別的工作就是「看不見但唸得出來」。定義一沒了，
+   * 那些字會直接印在頁面上：搜尋頁的欄位標籤、以及每一頁那個
+   * 切換主題後由 JavaScript 填字的狀態列。
+   * 44 頁、46 處，沒有一道關卡看得出來 ——
+   * **因為壞掉的樣子是「多了東西」，而所有檢查都在找「少了東西」。**
+   *
+   * 判準要跟訊息說的一樣（第 1 輪〔第二十四圈〕的教訓）：不是
+   * 「CSS 裡有 .sr-only 這幾個字」——`.sr-only { color: red }` 也會通過 ——
+   * 而是**那一塊真的有在把它藏起來**。
+   *
+   * 兩種正規寫法都認：clip-path／clip，或 1px ＋ overflow:hidden。
+   * 只認站上現在用的那一種的話，這條規則守的就變成「別改寫法」，
+   * 而不是「別讓它現形」—— 那是兩件事，而訊息說的是後者。
+   */
+  const srOnlyUses = pageTexts.reduce(
+    (n, html) => n + (html.match(/\sclass\s*=\s*"[^"]*\bsr-only\b[^"]*"/gi) ?? []).length,
+    0,
+  );
+  saw('sr-only-broken', srOnlyUses);
+  if (srOnlyUses > 0) {
+    const clips = cssFiles.some(({ css }) => {
+      for (const m of css.matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
+        if (!/(^|[,\s])\.sr-only(?![\w-])/.test(m[1])) continue;
+        const body = m[2];
+        const clipped = /clip-path\s*:|(^|[;\s])clip\s*:/.test(body);
+        const boxed = /(width|height)\s*:\s*1px/.test(body) && /overflow\s*:\s*hidden/.test(body);
+        if (clipped || boxed) return true;
+      }
+      return false;
+    });
+    if (!clips) {
+      add(
+        'error',
+        'dist/（全站 CSS）',
+        'sr-only-broken',
+        `站上有 ${srOnlyUses} 處 class="sr-only"，但送出去的 CSS 裡找不到一條` +
+          ' `.sr-only` 規則在把它藏起來（clip-path／clip，或 1px ＋ overflow:hidden）。' +
+          '　那些字是寫給螢幕閱讀器的，定義一沒了它們就直接印在畫面上。' +
+          '　改法：`global.css` 的 `.sr-only` 那一段要留著 —— ' +
+          '它是 1px ＋ clip-path 的寫法，別改成 display:none（那樣讀螢幕的人也聽不到）。',
+      );
     }
   }
 }

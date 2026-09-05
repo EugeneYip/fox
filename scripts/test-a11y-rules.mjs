@@ -31,11 +31,18 @@ import { promisify } from 'node:util';
 const run = promisify(execFile);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** 包成一份完整的頁面；`head`／`body` 可以蓋掉預設值 */
+/**
+ * 包成一份完整的頁面；`head`／`body` 可以蓋掉預設值。
+ *
+ * 導覽列那個 `aria-current="page"` 是必要的，不是裝飾：案例幾乎都寫成
+ * `index.html`，而那條連結指向 `/` —— 對那份檔案來說就是**連到自己**。
+ * 少了它，第 1 輪（第三十圈）加的 `current-page-unmarked` 會在
+ * **每一個案例**上響，48 格一起紅，而每一格紅的都不是它自己要驗的東西。
+ */
 function page({ lang = 'zh-Hant-TW', title = '測試頁', head = '', body = '' } = {}) {
   return `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8"><title>${title}</title>${head}</head>
 <body><a class="skip-link" href="#main">跳到主要內容</a>
-<header><nav aria-label="選單"><a href="/">首頁</a></nav></header>
+<header><nav aria-label="選單"><a href="/" aria-current="page">首頁</a></nav></header>
 <main id="main"><h1>標題</h1>${body}</main>
 <footer>頁尾</footer></body></html>`;
 }
@@ -427,6 +434,70 @@ const CASES = {
     }),
   },
   'positive-tabindex': { html: page({ body: '<button tabindex="3">插隊</button>' }) },
+  /*
+   * ── 第 1 輪（第三十圈）加的兩條 ────────────────────
+   *
+   * 兩條都是「拿掉了誰會發現」量出來的：在加它們之前，
+   * 把導覽列的 aria-current 或整條 .sr-only 刪掉，
+   * 六道關卡加兩套測試**全綠**。
+   */
+  'current-page-unmarked': {
+    html: page().replace('<a href="/" aria-current="page">首頁</a>', '<a href="/">首頁</a>'),
+  },
+  /*
+   * 反向一：nav 裡連到**別頁**的連結不該被要求標記 ——
+   * 少了這一格，「所有 nav 連結都要有 aria-current」也會通過。
+   */
+  'current-page-unmarked（連到別頁的不算）': {
+    rule: 'current-page-unmarked',
+    quiet: true,
+    html: page().replace('<a href="/" aria-current="page">首頁</a>', '<a href="/poems">詩詞</a>'),
+  },
+  /*
+   * 反向二：**nav 以外**的自我連結不算。
+   * 頁尾的版權連結、內文裡連回本頁的錨點都不是導覽 ——
+   * 判準只看 <nav> 裡面，這一格釘住那個範圍。
+   */
+  'current-page-unmarked（nav 以外的自我連結不算）': {
+    rule: 'current-page-unmarked',
+    quiet: true,
+    html: page({ body: '<p>又見 <a href="/">本頁</a>。</p>' }),
+  },
+  'sr-only-broken': {
+    html: page({ body: '<span class="sr-only">只給螢幕閱讀器的字</span>' }),
+  },
+  /* 反向一：定義在（而且真的在裁切）就不該報 */
+  'sr-only-broken（有在裁切就不報）': {
+    rule: 'sr-only-broken',
+    quiet: true,
+    html: page({
+      head: '<style>.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}</style>',
+      body: '<span class="sr-only">只給螢幕閱讀器的字</span>',
+    }),
+  },
+  /*
+   * 反向二：另一種正規寫法（1px ＋ overflow:hidden，沒有 clip）也算數。
+   * 少了這一格，這條規則守的會變成「別改寫法」而不是「別讓它現形」。
+   */
+  'sr-only-broken（1px ＋ overflow 也算藏得住）': {
+    rule: 'sr-only-broken',
+    quiet: true,
+    html: page({
+      head: '<style>.sr-only{position:absolute;width:1px;height:1px;overflow:hidden}</style>',
+      body: '<span class="sr-only">只給螢幕閱讀器的字</span>',
+    }),
+  },
+  /*
+   * 正向二：`.sr-only` 這幾個字在，但那一塊根本沒在藏 ——
+   * 這一格是判準與訊息對得上的證明（訊息說的是「藏起來」，不是「有定義」）。
+   */
+  'sr-only-broken（有定義但沒在藏）': {
+    rule: 'sr-only-broken',
+    html: page({
+      head: '<style>.sr-only{color:red}</style>',
+      body: '<span class="sr-only">只給螢幕閱讀器的字</span>',
+    }),
+  },
 };
 
 const tmp = await mkdtemp(join(tmpdir(), 'a11y-rules-'));
@@ -764,7 +835,7 @@ try {
     await writeFile(
       join(dir, 'index.html'),
       '<!DOCTYPE html><html lang="zh-Hant-TW"><head><title>x</title></head><body>' +
-        '<a class="skip-link" href="#main">跳到主要內容</a><header><nav aria-label="主選單"><a href="/">首頁</a></nav></header>' +
+        '<a class="skip-link" href="#main">跳到主要內容</a><header><nav aria-label="主選單"><a href="/" aria-current="page">首頁</a></nav></header>' +
         '<main id="main"><h1>標題</h1><p>一段字。</p></main></body></html>',
       'utf8',
     );
