@@ -70,6 +70,14 @@ const Tag = headingLevel;
      * 兩件事要一起改才有用：能換行（`white-space`）＋ 能縮（`flex`）。
      *
      * 寬螢幕上不受影響：東西放得下的時候，`flex: 0 1 auto` 跟 `none` 一樣。
+     *
+     * 第 8 輪（第二十八圈）在**線上**重驗那個極端情況（視窗 320px、
+     * 根字級 32px、英文版）：`document.scrollWidth` 是 320，**沒有橫向捲動**，
+     * 修法還成立。
+     *
+     * 同一次量到一件之前沒記過的事：那個字級下導覽列的 `<ul>` 會變成
+     * **705px**，而 `nav.site-nav` 的 `overflow-x: auto` 讓它變成一條
+     * 可橫捲的帶子（可視 320、可捲 705）—— 項目仍然到得了，是刻意的降級。
      */
     font-size: var(--t-sm);
     color: var(--c-ink-soft);
