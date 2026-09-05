@@ -1114,6 +1114,73 @@ console.log('─'.repeat(64));
   if (!okMatch) console.log(`        文件寫的是 ${wrong.join('、')}，實際 ${actual} 條。`);
 }
 
+/*
+ * ── 文件抄的那份閒置名單，要跟這次算出來的一樣 ──────────
+ *
+ * 第 1 輪（第三十四圈）：`docs/A11Y.md` 寫著「（目前 3 條：aria-ref、
+ * img-alt、positive-tabindex）」，而那份名單 `check-a11y` **每跑一次就重算一次**。
+ * 文件裡那一份是手抄的快照 —— 站上多一張圖，`img-alt` 就不再閒置，
+ * 而文件不會知道。第 1 輪（第三十三圈）守住了同一份文件裡的「幾條規則」，
+ * 沒有守這份清單。
+ *
+ * 關卡預設只在掃真的 `dist/` 時比對（暫存語料的閒置名單本來就不一樣），
+ * 所以這裡用 `--doc=` 指一份假文件，才驗得到這一格。
+ *
+ * 三個方向：對得上要綠、對不上要紅、**文件換了寫法要說「這一格沒有在守」**
+ * 而不是安靜地什麼都不比。
+ */
+{
+  const dir = await mkdtemp(join(tmpdir(), 'a11y-doc-'));
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, 'index.html'), page({ body: '<p>內文。</p>' }), 'utf8');
+
+  const docAt = join(dir, 'doc.md');
+  const run1 = async (/** @type {string} */ body) => {
+    await writeFile(docAt, body, 'utf8');
+    try {
+      const { stdout } = await run('node', [
+        resolve(ROOT, 'scripts/check-a11y.mjs'),
+        `--dir=${dir}`,
+        `--doc=${docAt}`,
+      ]);
+      return { out: stdout, code: 0 };
+    } catch (err) {
+      const e = /** @type {{ stdout?: string, code?: number }} */ (err);
+      return { out: String(e?.stdout ?? ''), code: typeof e?.code === 'number' ? e.code : -1 };
+    }
+  };
+  const claim = (/** @type {string[]} */ ids) =>
+    `跑完還會列出「這次沒有東西可看的規則」（目前 ${ids.length} 條：\n${ids.join('、')}）。\n`;
+
+  /* 這份語料實際閒置了哪幾條 —— 從 --verbose 的計數讀，不自己重算一次 */
+  const verbose = await runCheck(dir, ['--verbose']);
+  const actual = [...verbose.matchAll(/^\s*0\s+([a-z0-9-]+)\s*$/gm)].map((m) => m[1]).sort();
+
+  const okSetup = actual.length > 0;
+  if (!okSetup) failed++;
+  console.log(`  ${okSetup ? '\u2713' : 'X'} 這份語料上真的有閒置的規則（${actual.length} 條，下面幾格才有東西可比）`);
+
+  const same = await run1(claim(actual));
+  const okAgree = same.code === 0 && !/閒置名單過期/.test(same.out);
+  if (!okAgree) failed++;
+  console.log(`  ${okAgree ? '\u2713' : 'X'} 文件抄對時不誤報`);
+  if (!okAgree) console.log('        ' + same.out.split('\n').filter((l) => /名單/.test(l)).join(' ｜ '));
+
+  const wrong = await run1(claim(actual.slice(0, Math.max(1, actual.length - 1))));
+  const okCatch = wrong.code === 1 && /閒置名單過期/.test(wrong.out);
+  if (!okCatch) failed++;
+  console.log(`  ${okCatch ? '\u2713' : 'X'} 文件少抄一條時抓得到，而且擋得住（exit ${wrong.code}）`);
+  if (!okCatch) console.log('        ' + wrong.out.split('\n').filter((l) => /名單/.test(l)).join(' ｜ '));
+
+  const reworded = await run1('這一份完全沒有提到閒置的規則。\n');
+  const okLoud = reworded.code === 1 && /找不到閒置名單的說法/.test(reworded.out);
+  if (!okLoud) failed++;
+  console.log(`  ${okLoud ? '\u2713' : 'X'} 文件換了寫法時說「這一格沒有在守」，不是安靜通過`);
+  if (!okLoud) console.log('        ' + reworded.out.split('\n').filter((l) => /名單|沒有在守/.test(l)).join(' ｜ '));
+
+  await rm(dir, { recursive: true, force: true });
+}
+
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
 process.exit(failed > 0 ? 1 : 0);
 

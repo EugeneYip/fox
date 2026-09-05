@@ -1083,6 +1083,54 @@ for await (const file of htmlFiles(DIST)) {
  */
 for (const id of RULE_IDS) if (!subjects.has(id)) subjects.set(id, 0);
 
+/*
+ * ── 文件抄了一份閒置名單，而這裡每次都算得出來 ──────────
+ *
+ * `docs/A11Y.md` 寫著「跑完還會列出『這次沒有東西可看的規則』
+ * （目前 3 條：aria-ref、img-alt、positive-tabindex）」。
+ *
+ * 那份名單**每跑一次就重算一次**，就在下面幾行。文件裡那一份是手抄的快照 ——
+ * 站上哪天多一張圖，`img-alt` 就不再閒置，而文件不會知道。
+ *
+ * 第 1 輪（第三十三圈）在同一份文件上守住了「幾條規則」那個數字，
+ * 但沒有守這份**清單**。第三十四圈問「這個答案系統裡已經有了嗎」——
+ * 有，就在這支腳本手上，只是沒有拿去跟文件對。
+ *
+ * 只在掃真的 `dist/` 時比對：測試會拿 `--dir=` 指向暫存語料，
+ * 那種語料的閒置名單本來就跟站上不一樣，比對它沒有意義。
+ */
+const idleRules = [...subjects.entries()].filter(([, n]) => n === 0).map(([id]) => id).sort();
+let docDrift = false;
+/* `--doc=` 是給測試用的：帶了它就比對那一份，`--dir=` 的語料才驗得到這一格 */
+const docOverride = process.argv.find((a) => a.startsWith('--doc='))?.slice('--doc='.length);
+if (docOverride !== undefined || !process.argv.some((a) => a.startsWith('--dir='))) {
+  const docPath = docOverride === undefined ? resolve(ROOT, 'docs/A11Y.md') : resolve(docOverride);
+  const doc = await readFile(docPath, 'utf8').catch(() => '');
+  /* 「（目前 N 條：a、b、c）」——括號裡那一串就是被抄下來的答案 */
+  const claim = /這次沒有東西可看的規則」（目前 \d+ 條：\s*([^）]+)）/.exec(doc.replace(/\n/g, ''));
+  if (doc === '') {
+    console.log('\n⚠ 讀不到 docs/A11Y.md —— 閒置名單沒有跟文件對過。');
+  } else if (!claim) {
+    console.log(
+      '\n⚠ docs/A11Y.md 裡找不到閒置名單的說法 —— 這一格沒有在守。\n' +
+        '  文件換了寫法的話，這裡的樣式要跟著改（不然它會安靜地什麼都不比）。',
+    );
+    docDrift = true;
+  } else {
+    const listed = claim[1].split(/[、，,]/).map((t) => t.replace(/[`\s]/g, '')).filter(Boolean).sort();
+    if (listed.join('|') !== idleRules.join('|')) {
+      docDrift = true;
+      console.log(
+        `\n✗ docs/A11Y.md 的閒置名單過期了。\n` +
+          `      文件寫：${listed.join('、') || '（空的）'}\n` +
+          `      實際是：${idleRules.join('、') || '（一條都沒有）'}\n` +
+          '      那份名單這支腳本每次都會重算 —— 文件裡那一份是手抄的快照。\n' +
+          '      改法：把 docs/A11Y.md「跑完還會列出」那一段的括號內容換成上面實際的那幾條。',
+      );
+    }
+  }
+}
+
 // ── 輸出 ──────────────────────────────────────────────
 
 /*
@@ -1185,7 +1233,7 @@ if (findings.length === 0) {
     console.log('要看每條規則實際判斷過幾個元素：npm run check:a11y -- --verbose\n');
   }
 
-  const idle = [...subjects.entries()].filter(([, n]) => n === 0).map(([id]) => id).sort();
+  const idle = idleRules;
   if (idle.length > 0) {
     console.log(
       `這次沒有東西可看的規則（${idle.length} 條）：${idle.join('、')}\n` +
@@ -1203,7 +1251,7 @@ console.log(
     '  焦點框本身已經自動守住了 —— focus-outline-removed 這條規則，\n' +
     '  加上 check:contrast 會算焦點色在深淺兩套下的對比）\n',
 );
-  process.exit(0);
+  process.exit(docDrift ? 1 : 0);
 }
 
 /** 同一個問題常常每一頁都出現一次，合併起來看才有意義 */
@@ -1280,4 +1328,4 @@ if (findings.length > 0) {
       '      grep -rn "poem__original" src/\n',
   );
 }
-process.exit(errors.length > 0 ? 1 : 0);
+process.exit(errors.length > 0 || docDrift ? 1 : 0);
