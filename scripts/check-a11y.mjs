@@ -989,7 +989,20 @@ for (const id of RULE_IDS) if (!subjects.has(id)) subjects.set(id, 0);
 
 // ── 輸出 ──────────────────────────────────────────────
 
-console.log('\n無障礙靜態檢查（' + pageCount + ' 頁）\n' + '='.repeat(72));
+/*
+ * ── 標題要說「幾條規則」，不只是「幾頁」 ──────────
+ *
+ * 第 1 輪（第二十九圈）問「第一次跑的人跟第一百次跑的人看到的是同一份
+ * 東西嗎」。量了一次綠燈的輸出：這一支只說「44 頁」，**沒說跑了幾條規則**。
+ * 而 `check:copy` 說「掃了 61 個檔案、13646 行」、`check:links` 說
+ * 「44 頁、1263 個站內連結」—— 這一支是少數不說自己判斷過多少的。
+ *
+ * 這個 repo 從第二十一圈起的整套規矩就是「綠燈不說明判斷過什麼，
+ * 等於沒說」。標題是第一次跑的人唯一一定會看到的地方。
+ */
+console.log(
+  '\n無障礙靜態檢查（' + pageCount + ' 頁、' + RULE_IDS.length + ' 條規則）\n' + '='.repeat(72),
+);
 
 /*
  * ── 一頁都沒有，那不是「沒有問題」──────────────────
@@ -1058,6 +1071,22 @@ if (findings.length === 0) {
     console.log('每條規則實際判斷過的元素數：');
     for (const [id, n] of rows) console.log(`  ${String(n).padStart(5)}  ${id}`);
     console.log('');
+  }
+
+  /*
+   * ── 那個能回答「到底判斷過多少東西」的旗標，要說得出口 ──────────
+   *
+   * `--verbose` 會印出每條規則實際判斷過幾個元素（link-name 899 個、
+   * heading-order 161 個⋯⋯）—— 那正是「綠燈代表什麼」的答案。
+   *
+   * 第 1 輪（第二十九圈）量到：七支關卡裡**六支有 --verbose，而輸出
+   * 從來不提它**（只有 check:contrast 提）。也就是說老手知道要打，
+   * 第一次跑的人不知道那個東西存在。
+   *
+   * 一行就能讓它被看見。
+   */
+  if (!VERBOSE) {
+    console.log('要看每條規則實際判斷過幾個元素：npm run check:a11y -- --verbose\n');
   }
 
   const idle = [...subjects.entries()].filter(([, n]) => n === 0).map(([id]) => id).sort();

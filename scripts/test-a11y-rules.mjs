@@ -793,6 +793,39 @@ try {
 }
 
 console.log('─'.repeat(64));
+/*
+ * ── 第一次跑的人看得到什麼 ──────────
+ *
+ * 第 1 輪（第二十九圈）問「第一次跑的人跟第一百次跑的人看到的是同一份
+ * 東西嗎」。量了一次綠燈的輸出，兩件事：
+ *
+ * 一、標題只說「44 頁」，**沒說跑了幾條規則** —— 而 `check:copy` 說
+ *     「掃了 61 個檔案、13646 行」、`check:links` 說「44 頁、1263 個連結」。
+ * 二、七支關卡裡**六支有 `--verbose` 而輸出從來不提它**。
+ *     那個旗標印的正是「每條規則實際判斷過幾個元素」——
+ *     也就是「綠燈代表什麼」的答案。老手知道要打，第一次跑的人不知道它存在。
+ *
+ * 這兩格守的是那兩句話還在。
+ */
+{
+  const dir = await mkdtemp(join(tmpdir(), 'a11y-firsttime-'));
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, 'index.html'), page({ body: '<p>內文。</p>' }), 'utf8');
+  const out = await runCheck(dir);
+
+  const okCount = /\d+ 頁、\d+ 條規則/.test(out);
+  if (!okCount) failed++;
+  console.log(`  ${okCount ? '✓' : 'X'} 標題說得出「幾頁、幾條規則」`);
+  if (!okCount) console.log('        ' + out.split('\n').slice(0, 4).join(' | '));
+
+  const okVerbose = /--verbose/.test(out);
+  if (!okVerbose) failed++;
+  console.log(`  ${okVerbose ? '✓' : 'X'} 綠燈時說得出怎麼看「判斷過多少東西」（--verbose）`);
+  if (!okVerbose) console.log('        ' + out.split('\n').filter(Boolean).slice(0, 6).join(' | '));
+
+  await rm(dir, { recursive: true, force: true });
+}
+
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
 process.exit(failed > 0 ? 1 : 0);
 
