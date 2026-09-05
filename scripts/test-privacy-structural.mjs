@@ -159,6 +159,45 @@ const CASES = {
     },
   },
   /*
+   * ── 第 5 輪（第三十六圈）補的三格 ──────────
+   *
+   * 那時量到：這條規則只讀 `.html`，而且只認**標籤屬性**。
+   * dist 有 61 個檔案、讀到 44 個；那 44 個裡有 82 個內嵌 `<style>`，
+   * 裡面的 `url()` 一個都看不到 —— 而這個站的樣式就是內嵌的。
+   *
+   * 實測過後果：在讀者真的會下載的那份 CSS 最前面加一行 Google Fonts 的
+   * `@import`，七支檢查**全部綠燈**。這三格各釘住一條當時漏掉的路。
+   */
+  'built-third-party-request（內嵌 <style> 裡的 url()）': {
+    check: 'built-third-party-request',
+    files: {
+      'dist/index.html':
+        '<!DOCTYPE html><html lang="zh"><head><meta http-equiv="content-security-policy" content="default-src \'none\'">' +
+        '<title>x</title><style>.x{background:url("https://cdn.jsdelivr.net/a.png")}</style></head><body>x</body></html>',
+    },
+  },
+  'built-third-party-request（dist 的 .css 用 @import）': {
+    check: 'built-third-party-request',
+    files: {
+      'dist/_astro/x.css': '@import url("https://fonts.googleapis.com/css2?family=X");\n.a{color:red}\n',
+    },
+  },
+  /* 瀏覽器自己會去抓 manifest 的圖示，而它是 JSON —— 標籤那幾個樣式都認不出來 */
+  'built-third-party-request（webmanifest 的外部圖示）': {
+    check: 'built-third-party-request',
+    files: {
+      'dist/site.webmanifest':
+        '{"name":"x","icons":[{"src":"https://cdn.jsdelivr.net/icon.png","sizes":"96x96"}]}\n',
+    },
+  },
+  /* 通訊協定相對網址（`//host/x`）照樣會發請求，而 new URL() 收不下它 */
+  'built-third-party-request（//host 這種寫法）': {
+    check: 'built-third-party-request',
+    files: {
+      'dist/_astro/y.css': '.a{background:url(//cdn.jsdelivr.net/b.png)}\n',
+    },
+  },
+  /*
    * 掃描目錄裡出現一個沒人認得的副檔名。
    *
    * 第 5 輪（第十圈）的實測：同一組探針放進 `public/site.webmanifest`

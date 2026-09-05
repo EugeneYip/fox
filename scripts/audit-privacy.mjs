@@ -239,11 +239,54 @@ const saw = (/** @type {string} */ id, /** @type {number} */ n) =>
  * ── 建置產物的第三方請求 ────────────────────────────────
  *
  * 「零第三方請求」是硬性限制，但前面的規則只看原始碼。
- * 這一段直接看 dist/ 的 HTML：會真的發出請求的屬性
- * （src / href 的 stylesheet、preload、iframe…）指到外部網域就是違規。
+ * 這一段直接看 dist/：會真的發出請求的寫法指到外部網域就是違規。
  *
  * 純粹的 <a href> 不算 —— 那是使用者按了才會去，本來就是外連。
+ *
+ * ── 第 5 輪（第三十六圈）補的兩塊 ──────────
+ *
+ * 原本這一段只讀 `.html`，而且只認**標籤屬性**（src／data／link href）。
+ * 量出來的缺口：dist 有 61 個檔案，讀到的是 44 個；
+ * 而那 44 個裡有 **82 個內嵌 `<style>` 區塊**，裡面的 `url()` 一個都看不到
+ * —— 這個站的樣式是內嵌的（`inlineStylesheets: 'auto'`），
+ * 所以「看得到標籤、看不到樣式」等於漏掉讀者真的會下載的那一半。
+ *
+ * 實測過那個後果：在 `dist/_astro/*.css` 最前面加一行
+ * `@import url("https://fonts.googleapis.com/css2?…")`，
+ * 也就是**每一個讀者都會下載到的那份 CSS**，然後跑全部七支檢查 ——
+ * `audit:privacy` 說「必須修正 0」，`check:perf`、`check:a11y`、
+ * `check:content`、`check:copy`、`check:links` 一個字都沒說。
+ * 這個專案的第一條硬性限制，在產出那一端沒有人在守。
+ *
+ * 所以現在多做兩件事：
+ *   1. 讀 dist 裡**會出貨的文字檔**（css／webmanifest／json／txt／svg），不只 html
+ *   2. 認 `url()` 與 `@import` —— 不管它在 .css 裡還是在內嵌的 `<style>` 裡
+ *
+ * 二進位（png／ico）與內容檔（xml 的 RSS／sitemap）不讀：
+ * feed 裡的外部網址是**內容**（她的影片連結），不是請求。
  */
+/**
+ * dist 裡**每一個**檔案的副檔名分佈（不經過 SCAN_EXT 的篩子）。
+ *
+ * 要另外走一次的理由：`walk()` 自己就用 SCAN_EXT 篩過了，
+ * 所以在那個迴圈裡數「跳過幾個」永遠是 0 —— 那會是一個假的數字，
+ * 而假的 0 比不說更糟（讀起來像「全部都讀了」）。
+ */
+const distExt = /** @type {Map<string, number>} */ (new Map());
+if (existsSync(resolve(ROOT, 'dist'))) {
+  /** @param {string} dir @returns {AsyncGenerator<string>} */
+  async function* rawWalk(dir) {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const full = resolve(dir, entry.name);
+      if (entry.isDirectory()) yield* rawWalk(full);
+      else yield full;
+    }
+  }
+  for await (const f of rawWalk(resolve(ROOT, 'dist'))) {
+    const e = extname(f) || '（沒有副檔名）';
+    distExt.set(e, (distExt.get(e) ?? 0) + 1);
+  }
+}
 if (existsSync(resolve(ROOT, 'dist'))) {
   const LOADING = /<(?:script|iframe|img|source|video|audio|embed|object)\b[^>]*\b(?:src|data)\s*=\s*"(https?:\/\/[^"]+)"/gi;
   const LINKS = /<link\b[^>]*\bhref\s*=\s*"(https?:\/\/[^"]+)"[^>]*>/gi;
@@ -285,8 +328,18 @@ if (existsSync(resolve(ROOT, 'dist'))) {
     );
   }
 
+  /*
+   * `url(https://…)` 與 `@import` —— CSS 裡「會自己發出請求」的兩種寫法。
+   * 放在這裡而不是 privacy-rules.mjs，是因為它只對**產出**成立：
+   * 原始碼那一端已經有 google-fonts／third-party-cdn 在守。
+   */
+  const CSS_URL = /url\(\s*["']?(https?:)?\/\/[^)"']+/gi;
+  const CSS_IMPORT = /@import\s+(?:url\(\s*)?["'](https?:)?\/\/[^"']+/gi;
+  /** dist 裡會出貨、而且讀得懂的純文字 —— 二進位與 feed 不在內（理由見上面） */
+  const BUILT_TEXT = new Set(['.html', '.css', '.webmanifest', '.json', '.txt', '.svg', '']);
+
   for await (const file of walk(resolve(ROOT, 'dist'))) {
-    if (!file.endsWith('.html')) continue;
+    if (!BUILT_TEXT.has(extname(file))) continue;
     saw('built-third-party-request', 1);
     const rel = relative(ROOT, file);
     const text = await readFile(file, 'utf8');
@@ -296,6 +349,23 @@ if (existsSync(resolve(ROOT, 'dist'))) {
     for (const m of text.matchAll(LINKS)) {
       // canonical / alternate 只是宣告，不會發出請求
       if (!SAFE_REL.test(m[0])) hits.push([m[1], m[0]]);
+    }
+    /*
+     * 整份檔案一起掃，不先切出 `<style>` ——
+     * `url(https://…)` 不管出現在哪裡都是一個請求，
+     * 而切區塊反而會漏掉 `style="background:url(…)"` 那種寫在屬性裡的。
+     */
+    for (const m of text.matchAll(CSS_URL)) hits.push([m[0].replace(/^url\(\s*["']?/i, ''), m[0]]);
+    for (const m of text.matchAll(CSS_IMPORT)) hits.push([m[0].replace(/^@import\s+(?:url\(\s*)?["']/i, ''), m[0]]);
+    /*
+     * webmanifest 的圖示是瀏覽器自己會去抓的（安裝、加到主畫面、分頁圖示），
+     * 而它是 JSON —— 上面每一個樣式都認不出來。
+     * 只對 .webmanifest 這樣讀：`search-index.json` 裡的網址是**內容**，不是請求。
+     */
+    if (extname(file) === '.webmanifest') {
+      for (const m of text.matchAll(/"(?:src|url)"\s*:\s*"((?:https?:)?\/\/[^"]+)"/gi)) {
+        hits.push([m[1], m[0]]);
+      }
     }
 
     /* 承諾 vs 事實：外部的 <a> 有沒有帶著隱私頁說的那個 rel */
@@ -328,17 +398,23 @@ if (existsSync(resolve(ROOT, 'dist'))) {
       }
     }
 
+    /* 同一行的 `@import url(…)` 兩個樣式都會配到，報一次就好 */
+    const reported = new Set();
     for (const [url, tag] of hits) {
       let host;
       try {
-        host = new URL(url).host;
+        /* `//host/x` 是通訊協定相對網址 —— 照樣會發請求，但 new URL 收不下 */
+        host = new URL(url.startsWith('//') ? `https:${url}` : url).host;
       } catch {
         continue;
       }
       if (host.endsWith('bellafoxy.com')) continue;
+      const lineNo = text.slice(0, text.indexOf(tag)).split('\n').length;
+      if (reported.has(`${host}@${lineNo}`)) continue;
+      reported.add(`${host}@${lineNo}`);
       findings.push({
         rel,
-        lineNo: text.slice(0, text.indexOf(tag)).split('\n').length,
+        lineNo,
         line: tag.slice(0, 110),
         matched: host,
         rule: {
@@ -1646,6 +1722,33 @@ const exempt = [...ALLOWLIST].filter((rel) => existsSync(resolve(ROOT, rel))).le
 console.log(
   `\n掃了 ${scanned} 個檔案（另外 ${exempt} 個在豁免名單上，沒掃）、${subjects.size} 條規則。`,
 );
+
+/*
+ * ── 產出那一端的邊界，要自己說出口 ──────────────────
+ *
+ * 第 5 輪（第三十六圈）問「這道檢查的邊界外面是什麼？那裡現在有幾個？」
+ *
+ * 上面那一行講的是**原始碼**。而讀者拿到的是 `dist/`，
+ * 那是另一個語料、另一個涵蓋範圍 —— 不說的話，「必須修正 0」
+ * 讀起來像是連出貨的東西都掃過了。
+ */
+const built = subjects.get('built-third-party-request') ?? 0;
+if (built > 0) {
+  const total = [...distExt.values()].reduce((n, v) => n + v, 0);
+  const skipped = total - built;
+  console.log(
+    `產出那一端另外讀了 dist 的 ${built}／${total} 個檔案` +
+      `（html／css／webmanifest／json／txt／svg 這幾種會出貨的純文字）。\n` +
+      `  沒讀的 ${skipped} 個：` +
+      [...distExt.entries()]
+        .filter(([e]) => !['.html', '.css', '.webmanifest', '.json', '.txt', '.svg', '（沒有副檔名）'].includes(e))
+        .sort((a, b) => b[1] - a[1])
+        .map(([e, n]) => `${e} ${n}`)
+        .join('、') +
+      '\n  —— 二進位（png／ico）讀不出字；xml 是 feed 與 sitemap，那裡的外部網址是\n' +
+      '  **內容**（她的影片連結）不是請求，所以刻意不掃。',
+  );
+}
 
 /*
  * ── 這次哪幾條一個東西都沒判斷過 ──────────────────
