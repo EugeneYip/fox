@@ -1289,7 +1289,7 @@ const SYNC_STALE_DAYS = 3;
   if (raw === null) {
     notes.push('同步資料的新舊沒有檢查：讀不到 src/data/syndication.json。');
   } else {
-    /** @type {{ generatedAt?: string }} */
+    /** @type {{ generatedAt?: string, sources?: Record<string, { lastSuccessAt?: string | null, status?: string }> }} */
     let data = {};
     try {
       data = JSON.parse(raw);
@@ -1318,6 +1318,54 @@ const SYNC_STALE_DAYS = 3;
             '    /colophon 仍然會說「來源狀態：N 個正常」—— 那是**上一次真的跑過**時記下的，\n' +
             '    所以排程停掉跟排程健康在那一頁上長得一樣。\n' +
             '    改法：跑一次 npm run sync；如果是排程本身停了，去 GitHub 的 Actions 看 sync-feeds.yml。',
+        );
+      }
+
+      /*
+       * ── 上面那個鬧鐘看的是「排程有沒有跑」，不是「來源有沒有活著」──
+       *
+       * 第 4 輪（第三十圈）量到的：`sync-feeds.yml` **終於第一次觸發了**
+       * （2026-09-05 04:07 UTC，排程 `0 0,12` 遲了四個多小時），
+       * 而那一次的紀錄是 `status: "error"` —— YouTube 的 feed 回 404。
+       *
+       * 那次執行是**綠的**：`npm run sync` 在來源全部失敗時離開碼仍然是 0
+       * （實測），commit message 還寫「共 9 筆」。站上不受影響（沿用快取）。
+       *
+       * 問題在這裡：**`generatedAt` 每跑一次就更新，不管來源成不成功。**
+       * 排程一天兩次，所以上面那個「3 天沒更新」的鬧鐘從今天起**永遠不會響**
+       * —— 即使這個來源已經死了好幾個月。
+       *
+       * 鬧鐘的錶被它要監視的東西自己撥快了。
+       *
+       * 而真正能回答「上次真的拿到資料是什麼時候」的欄位一直都在：
+       * `lastSuccessAt`。`sync-core.mjs` 會寫它、失敗時刻意保住舊值、
+       * `lib/syndication.ts` 有型別、`test-sync-core.mjs` 有兩格在守它 ——
+       * **然後沒有任何一個地方讀它來報警。**
+       *
+       * 沿用同一個 3 天的門檻（不另訂一個），一樣只說話、不擋。
+       */
+      const sources = Object.entries(data.sources ?? {});
+      /** @type {string[]} */
+      const cold = [];
+      for (const [id, st] of sources) {
+        const last = st?.lastSuccessAt ? Date.parse(st.lastSuccessAt) : NaN;
+        if (Number.isNaN(last)) {
+          cold.push(`      · ${id} —— **從來沒有成功過**（lastSuccessAt 是空的）`);
+          continue;
+        }
+        const quiet = (Date.now() - last) / 86_400_000;
+        if (quiet > SYNC_STALE_DAYS) {
+          cold.push(`      · ${id} —— 上次真的拿到資料是 ${quiet.toFixed(1)} 天前`);
+        }
+      }
+      if (cold.length > 0) {
+        notes.push(
+          `${sources.length} 個來源裡，**${cold.length} 個已經超過 ${SYNC_STALE_DAYS} 天沒有成功過**：\n` +
+            cold.join('\n') +
+            '\n    這跟上面那句不是同一件事：`generatedAt` 每跑一次就更新（不管成不成功），\n' +
+            '    所以排程活著的時候，那個鬧鐘永遠不會為「來源死掉」響。\n' +
+            '    網站不會壞（沿用快取），但顯示的東西會停在那一天。\n' +
+            '    改法：npm run verify -- --patterns 實際打一次；真的持續不通再考慮設 YOUTUBE_API_KEY。',
         );
       }
     }

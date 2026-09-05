@@ -911,6 +911,67 @@ try {
     await withSync('同步資料放很久：說出來（但不擋）', stale, (out) => /同步的資料已經 [\d.]+ 天沒更新/.test(out));
     await withSync('同步資料是新的：不說那句話（反向案例）', fresh, (out) => !/天沒更新/.test(out));
     await withSync('沒有那個檔案：說「沒有檢查」而不是安靜跳過', null, (out) => /同步資料的新舊沒有檢查/.test(out));
+
+    /*
+     * ── 來源死掉，跟排程停掉，是兩件事 ────────────────
+     *
+     * 第 4 輪（第三十圈）：`generatedAt` 每跑一次就更新，不管來源成不成功。
+     * 排程一天兩次，所以上面那個「3 天沒更新」的鬧鐘在排程活著的時候
+     * **永遠不會響** —— 來源死了幾個月也一樣。
+     *
+     * 第一格是這件事的證明：`generatedAt` 是新的、`lastSuccessAt` 是舊的。
+     * 舊的判準在那一格完全安靜。
+     */
+    /**
+     * @param {string} label
+     * @param {unknown} json 整份 syndication.json
+     * @param {(out: string) => boolean} want
+     */
+    const withJson = async (label, json, want) => {
+      const dir = await build(`cold-${label}`, {
+        content: { 'poems/wu-yi-xiang.md': poem() },
+        dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花') },
+      });
+      const at = join(dir, 'src/data');
+      await mkdir(at, { recursive: true });
+      await writeFile(join(at, 'syndication.json'), JSON.stringify(json), 'utf8');
+      const { out } = await checkWithCode(dir, [`--syndication=${join(at, 'syndication.json')}`]);
+      const ok = want(out);
+      if (!ok) failed++;
+      console.log(`  ${ok ? '✓' : 'X'} ${label}`);
+      if (!ok) {
+        const said = out.split('\n').filter((l) => /來源|成功|天沒更新/.test(l)).join(' ｜ ');
+        console.log('        ' + (said || '（完全沒提到來源）'));
+      }
+      await rm(dir, { recursive: true, force: true });
+    };
+
+    /* `fresh` 這個名字外面那一格已經用掉了 —— 型別關卡當場說 ts(2451) */
+    const justNow = new Date(Date.now() - 6 * 3_600_000).toISOString();
+    const long = new Date(Date.now() - 20 * 86_400_000).toISOString();
+    const src = (/** @type {string | null} */ lastSuccessAt) => ({
+      generatedAt: justNow,
+      sources: { yt: { status: 'error', platform: 'youtube', itemCount: 9, lastSuccessAt, message: 'x' } },
+      items: [],
+    });
+
+    await withJson(
+      '排程是新的、來源 20 天沒成功：說出來（舊判準在這一格完全安靜）',
+      src(long),
+      (out) => /1 個已經超過 3 天沒有成功過/.test(out) && !/天沒更新/.test(out),
+    );
+    await withJson('來源剛剛才成功過：不說那句話（反向案例）', src(justNow), (out) => !/沒有成功過/.test(out));
+    await withJson(
+      'lastSuccessAt 是空的：說「從來沒有成功過」',
+      src(null),
+      (out) => /從來沒有成功過/.test(out),
+    );
+    /* 反向：一個來源都沒有的時候不要無中生有 */
+    await withJson(
+      '一個來源都沒有：不說那句話（反向案例）',
+      { generatedAt: justNow, sources: {}, items: [] },
+      (out) => !/沒有成功過/.test(out),
+    );
   }
 
   /*
