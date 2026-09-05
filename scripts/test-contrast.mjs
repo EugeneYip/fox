@@ -248,7 +248,7 @@ async function check(label, files, want) {
 }
 
 // 正常的 tokens 應該全過
-await check('原本的顏色全部合格', {}, { exit: 0, checked: 42 });
+await check('原本的顏色全部合格', {}, { exit: 0, checked: 44 });
 
 // 正文顏色改成幾乎跟底色一樣 → 一定要擋，而且只有用到 --c-ink 的那四組
 /*
@@ -301,7 +301,7 @@ await check(
   { tokens: withColor('--c-ink', '#f5f2ea', '#17150f') },
   {
     exit: 1,
-    checked: 42,
+    checked: 44,
     fails: [
       '淺色／正文', '淺色／卡片上的正文', '淺色／程式碼區塊', '淺色／選取範圍',
       '深色／正文', '深色／卡片上的正文', '深色／程式碼區塊', '深色／選取範圍',
@@ -315,7 +315,7 @@ await check(
   { tokens: withColor('--c-focus', '#f7ede2', '#1a1712') },
   {
     exit: 1,
-    checked: 42,
+    checked: 44,
     fails: ['淺色／鍵盤焦點框', '淺色／卡片上的焦點框', '深色／鍵盤焦點框', '深色／卡片上的焦點框'],
   },
 );
@@ -332,7 +332,7 @@ await check(
   { tokens: withColor('--c-ink', '#1f1c18', '#17150f') },
   {
     exit: 1,
-    checked: 42,
+    checked: 44,
     fails: ['深色／正文', '深色／卡片上的正文', '深色／程式碼區塊', '深色／選取範圍'],
   },
 );
@@ -351,7 +351,9 @@ await check(
     checked: 38, // 42 減掉算不出來的那 4 組
     missing: [
       '淺色／.faint（日期、註記）', '淺色／卡片上的 .faint',
+      '淺色／程式碼區塊／定義清單上的 .faint',
       '深色／.faint（日期、註記）', '深色／卡片上的 .faint',
+      '深色／程式碼區塊／定義清單上的 .faint',
     ],
   },
 );
@@ -375,7 +377,7 @@ await check(
   { tokens: withColor('--c-bg-raised', '#fffdf880', '#1d1a16') },
   {
     exit: 1,
-    checked: 36, // 42 減掉用到 --c-bg-raised 的那 6 組（只有淺色那一半壞掉）
+    checked: 38, // 44 減掉用到 --c-bg-raised 的那 6 組（只有淺色那一半壞掉）
     missing: [
       '淺色／卡片上的正文', '淺色／卡片上的次要文字', '淺色／卡片上的 .faint',
       '淺色／卡片上的連結', '淺色／卡片上的焦點框', '淺色／卡片上的輸入框邊界',
@@ -388,7 +390,7 @@ await check(
   { tokens: withColor('--c-bg-raised', '#abcd', '#1d1a16') },
   {
     exit: 1,
-    checked: 36,
+    checked: 38,
     missing: [
       '淺色／卡片上的正文', '淺色／卡片上的次要文字', '淺色／卡片上的 .faint',
       '淺色／卡片上的連結', '淺色／卡片上的焦點框', '淺色／卡片上的輸入框邊界',
@@ -487,7 +489,7 @@ await check(
     },
     {
       exit: 0,
-      checked: 42,
+      checked: 44,
       /* 死的那一組兩個都要列出來；活的那一組一個都不能列 */
       unusedHas: ['--probe-dead', '--probe-dead-part'],
       unusedHasNot: ['--probe-live', '--probe-live-part'],
@@ -538,13 +540,13 @@ await check(
 await check(
   'fallback 跟 light-dark() 的淺色值分岔時會擋',
   { tokens: realTokens.replace('  --c-bg-raised: #fffdf8;', '  --c-bg-raised: #ffffff;') },
-  { exit: 1, checked: 42, fallback: ['--c-bg-raised（不一致）'] },
+  { exit: 1, checked: 44, fallback: ['--c-bg-raised（不一致）'] },
 );
 
 await check(
   '有 light-dark() 卻沒有單值 fallback 時會擋',
   { tokens: realTokens.replace('  --c-bg-raised: #fffdf8;\n', '') },
-  { exit: 1, checked: 42, fallback: ['--c-bg-raised（缺）'] },
+  { exit: 1, checked: 44, fallback: ['--c-bg-raised（缺）'] },
 );
 
 /*
@@ -564,7 +566,7 @@ await check(
       '  /*\n  --c-bg-raised: #000000;\n  */\n  --c-bg-raised: light-dark(#fffdf8, #1d1a16);',
     ),
   },
-  { exit: 0, checked: 42 },
+  { exit: 0, checked: 44 },
 );
 
 /*
@@ -591,7 +593,7 @@ await check(
     ),
     global: realGlobal + '\n.zzz-probe { width: var(--zzz-never-used-more); }\n',
   },
-  { exit: 0, checked: 42, unusedHas: ['--zzz-never-used'], unusedHasNot: ['--zzz-never-used-more'] },
+  { exit: 0, checked: 44, unusedHas: ['--zzz-never-used'], unusedHasNot: ['--zzz-never-used-more'] },
 );
 await check(
   '有人用的 token 不會被列成沒人用',
@@ -599,7 +601,7 @@ await check(
     tokens: realTokens.replace(':root {', ':root {\n  --zzz-never-used: 1px;'),
     global: realGlobal + '\n.zzz-probe { width: var(--zzz-never-used); }\n',
   },
-  { exit: 0, checked: 42, unusedHasNot: ['--zzz-never-used'] },
+  { exit: 0, checked: 44, unusedHasNot: ['--zzz-never-used'] },
 );
 
 /*
@@ -618,7 +620,7 @@ await check(
       '$1  /*\n  --c-ink: light-dark(#faf6ee, #14120f);\n  */\n',
     ),
   },
-  { exit: 0, checked: 42 },
+  { exit: 0, checked: 44 },
 );
 
 /*
@@ -642,14 +644,14 @@ await check(
         '  --shadow-soft-near: light-dark(rgba(31, 28, 24, 0.04), rgb(0 0 0 / 0.3));',
       ),
   },
-  { exit: 0, checked: 42, fallback: [] },
+  { exit: 0, checked: 44, fallback: [] },
 );
 
 /* 反向：三位是合法的不透明短寫法，不能一起擋掉 */
 await check(
   '三位 hex 是合法的短寫法，照樣算得出來',
   { tokens: withColor('--c-bg-raised', '#fff', '#111') },
-  { exit: 0, checked: 42 },
+  { exit: 0, checked: 44 },
 );
 
 /*
@@ -671,7 +673,7 @@ await check(
      */
     extra: { 'src/components/content/Probe.astro': '<style>.zz-probe { color: var(--c-not-in-pairs); }</style>\n' },
   },
-  { exit: 1, checked: 42, coverage: ['--c-not-in-pairs'] },
+  { exit: 1, checked: 44, coverage: ['--c-not-in-pairs'] },
 );
 
 // 列印區塊只寫 :root（第 8 輪〔第三圈〕那個活了兩圈的 bug）
@@ -685,7 +687,7 @@ await check(
   },
   {
     exit: 1,
-    checked: 42,
+    checked: 44,
     /*
      * **兩個都要**。只要求「有東西缺」的話，「比對前不去掉 CSS 註解」
      * 那個突變會靜靜通過 —— 列印區塊的說明文字裡就寫著
@@ -1036,6 +1038,40 @@ console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
   if (!okCount) console.log('      ' + (local.out.split('\n').find((l) => l.includes('指到的 token')) ?? '（那一行沒印）'));
 
   await rm(dir, { recursive: true, force: true });
+}
+
+/*
+ * ── 那份表是手寫的，輸出要自己說出來 ────────────────
+ *
+ * 第 8 輪（第三十六圈）加的。這一支所有數字都算得準，
+ * 但算的是 **PAIRS 上有的那幾組** —— 而 PAIRS 是人手維護的。
+ * 那一輪在瀏覽器裡走了 4 頁，量到 10 種真的出現過的組合，
+ * 其中 1 種不在表上（`--c-ink-faint` 畫在 `--c-bg-sunken` 上，
+ * `/colophon` 的定義清單標題，淺色 4.52，門檻 4.5）。
+ *
+ * 綠燈不說這件事的話，「未達標 0 組」會被讀成「畫面上每一組都合格」。
+ */
+{
+  console.log('\n' + '─'.repeat(64));
+  /* 這一段不需要 fixture —— 那句話是無條件印的，所以直接對真的 repo 跑一次 */
+  const { stdout: out } = await run('node', [resolve(ROOT, 'scripts/check-contrast.mjs')])
+    .catch((/** @type {any} */ e) => ({ stdout: String(e?.stdout ?? '') }));
+
+  const okHand = /這份表是\*\*手寫\*\*的/.test(out);
+  if (!okHand) failed++;
+  console.log(`  ${okHand ? '✓' : 'X'} 說得出這份表是手寫的`);
+  if (!okHand) console.log('      ' + out.split('\n').filter(Boolean).slice(-4).join(' ｜ '));
+
+  const okBlind = /不知道畫面上真的畫了哪些組合/.test(out);
+  if (!okBlind) failed++;
+  console.log(`  ${okBlind ? '✓' : 'X'} 說得出它因此看不到什麼`);
+  if (!okBlind) console.log('      ' + out.split('\n').filter(Boolean).slice(-4).join(' ｜ '));
+
+  /* 有數字才是量過，「可能有漏」誰都會寫 */
+  const okNum = /走過 \d+ 頁實測/.test(out) && /出現 \d+ 種/.test(out);
+  if (!okNum) failed++;
+  console.log(`  ${okNum ? '✓' : 'X'} 那句話帶著實測的數字（幾頁、幾種）`);
+  if (!okNum) console.log('      ' + out.split('\n').filter(Boolean).slice(-4).join(' ｜ '));
 }
 
 process.exit(failed > 0 ? 1 : 0);
