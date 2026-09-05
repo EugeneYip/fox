@@ -56,6 +56,8 @@ const GUIDE = arg('guide') ?? resolve(ROOT, 'docs/CONTENT.md');
 const SYNDICATION = arg('syndication') ?? resolve(ROOT, 'src/data/syndication.json');
 /* `--src=` 同理，給 component-unreached 的案例換一份假的原始碼樹用 */
 const SRC = arg('src') ?? resolve(ROOT, 'src');
+/* `--astro=` 同理，給 locale-list-drift 的案例換一份假的 astro.config.mjs 用 */
+const ASTRO_CONFIG = arg('astro') ?? resolve(ROOT, 'astro.config.mjs');
 
 /** @param {string} dir @returns {AsyncGenerator<string>} */
 async function* walk(dir) {
@@ -980,6 +982,7 @@ const RULES = [
   'template-text-left',
   'field-undocumented',
   'vertical-lost',
+  'locale-list-drift',
 ];
 /*
  * ── schema 說詩詞預設直排，產出裡還有那條規則嗎 ──────────
@@ -1102,6 +1105,85 @@ servedCss += dedupedInlineStyles(built.filter((b) => b.path.endsWith('.html')).m
             '`min-width: 0` 這種永遠成立的條件不是條件。',
         });
       }
+    }
+  }
+}
+
+/*
+ * ── 語言清單寫在四個地方 ──────────────────────────────
+ *
+ * 第 3 輪（第三十一圈）量到的：`['zh-TW', 'en']` 這個清單存在於
+ *
+ *   src/config/site.ts        LOCALES —— 型別的來源
+ *   src/content.config.ts     z.enum([…]) —— 驗 frontmatter 的 lang
+ *   astro.config.mjs          i18n.locales —— 路由
+ *   astro.config.mjs          sitemap 的 locales{} —— hreflang 對照
+ *
+ * **四份，沒有任何東西檢查它們一樣。** 而「只有中文與英文」是這個專案
+ * 三條硬性限制之一，寫在 CLAUDE.md 與 AGENTS.md 裡 —— 只寫在散文裡。
+ *
+ * 四份不是有人選的：型別要一份、Zod 要一份、Astro 的路由要一份、
+ * sitemap 的對照表要一份，每一層各自需要，於是就變成四份。
+ * 它們也**沒辦法共用**：`astro.config.mjs` 是 ESM 設定檔，
+ * `content.config.ts` 跑在 Astro 的內容管線裡，都不方便 import 對方。
+ *
+ * 所以跟版面斷點那件事一樣：改不掉重複，就檢查它們一致。
+ * 差別在斷點那邊「全部要一樣」是錯的（站上真的有三種），
+ * 這邊**四份講的是同一件事**，不一樣就是 bug。
+ */
+{
+  /** @param {string} text @param {RegExp} re */
+  const listFrom = (text, re) => {
+    const m = re.exec(text);
+    if (!m) return null;
+    return [...m[1].matchAll(/['"]([\w-]+)['"]/g)].map((x) => x[1]);
+  };
+  /* 路徑走 SRC／ASTRO_CONFIG，不是寫死的 ROOT —— 不然測試換不掉，
+     這幾條規則就只驗得到真的 repo（而真的 repo 永遠是一致的）。 */
+  const readOr = async (/** @type {string} */ abs) => await readFile(abs, 'utf8').catch(() => '');
+  const siteTs = await readOr(resolve(SRC, 'config/site.ts'));
+  const contentTs = await readOr(resolve(SRC, 'content.config.ts'));
+  const astroCfg = await readOr(ASTRO_CONFIG);
+
+  /** @type {{ where: string, list: string[] | null }[]} */
+  const sources = [
+    { where: 'src/config/site.ts（LOCALES）', list: listFrom(siteTs, /LOCALES\s*=\s*\[([^\]]*)\]/) },
+    { where: 'src/content.config.ts（z.enum）', list: listFrom(contentTs, /z\.enum\(\s*\[([^\]]*)\]/) },
+    { where: 'astro.config.mjs（i18n.locales）', list: listFrom(astroCfg, /locales:\s*\[([^\]]*)\]/) },
+    {
+      where: 'astro.config.mjs（sitemap 的 locales）',
+      /* 這一份是對照表不是陣列，取它的鍵 —— `en: 'en'` 的鍵沒有引號，兩種都要認 */
+      list: (() => {
+        const m = /locales:\s*\{([^}]*)\}/.exec(astroCfg);
+        return m ? [...m[1].matchAll(/(?:['"]([\w-]+)['"]|\b([a-z]{2})\b)\s*:/g)].map((x) => x[1] ?? x[2]) : null;
+      })(),
+    },
+  ];
+  const found = sources.filter((x) => x.list !== null && x.list.length > 0);
+  saw('locale-list-drift', found.length);
+  if (found.length < sources.length) {
+    notes.push(
+      '語言清單只比對了 ' + found.length + '／' + sources.length + ' 份 —— 抽不到的：' +
+        sources.filter((x) => !found.includes(x)).map((x) => x.where).join('、') +
+        '。\n    不是「一致」，是**沒有比對到**。抽取的正則可能跟不上寫法了。',
+    );
+  }
+  if (found.length > 1) {
+    const key = (/** @type {string[]} */ l) => [...l].sort().join('|');
+    const base = key(/** @type {string[]} */ (found[0].list));
+    const off = found.slice(1).filter((x) => key(/** @type {string[]} */ (x.list)) !== base);
+    for (const x of off) {
+      problems.push({
+        file: x.where.replace(/（.*/, ''),
+        id: 'locale-list-drift',
+        msg:
+          `語言清單跟 ${found[0].where} 對不起來。\n` +
+          `      ${found[0].where}：${/** @type {string[]} */ (found[0].list).join('、')}\n` +
+          `      ${x.where}：${/** @type {string[]} */ (x.list).join('、')}\n` +
+          '      這四份講的是同一件事（型別、frontmatter 驗證、路由、hreflang 對照），\n' +
+          '      不一樣的話會出現「路由得到但型別沒有」或反過來的頁面。\n' +
+          '      改法：四個地方一起改 —— 但先確認真的要加語言（`不加日文` 是專案的硬性限制）。',
+      });
     }
   }
 }
@@ -1429,6 +1511,44 @@ const SYNC_STALE_DAYS = 3;
         '\n    CSS 沒辦法把斷點寫成變數（媒體查詢裡不能用 custom property），所以同一個數字'
         + '是一處一處寫的。\n    這裡不判斷對錯 —— 但一個只出現一次、又跟主要斷點只差一點的數字，'
         + '通常是打錯的。',
+    );
+  }
+}
+
+/*
+ * ── translationKey：填了，然後呢 ──────────────────────
+ *
+ * 第 3 輪（第三十一圈）問「是我們選的，還是它剛好長成這樣」。
+ *
+ * `content.config.ts` 的說明寫著「同一篇文章的中／英／日版本填一樣的
+ * translationKey，頁面就能自動互相連結」。實測：3 篇填了，
+ * **每一個 key 都只有一篇** —— `getTranslations()` 的
+ * `filter(e => e.data.translationKey === key && e.id !== entry.id)`
+ * 從來沒有回過非空的陣列。
+ *
+ * 那不是決定（沒有人決定「每篇各自獨立」），是**還沒有任何一篇被翻譯過**。
+ * 差別在於：填了 key 會讓這個機制看起來已經在跑。
+ *
+ * 這裡不擋 —— 填了 key 等著將來配對是完全正常的。只是把「幾組真的配成對」
+ * 說出來，免得「有人填了」被讀成「有在運作」。
+ */
+{
+  /** @type {Map<string, string[]>} */
+  const byKey = new Map();
+  for (const e of entries) {
+    const key = /^translationKey:\s*(.+?)\s*$/m.exec(e.text)?.[1]?.replace(/^['"]|['"]$/g, '');
+    if (!key) continue;
+    byKey.set(key, [...(byKey.get(key) ?? []), `${e.collection}/${e.slug}（${e.lang}）`]);
+  }
+  if (byKey.size > 0) {
+    const paired = [...byKey.values()].filter((v) => v.length > 1);
+    const filled = [...byKey.values()].reduce((n, v) => n + v.length, 0);
+    notes.push(
+      `translationKey：${filled} 篇填了、${byKey.size} 個 key，其中 **${paired.length} 組真的配成對**。\n` +
+        (paired.length === 0
+          ? '    也就是說跨語言互連那條路從來沒有跑過 —— 不是壞了，是還沒有任何一篇被翻譯過。\n' +
+            '    填了 key 會讓這個機制看起來已經在運作，所以這裡把數字說出來。'
+          : '    配成對的：' + paired.map((v) => v.join(' ↔ ')).join('、')),
     );
   }
 }

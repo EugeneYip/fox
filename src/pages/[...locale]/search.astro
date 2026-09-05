@@ -211,7 +211,11 @@ const strings = JSON.stringify({
 
   /**
    * 中文沒有空格分詞，所以不做斷詞，直接做子字串比對。
-   * 英文與日文用空白切成多個詞，全部都要命中（AND）。
+   * 英文用空白切成多個詞，全部都要命中（AND）。
+   *
+   * （原本寫「英文與日文用空白切成多個詞」。兩個地方不對：這個站沒有日文，
+   * 而且日文本來就不用空白分詞 —— 它跟中文一樣走上面那條路。
+   * 第 3 輪〔第三十一圈〕改掉。）
    */
   function score(item: IndexItem, terms: string[]): number {
     const title = item.t.toLowerCase();

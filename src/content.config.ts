@@ -12,8 +12,16 @@
  *             Threads 是 bridge 不是 manual —— 它有 RSSHub 路由，
  *             只是沒設 RSSHUB_BASE 的時候抓不到，那時也走這裡。
  *
- * 多語言用 translationKey 串起來：同一篇文章的中／英／日版本填一樣的
+ * 多語言用 translationKey 串起來：同一篇文章的中文版與英文版填一樣的
  * translationKey，頁面就能自動互相連結。不需要平行的資料夾結構。
+ *
+ * （原本這一句寫的是「中／英／日版本」。那個「日」是早期規劃的殘留 ——
+ * 站主 2026-09-02 明確說過不需要日文版，`ja` 已經全部移除，
+ * 而上面的 LOCALE 也只有兩個。第 3 輪〔第三十一圈〕改掉：
+ * **那不是一個選擇，是一個沒有人再看第二眼的字。**）
+ *
+ * 到 2026-09-05 為止：3 篇填了 translationKey，而**沒有任何兩篇共用同一個** ——
+ * 所以這條互連的路從來沒有真的跑過。`check:content` 每次跑都會把數字說出來。
  */
 import { defineCollection, reference } from 'astro:content';
 import { glob } from 'astro/loaders';

@@ -85,7 +85,10 @@ const REAL_GUIDE = await readFile(resolve(ROOT, 'docs/CONTENT.md'), 'utf8');
  * `mustMention` 是「報告裡必須提到的字串」—— 用來確認**涵蓋範圍**而不只是
  * 「有沒有響」。一條規則掃三種檔案型別時，只響一次證明不了三種都掃到了。
  *
- * @type {Record<string, { content: Record<string, string>, dist: Record<string, string>, also?: string[], mustMention?: string[], expect?: string, noIndex?: boolean, guide?: string }>}
+ * `extra` 是照原樣寫的相對路徑、`args` 是要多帶給腳本的旗標 ——
+ * 兩個一起用，才寫得出「比對 content／dist 以外的檔案」那種案例。
+ *
+ * @type {Record<string, { content: Record<string, string>, dist: Record<string, string>, also?: string[], mustMention?: string[], expect?: string, noIndex?: boolean, guide?: string, extra?: Record<string, string>, args?: (dir: string) => string[] }>}
  */
 const CASES = {
   'no-title': {
@@ -253,6 +256,25 @@ const CASES = {
    * 第 8 輪（第二十六圈）實測：把那一行改掉，六道關卡加兩套測試全綠，
    * 而全站的詩會變成橫排。誰會告訴我們？讀者，或者她。
    */
+  /*
+   * 語言清單寫在四個地方（site.ts 的型別、content.config 的 Zod、
+   * astro.config 的路由與 sitemap 對照），而沒有東西檢查它們一樣。
+   * 第 3 輪（第三十一圈）量到的。這一格讓其中一份多一個語言。
+   *
+   * 其餘三個情境（一致、少一個、抽不到）在底下的獨立區塊裡 ——
+   * 那幾格要驗的是筆記的措辭與離開碼，`CASES` 只比對「有沒有響」。
+   */
+  'locale-list-drift': {
+    content: { 'poems/wu-yi-xiang.md': poem() },
+    dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花') },
+    extra: {
+      'src/config/site.ts': "export const LOCALES = ['zh-TW', 'en'] as const;\n",
+      'src/content.config.ts': "const LOCALE = z.enum(['zh-TW', 'en', 'ja']).default('zh-TW');\n",
+      'astro.config.mjs':
+        "export default { i18n: { locales: ['zh-TW', 'en'] }, integrations: [sitemap({ i18n: { locales: { 'zh-TW': 'zh-Hant-TW', en: 'en' } } })] };\n",
+    },
+    args: (/** @type {string} */ dir) => [`--src=${join(dir, 'src')}`, `--astro=${join(dir, 'astro.config.mjs')}`],
+  },
   'vertical-lost': {
     content: { 'poems/wu-yi-xiang.md': poem() },
     dist: {
@@ -591,7 +613,8 @@ try {
      */
     const id = /** @type {any} */ (files).expect ?? label;
     const dir = await build(`case-${label}`, files);
-    const out = await check(dir);
+    /* `args` 讓案例換掉腳本讀的路徑（`--src=`、`--astro=`），配合上面的 extra */
+    const out = await check(dir, /** @type {any} */ (files).args?.(dir) ?? []);
     const hit = out.includes(`[${id}]`);
     const fired = [...new Set([...out.matchAll(/\[([a-z-]+)\]/g)].map((m) => m[1]))];
     const undeclared = fired.filter((x) => x !== id && !(files.also ?? []).includes(x));
@@ -971,6 +994,119 @@ try {
       '一個來源都沒有：不說那句話（反向案例）',
       { generatedAt: justNow, sources: {}, items: [] },
       (out) => !/沒有成功過/.test(out),
+    );
+  }
+
+  /*
+   * ── translationKey：填了，然後呢 ──────────────────────
+   *
+   * 第 3 輪（第三十一圈）量到：真的 repo 裡 3 篇填了 translationKey，
+   * 而每一個 key 都只有一篇 —— 跨語言互連那條路從來沒跑過。
+   *
+   * 「真的 repo 現在是 0」正是這一格必須存在的理由：突變「配成對的數字
+   * 一律印 0」在真站上看不出來，因為答案剛好就是 0。
+   * 所以這裡做一份**真的有配對**的語料。
+   */
+  {
+    /**
+     * @param {string} label
+     * @param {Record<string, string>} content
+     * @param {(out: string) => boolean} want
+     */
+    const withKeys = async (label, content, want) => {
+      const dir = await build(`tk-${label}`, {
+        content,
+        dist: Object.fromEntries(
+          Object.keys(content).map((k) => [
+            k.replace(/^poems\//, 'poems/').replace(/\.md$/, '/index.html'),
+            page('烏衣巷 — 朱雀橋邊野草花'),
+          ]),
+        ),
+      });
+      const out = await check(dir);
+      const ok = want(out);
+      if (!ok) failed++;
+      console.log(`  ${ok ? '✓' : 'X'} ${label}`);
+      if (!ok) {
+        const said = out.split('\n').filter((l) => l.includes('translationKey')).join(' ｜ ');
+        console.log('        ' + (said || '（完全沒提到 translationKey）'));
+      }
+      await rm(dir, { recursive: true, force: true });
+    };
+
+    const withKey = (/** @type {string} */ key, /** @type {string} */ lang) =>
+      poem({ lang }).replace('lang: ' + lang, `lang: ${lang}\ntranslationKey: ${key}`);
+
+    await withKeys(
+      '兩篇共用一個 key：說「1 組真的配成對」',
+      { 'poems/a.md': withKey('wu-yi', 'zh-TW'), 'poems/b.md': withKey('wu-yi', 'en') },
+      (out) => /2 篇填了、1 個 key，其中 \*\*1 組真的配成對\*\*/.test(out),
+    );
+    /* 反向：每個 key 各自獨立時要說 0，而且要講明那是「還沒被翻譯過」不是壞了 */
+    await withKeys(
+      '每個 key 各自獨立：說「0 組」並解釋（反向案例）',
+      { 'poems/a.md': withKey('aaa', 'zh-TW'), 'poems/b.md': withKey('bbb', 'zh-TW') },
+      (out) => /2 篇填了、2 個 key，其中 \*\*0 組真的配成對\*\*/.test(out) && /還沒有任何一篇被翻譯過/.test(out),
+    );
+  }
+
+  /*
+   * ── 語言清單的四份要一致 ────────────────────────────
+   *
+   * 第 3 輪（第三十一圈）量到 `['zh-TW', 'en']` 寫在四個地方
+   * （site.ts 的型別、content.config 的 Zod、astro.config 的路由與 sitemap 對照），
+   * 而沒有任何東西檢查它們一樣 —— 「只有中文與英文」是三條硬性限制之一，
+   * 卻只寫在散文裡。
+   *
+   * 這幾格用真的 ROOT 底下那四個檔案的**副本**，改其中一份再比對。
+   */
+  {
+    /**
+     * @param {string} label
+     * @param {Record<string, string>} files 相對於假 root 的路徑 → 內容
+     * @param {(out: string, code: number) => boolean} want
+     */
+    const withRoot = async (label, files, want) => {
+      const dir = await build(`loc-${label}`, {
+        content: { 'poems/wu-yi-xiang.md': poem() },
+        dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花') },
+      });
+      for (const [rel, body] of Object.entries(files)) {
+        await mkdir(dirname(join(dir, rel)), { recursive: true });
+        await writeFile(join(dir, rel), body, 'utf8');
+      }
+      const { out, code } = await checkWithCode(dir, [`--src=${join(dir, 'src')}`, `--astro=${join(dir, 'astro.config.mjs')}`]);
+      const ok = want(out, code);
+      if (!ok) failed++;
+      console.log(`  ${ok ? '✓' : 'X'} ${label}`);
+      if (!ok) {
+        const said = out.split('\n').filter((l) => /語言清單|locale-list/.test(l)).join(' ｜ ');
+        console.log('        ' + (said || `（完全沒提到語言清單，exit ${code}）`));
+      }
+      await rm(dir, { recursive: true, force: true });
+    };
+
+    const four = (/** @type {string} */ enumList) => ({
+      'src/config/site.ts': "export const LOCALES = ['zh-TW', 'en'] as const;\n",
+      'src/content.config.ts': `const LOCALE = z.enum([${enumList}]).default('zh-TW');\n`,
+      'astro.config.mjs':
+        "export default { i18n: { locales: ['zh-TW', 'en'] }, integrations: [sitemap({ i18n: { locales: { 'zh-TW': 'zh-Hant-TW', en: 'en' } } })] };\n",
+    });
+
+    await withRoot('四份一致：不報（反向案例）', four("'zh-TW', 'en'"), (out) => !/locale-list-drift/.test(out));
+    await withRoot(
+      '有一份少了語言：擋下來',
+      four("'zh-TW'"),
+      (out, code) => /locale-list-drift/.test(out) && code === 1,
+    );
+    /*
+     * 反向：抽不到的時候要說「沒有比對到」，不是安靜地當成一致 ——
+     * 一份抽不到就只剩三份在比，而輸出看起來跟四份全對一樣。
+     */
+    await withRoot(
+      '抽不到其中一份：說「沒有比對到」而不是安靜放行',
+      { ...four("'zh-TW', 'en'"), 'src/config/site.ts': 'export const LOCALES = ALL_LOCALES;\n' },
+      (out) => /語言清單只比對了 3／4 份/.test(out),
     );
   }
 
@@ -1361,6 +1497,18 @@ async function build(name, files) {
       await writeFile(full, body);
     }
   }
+  /*
+   * `files.extra` 是**照原樣寫的相對路徑**（不塞進 src/content 或 dist）。
+   * 第 3 輪（第三十一圈）加的：`locale-list-drift` 要比對的是
+   * `src/config/site.ts`、`src/content.config.ts`、`astro.config.mjs` ——
+   * 三個都不在 content／dist 底下，沒有這個就沒辦法寫成一格 CASE。
+   */
+  for (const [path, body] of Object.entries(/** @type {any} */ (files).extra ?? {})) {
+    const full = join(dir, path);
+    await mkdir(dirname(full), { recursive: true });
+    await writeFile(full, body);
+  }
+
   return dir;
 }
 
@@ -1384,7 +1532,7 @@ async function checkWithCode(dir, extra = []) {
 }
 
 /** @param {string} dir */
-async function check(dir) {
+async function check(dir, /** @type {string[]} */ extra = []) {
   const args = [
     resolve(ROOT, 'scripts/check-content.mjs'),
     `--dir=${join(dir, 'dist')}`,
@@ -1397,6 +1545,7 @@ async function check(dir) {
    */
   const guide = join(dir, 'guide.md');
   if (await readFile(guide, 'utf8').then(() => true, () => false)) args.push(`--guide=${guide}`);
+  args.push(...extra);
   try {
     const { stdout } = await run('node', args);
     return stdout;
