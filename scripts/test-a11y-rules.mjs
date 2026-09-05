@@ -1181,6 +1181,41 @@ console.log('─'.repeat(64));
   await rm(dir, { recursive: true, force: true });
 }
 
+/*
+ * ── 掃不到的那些連結，要數出來 ──────────
+ *
+ * 第 1 輪（第三十五圈）用第二種算法數 `<a href=`：整份 HTML 901 個，
+ * 關卡的 `link-name` 說 899。差的 2 個在 `<script>` 裡 —— `strip()` 先拿掉了，
+ * **899 是對的**。但那也表示前端拼出來的連結（搜尋結果）每一條規則都沒看過。
+ *
+ * 兩個方向：script 裡有連結時要說，沒有的時候不能亂說
+ * （只驗前者的話，一句「永遠都印」也會過）。
+ */
+{
+  const dir = await mkdtemp(join(tmpdir(), 'a11y-script-links-'));
+  await mkdir(dir, { recursive: true });
+
+  await writeFile(join(dir, 'index.html'), page({ body: '<p>內文。</p>' }), 'utf8');
+  const quiet = await runCheck(dir);
+  const okQuiet = !/寫在 <script> 裡/.test(quiet);
+  if (!okQuiet) failed++;
+  console.log(`  ${okQuiet ? '\u2713' : 'X'} script 裡沒有連結時不亂說`);
+  if (!okQuiet) console.log('        ' + (quiet.split('\n').find((l) => l.includes('script')) ?? ''));
+
+  await writeFile(
+    join(dir, 'index.html'),
+    page({ body: '<p>內文。</p><script>el.innerHTML = `<a href="/x">看</a>`;</script>' }),
+    'utf8',
+  );
+  const loud = await runCheck(dir);
+  const okLoud = /另有 1 個 <a href=…> 寫在 <script> 裡/.test(loud);
+  if (!okLoud) failed++;
+  console.log(`  ${okLoud ? '\u2713' : 'X'} script 裡有連結時數得出來（1 個）`);
+  if (!okLoud) console.log('        ' + (loud.split('\n').find((l) => l.includes('script')) ?? '（那一行沒印）'));
+
+  await rm(dir, { recursive: true, force: true });
+}
+
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
 process.exit(failed > 0 ? 1 : 0);
 

@@ -219,10 +219,30 @@ const saw = (rule, n) => subjects.set(rule, (subjects.get(rule) ?? 0) + n);
 
 let pageCount = 0;
 
+/*
+ * ── 被 strip() 拿掉的那一塊裡，有沒有連結 ──────────
+ *
+ * 第 1 輪（第三十五圈）用第二種算法數 `<a href=`：整份 HTML 是 901 個，
+ * 而關卡的 `link-name` 說 899。差的 2 個在 `<script>` 裡面 ——
+ * `strip()` 會先把 script 與 style 整段拿掉，**所以那 899 是對的**。
+ *
+ * 但追那 2 個的時候看到一件事：搜尋頁的前端會自己拼 `<a href=… target="_blank"
+ * rel=… >`，還會加一個 `<span aria-hidden="true">↗</span>`。
+ * 那是真的會出現在畫面上的連結，而**這一支的每一條規則都看不到它** ——
+ * 包括 `decorative-glyph-in-name`，那條規則存在的理由正好就是那個箭頭。
+ * （它今天是對的：箭頭有 `aria-hidden`。但那是人寫對的，不是檢查出來的。）
+ *
+ * 所以把這個盲點數出來、印在報告上。這一支的規矩是「綠燈要說出它涵蓋什麼」，
+ * 而「有幾個連結不在涵蓋範圍裡」正是那句話的另一半。
+ */
+let linksInScripts = 0;
+
 for await (const file of htmlFiles(DIST)) {
   const rel = relative(DIST, file);
   const raw = await readFile(file, 'utf8');
   const html = strip(raw);
+  linksInScripts +=
+    (raw.match(/<a\b[^>]*\shref\s*=/gi) ?? []).length - (html.match(/<a\b[^>]*\shref\s*=/gi) ?? []).length;
   pageCount++;
 
   // ── lang ───────────────────────────────────────────
@@ -1099,6 +1119,14 @@ for (const id of RULE_IDS) if (!subjects.has(id)) subjects.set(id, 0);
  * 只在掃真的 `dist/` 時比對：測試會拿 `--dir=` 指向暫存語料，
  * 那種語料的閒置名單本來就跟站上不一樣，比對它沒有意義。
  */
+if (linksInScripts > 0) {
+  console.log(
+    `\n另有 ${linksInScripts} 個 <a href=…> 寫在 <script> 裡（搜尋結果是前端拼出來的）。\n` +
+      '  這一支掃的是產出的 HTML，script 在掃之前就被拿掉了 —— 上面每一條規則都沒有看過它們。\n' +
+      '  那不是漏掉，是掃不到：那些連結要等使用者打字才存在。\n',
+  );
+}
+
 const idleRules = [...subjects.entries()].filter(([, n]) => n === 0).map(([id]) => id).sort();
 let docDrift = false;
 /* `--doc=` 是給測試用的：帶了它就比對那一份，`--dir=` 的語料才驗得到這一格 */
