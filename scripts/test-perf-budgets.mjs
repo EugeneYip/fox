@@ -907,6 +907,46 @@ for (const [key, value] of Object.entries(CASES)) {
   console.log(`  ${okStillGreen ? '\u2713' : 'X'} 加了那句說明之後這一支仍然是綠的（exit ${code}）`);
 }
 
+/*
+ * ── 請求數這條的邊界外面 ──────────
+ *
+ * 第 2 輪（第三十六圈）把產出裡所有會發出請求的寫法列了一次：
+ * 這條預算算 stylesheet／script src／img src，而 `rel="icon"` 那一類（132 個）
+ * 與 `rel="manifest"`（44 個）**也會發出請求，卻不在裡面**。
+ * 平均每頁 4 個 —— 也就是「單頁請求數 2」不是那一頁請求的全部。
+ *
+ * 不改判準（圖示只抓一次、快取很久），但那句話要在。
+ * 兩個方向：有那種連結時要說、沒有時不能亂說。
+ */
+{
+  const withIcons = await mkdtemp(join(tmpdir(), 'perf-uncounted-'));
+  await writeFile(
+    join(withIcons, 'index.html'),
+    page({
+      head:
+        '<link rel="icon" href="/favicon.ico">' +
+        '<link rel="apple-touch-icon" href="/a.png">' +
+        '<link rel="manifest" href="/site.webmanifest">',
+      body: '<p>x</p>',
+    }),
+    'utf8',
+  );
+  const loud = await check(withIcons);
+  const okLoud = /單頁請求數數不到的：1 頁合計還有 3 個/.test(loud);
+  if (!okLoud) failed++;
+  console.log(`  ${okLoud ? '\u2713' : 'X'} 圖示與 manifest 連結會被數出來說明（3 個）`);
+  if (!okLoud) console.log('        ' + (loud.split('\n').find((l) => l.includes('數不到')) ?? '（那一行沒印）'));
+  await rm(withIcons, { recursive: true, force: true });
+
+  const without = await mkdtemp(join(tmpdir(), 'perf-uncounted-none-'));
+  await writeFile(join(without, 'index.html'), page({ body: '<p>x</p>' }), 'utf8');
+  const quiet = await check(without);
+  const okQuiet = !/單頁請求數數不到的/.test(quiet);
+  if (!okQuiet) failed++;
+  console.log(`  ${okQuiet ? '\u2713' : 'X'} 沒有那種連結時不亂說`);
+  await rm(without, { recursive: true, force: true });
+}
+
   const clean = (await runPerf()).out;
   const okQuiet = !clean.includes('說明裡的數字過期');
   if (!okQuiet) failed++;

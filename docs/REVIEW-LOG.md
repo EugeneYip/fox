@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 46,000 行、2.4 MB、283 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 46,100 行、2.4 MB、284 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -46000,4 +46000,126 @@ X [svg-unnamed] 內嵌的 <svg> 既沒有 aria-hidden="true" 也沒有名字 ⋯
   workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：2 — 效能**
+
+### 2026-09-05 — 第 2 輪（第三十六圈）：效能
+
+**第三十六圈問：這道檢查的邊界外面是什麼？那裡現在有幾個？**
+判準：**這一支說得出「它看不到什麼」嗎？而那些東西現在有幾個？**
+
+`check:perf` 有 11 條預算。往外看兩層。
+
+#### 1. 檔案層：`dist/` 裡沒有任何一個檔案落在預算外（沒發現問題）
+
+把 61 個檔案逐個對照每條預算的判準：HTML 有自己的、`.css` 有、圖片有、
+text-like 有（`.xml`／`.json`／`.txt`／`.svg`／`.webmanifest`⋯⋯）、
+其餘非 HTML 非文字的落在「最大單一檔案」。
+
+**一條預算都沒 claim 的：0 個。** 三條互斥的預算加起來蓋滿了整個 `dist/`
+（那個分割是第 2 輪〔第三十五圈〕才確認過的）。
+
+#### 2. 請求層：邊界外面有 176 個
+
+「單頁請求數（不含 HTML）」算三種：`stylesheet`、`script src`、`img src`。
+把產出裡**所有會發出請求的寫法**列一次，44 頁合計：
+
+| 寫法 | 數量 | 算進去嗎 |
+|---|---|---|
+| `<link rel="stylesheet">` | 47 | ✓ |
+| `<script src>` | 0 | ✓ |
+| `<img src>` | 0 | ✓ |
+| **`<link rel="icon">` 那一類** | **132** | **✗** |
+| **`<link rel="manifest">`** | **44** | **✗** |
+| preload／modulepreload／preconnect | 0 | — |
+| iframe／video／audio／source／object／embed | 0 | — |
+| SVG 的 `<use href>` | 0 | — |
+| CSS 裡的 `url()`、`@font-face` | 0 | — |
+
+**176 個沒被算到，平均每頁 4.0 個。**
+
+也就是說「單頁請求數 **2** ／ 上限 4」讀起來像「這一頁只發 2 個請求」，
+而實際上每頁還有 3 個圖示連結與 1 個 manifest。
+
+#### 3. 不改判準，但把數字說出來
+
+圖示與 manifest 算不算「一次瀏覽的請求」是可以吵的 ——
+瀏覽器只抓一次、快取很久，把它們算進去會讓這條預算長期貼著上限而沒有意義。
+**那是站主對這條預算意圖的判斷，不是我該當場改的。**
+
+所以判準不動，加一行：
+
+```
+· 單頁請求數數不到的：44 頁合計還有 176 個 `rel="icon"`／`rel="manifest"` 連結
+  （平均每頁 4.0 個），也會發出請求。
+  它們只抓一次、快取很久，所以不算進這條預算 —— 但「2」不是這一頁請求的全部。
+```
+
+#### 4. 突變與測試
+
+| 突變 | 結果 |
+|---|---|
+| 讓那一行的條件永遠不成立 | 那句消失 → 測試紅 ✓ |
+
+測試兩格：fixture 放三個那種連結會數出「3 個」；沒有那種連結時不亂說。
+
+#### 5. 這一圈的問題，在這一層得到的答案
+
+跟第 1 輪同一個形狀，但答案的方向相反：
+第 1 輪的邊界外面是**沒有人守的東西**（99 個 SVG），這一輪是
+**刻意不守、但沒說出口的東西**（176 個圖示與 manifest 連結）。
+
+兩種都要說出來，而說法不一樣：前者要加規則，後者要加一句話。
+
+| | 之前 | 現在 |
+|---|---|---|
+| 檔案層的覆蓋 | 沒有人確認過 | 逐個對照過，0 個在預算外 |
+| 「單頁請求數 2」 | 讀起來像全部 | 旁邊說出還有 176 個不算在內 |
+| 測試 | —— | 2 格 |
+
+### 待辦（不屬於這一輪）
+
+- **圖示與 manifest 要不要算進「單頁請求數」？** 現在不算，理由是快取；
+  但那個上限（4）是在只數三種的前提下訂的。要改的話上限也要跟著重訂
+  （→ 站主）
+- 上一輪與更早的都還在（`<details>`／`<summary>` 各 44 個沒有規則在看、
+  `<time>` 82 個沒人看 `datetime`、涵蓋範圍算不出來要讓規則自己宣告、
+  `check:workflows` 的數字沒驗、「掃了 61 個檔案、13713 行」沒驗、
+  「身分規則：8 個值」不能印內容、`--patterns` 那 11 個平臺的「N 筆」沒驗、
+  `SCHEMA_STRUCTURAL` 與「走不到的是哪一個」還沒驗、
+  node 與 python 的 gzip 差 0.9% 沒人查過為什麼、
+  另外 22 個 a11y `--verbose` 數字還沒驗、搜尋結果的連結沒有任何無障礙檢查看過、
+  `tokens.css` 註解裡的對比值沒有東西在守、`domain-drift` 只看三份、
+  `rule-not-documented` 只守 id、`strictReferrerPolicy: false` 那條路沒有測試、
+  `verifiedAt` 仍然手寫、`field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、`docs/A11Y.md` 那三個瀏覽器量的數字沒人對、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `audit:privacy` 沒有 needles 時本機 exit 0、
+  我連續六次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  `test-ci-sim` 那一格在有負載時會紅、要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 10 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `check:perf` 那句「全是 favicon」是寫死的描述、7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  28 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、`related` 單向、schema 的必填／選填沒被選過、
+  11 條預算裡 5 條的上限是挑的、另外四支檢查的嚴重度、
+  `CoverImage` 的 `sizes` 用 40rem、
+  `check.yml` 跑過 0 次、`ci:sim` 只有手動跑、`ui.ts` 的 `en` 要不要必填、
+  `reveal('email')` 沒有人呼叫、4 條閒置豁免、本機 `ahead 48, behind 1`、
+  `npm run sync` 來源全失敗仍離開碼 0、排程遲了四小時只有一筆、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `VideoFacade` 一次都沒算繪過、`aria-live`／`role="status"` 沒有規則、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、`probe:served` 沒有自己的測試、
+  `--real-install` 成功路徑沒測試、視覺層 24 處實測沒重驗、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  真的開一次螢幕閱讀器聽、`CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：3 — 內容結構**

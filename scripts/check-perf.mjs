@@ -152,7 +152,33 @@ function requestParts(text) {
   ).length;
   const scripts = tagsOf('script').filter((t) => attrOf(t, 'src') !== null).length;
   const imgs = tagsOf('img').filter((t) => attrOf(t, 'src') !== null).length;
-  return { links, scripts, imgs, total: links + scripts + imgs };
+  /*
+   * ── 這條預算數不到的那幾種 ──────────
+   *
+   * 第 2 輪（第三十六圈）問「這道檢查的邊界外面是什麼、那裡有幾個」。
+   * 把產出裡所有會發出請求的寫法列一次，44 頁合計：
+   *
+   *   算進來的：stylesheet 47、script src 0、img src 0
+   *   **沒算的**：`rel="icon"` 那一類 132、`rel="manifest"` 44
+   *   一個都沒有的：preload、modulepreload、preconnect、iframe、
+   *                 video／audio／source、object／embed、SVG 的 `<use href>`、
+   *                 CSS 裡的 `url()`、`@font-face`
+   *
+   * 圖示與 manifest 算不算「一次瀏覽的請求」是可以吵的
+   * （瀏覽器只抓一次、而且快取很久），所以這裡**不改判準** ——
+   * 但把數字說出來，不然「單頁請求數 2」讀起來像「這一頁只發 2 個請求」，
+   * 而實際上每頁還有 3 個圖示連結與 1 個 manifest。
+   */
+  const uncountedLinks = tagsOf('link').filter((t) => {
+    const rel = (attrOf(t, 'rel') ?? '').split(/\s+/);
+    return (
+      rel.includes('icon') ||
+      rel.includes('apple-touch-icon') ||
+      rel.includes('shortcut') ||
+      rel.includes('manifest')
+    );
+  }).length;
+  return { links, scripts, imgs, uncountedLinks, total: links + scripts + imgs };
 }
 
 /*
@@ -877,10 +903,11 @@ console.log('  　　　　　第二頁起樣式表在快取裡，就只剩 HTML
 const reqTotals = pageStats.reduce(
   (a, p) => ({
     links: a.links + p.requests.links,
+    uncountedLinks: a.uncountedLinks + p.requests.uncountedLinks,
     scripts: a.scripts + p.requests.scripts,
     imgs: a.imgs + p.requests.imgs,
   }),
-  { links: 0, scripts: 0, imgs: 0 },
+  { links: 0, scripts: 0, imgs: 0, uncountedLinks: 0 },
 );
 /** @type {string[]} */
 const empty = [];
@@ -924,6 +951,21 @@ if (images.length > 0 && rendered.length === 0) {
         (live.length > 0
           ? `      數得到東西的只有 ${live.map((p) => p.name).join('、')} —— 這條預算的綠燈只涵蓋那些。`
           : '      也就是說這條預算這次**什麼都沒量到**，綠燈不代表請求數有節制。'),
+    );
+  }
+
+  /*
+   * 邊界外面：`rel="icon"` 那一類與 `rel="manifest"` 也會發出請求，
+   * 而這條預算不數它們。不改判準（瀏覽器只抓一次、快取很久，
+   * 算不算「一次瀏覽的請求」可以吵），但要說出來 ——
+   * 不然「單頁請求數 2」讀起來像「這一頁只發 2 個請求」。
+   */
+  if (reqTotals.uncountedLinks > 0) {
+    empty.push(
+      `單頁請求數數不到的：${html.length} 頁合計還有 ${reqTotals.uncountedLinks} 個 ` +
+        '`rel="icon"`／`rel="manifest"` 連結（平均每頁 ' +
+        `${(reqTotals.uncountedLinks / html.length).toFixed(1)} 個），也會發出請求。\n` +
+        '      它們只抓一次、快取很久，所以不算進這條預算 —— 但「2」不是這一頁請求的全部。',
     );
   }
 }
