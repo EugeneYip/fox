@@ -646,6 +646,31 @@ try {
   {
     const dir = await build('clean', CLEAN);
     const out = await check(dir);
+    /*
+     * ── CLEAN 護得到哪幾條規則的邊界 ────────────────────
+     *
+     * 第 3 輪（第三十二圈）：把四條規則各改成**一律會響**，四條都被
+     * 這一格抓到 —— 它就是這一支的反向案例。
+     *
+     * 但第 1 輪（第三十二圈）在無障礙那邊量到：這種「乾淨語料」
+     * **只護得到它身上有東西可踩的那幾條**。主體是 0 的規則，
+     * 邊界移一格也不會有人說話。所以把數字說出來。
+     */
+    const verbose = await check(dir, ['--verbose']);
+    const subjects = new Map(
+      [...verbose.matchAll(/^\s*(\d+)\s+([a-z0-9-]+)\s*$/gm)].map((m) => [m[2], Number(m[1])]),
+    );
+    const bare = [...subjects.entries()].filter(([, n]) => n === 0).map(([id]) => id).sort();
+    if (subjects.size === 0) {
+      failed++;
+      console.log('  X 讀不到 CLEAN 的主體數 —— 底下那句是假的');
+    } else {
+      console.log(
+        `  · CLEAN 這份語料上，${subjects.size} 條規則裡 ${bare.length} 條主體是 0` +
+          (bare.length > 0 ? `：${bare.join('、')}` : '（每一條都踩得到）') +
+          '\n      主體是 0 的那幾條，「不該響的不響」在這一格證明不了 —— 邊界移一格也不會紅。',
+      );
+    }
     const ok = out.includes('沒有發現問題');
     console.log(`  ${ok ? '✓' : 'X'} 正常的內容不誤報`);
     if (!ok) {
@@ -994,6 +1019,63 @@ try {
       '一個來源都沒有：不說那句話（反向案例）',
       { generatedAt: justNow, sources: {}, items: [] },
       (out) => !/沒有成功過/.test(out),
+    );
+  }
+
+  /*
+   * ── 那份排除清單，哪幾條什麼都沒擋 ──────────────────
+   *
+   * 第 3 輪（第三十二圈）：`SCHEMA_STRUCTURAL` 有 6 個名字，
+   * 實測只有 3 個真的濾到東西。`base` 最有意思 —— 它在
+   * `content.config.ts` 裡出現 4 次，但都寫在 `glob({ base: … })` 裡面，
+   * 而抽取的正則只認行首那種，所以從來沒抽到它。
+   *
+   * 語料要同時有「真的擋到的」與「什麼都沒擋的」，
+   * 不然「一律說沒擋」跟「真的算」在輸出上是同一句話。
+   */
+  {
+    /**
+     * @param {string} label
+     * @param {string} config 假的 content.config.ts
+     * @param {(out: string) => boolean} want
+     */
+    const withConfig = async (label, config, want) => {
+      const dir = await build(`struct-${label}`, {
+        content: { 'poems/wu-yi-xiang.md': poem() },
+        dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花') },
+        extra: { 'src/content.config.ts': config },
+      });
+      const out = await check(dir, [`--src=${join(dir, 'src')}`]);
+      const ok = want(out);
+      if (!ok) failed++;
+      console.log(`  ${ok ? '✓' : 'X'} ${label}`);
+      if (!ok) {
+        const said = out.split('\n').filter((l) => l.includes('SCHEMA_STRUCTURAL')).join(' ｜ ');
+        console.log('        ' + (said || '（完全沒提到 SCHEMA_STRUCTURAL）'));
+      }
+      await rm(dir, { recursive: true, force: true });
+    };
+
+    /* `loader` 在行首會被抽到（真的擋到），`type`／`message`／`base` 抽不到 */
+    await withConfig(
+      '有的擋到、有的沒擋到：只點名沒擋到的那幾個',
+      "const c = {\n  loader: glob({ base: './x' }),\n  schema: z.object({ title: z.string() }),\n};\n",
+      (out) => {
+        const m = /SCHEMA_STRUCTURAL 有 (\d+) 個名字，這一輪\*\*(\d+) 個什麼都沒擋\*\*：(.+?)。/.exec(out);
+        /* 總數要大於「沒擋到的」—— 不然「總數印成沒擋到的那個數」看不出來 */
+        return (
+          m !== null &&
+          Number(m[1]) > Number(m[2]) &&
+          Number(m[2]) === 4 &&
+          m[3].trim() === 'base、error、message、type'
+        );
+      },
+    );
+    /* 反向：六個全部都抽得到的話，整段不該出現 */
+    await withConfig(
+      '六個全部都擋到：整段不印（反向案例）',
+      "const c = {\n  loader: 1,\n  schema: 1,\n  type: 1,\n  base: 1,\n  message: 1,\n  error: 1,\n};\n",
+      (out) => !/什麼都沒擋/.test(out),
     );
   }
 
@@ -1455,7 +1537,10 @@ process.exit(failed > 0 ? 1 : 0);
 
 /**
  * @param {string} name
- * @param {{ content: Record<string, string>, dist: Record<string, string> }} files
+ * `extra` 是照原樣寫的相對路徑（不塞進 src/content 或 dist）——
+ * 第 3 輪（第三十一圈）加的，理由見 CASES 那份型別上面的說明。
+ *
+ * @param {{ content: Record<string, string>, dist: Record<string, string>, extra?: Record<string, string>, guide?: string, noIndex?: boolean }} files
  */
 async function build(name, files) {
   const dir = join(tmp, name);

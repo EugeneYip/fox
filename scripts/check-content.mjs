@@ -1252,13 +1252,44 @@ if (contentFiles === 0) {
 const SCHEMA_STRUCTURAL = new Set(['loader', 'schema', 'type', 'base', 'message', 'error']);
 let fieldReport = '';
 {
-  const src = await readFile(resolve(ROOT, 'src/content.config.ts'), 'utf8').catch(() => '');
+  /* 走 SRC 不是寫死的 ROOT —— 不然測試換不掉，這一段就只驗得到真的 repo
+     （第 3 輪〔第三十一圈〕在語言清單那條踩過同一件事） */
+  const src = await readFile(resolve(SRC, 'content.config.ts'), 'utf8').catch(() => '');
+  /** 抽到的所有名字（還沒扣掉結構性的那些）—— 底下要拿它算「哪幾條豁免什麼都沒擋」 */
+  const extracted = new Set([
+    ...[...src.matchAll(/^\s{2,}([a-zA-Z][a-zA-Z0-9_]*):\s*\S/gm)].map((m) => m[1]),
+    ...[...src.matchAll(/\b([a-zA-Z][a-zA-Z0-9_]*):\s*z\./g)].map((m) => m[1]),
+  ]);
   const declared = new Set(
-    [
-      ...[...src.matchAll(/^\s{2,}([a-zA-Z][a-zA-Z0-9_]*):\s*\S/gm)].map((m) => m[1]),
-      ...[...src.matchAll(/\b([a-zA-Z][a-zA-Z0-9_]*):\s*z\./g)].map((m) => m[1]),
-    ].filter((n) => !SCHEMA_STRUCTURAL.has(n)),
+    [...extracted].filter((n) => !SCHEMA_STRUCTURAL.has(n)),
   );
+  /*
+   * ── 那份排除清單，哪幾條什麼都沒擋 ──────────────────
+   *
+   * 第 3 輪（第三十二圈）問「如果第一版就寫錯，今天有沒有東西會說話」。
+   * `SCHEMA_STRUCTURAL` 有 6 個名字，實測**只有 3 個真的濾到東西**
+   * （`loader`、`schema`、`error`）。另外三個：
+   *
+   *   `type`、`message` —— `content.config.ts` 裡一次都沒出現
+   *   `base`           —— 出現 4 次，但都寫在 `glob({ base: … })` 裡面，
+   *                        而抽取的正則只認**行首**那種，所以從來沒抽到它
+   *
+   * 也就是說那份清單的第一版是**猜**哪些名字會被抽到 —— 一半猜錯了，
+   * 而猜錯的那一半跟猜對的一樣安靜。
+   *
+   * 不刪 —— 跟 `audit:privacy` 的豁免名單同一個處理：讓它每一輪自己說出來。
+   * （那一條是第 5 輪〔第二十八圈〕加的，理由一模一樣。）
+   */
+  const idleExempt = [...SCHEMA_STRUCTURAL].filter((n) => !extracted.has(n)).sort();
+  if (idleExempt.length > 0) {
+    notes.push(
+      `SCHEMA_STRUCTURAL 有 ${SCHEMA_STRUCTURAL.size} 個名字，這一輪` +
+        `**${idleExempt.length} 個什麼都沒擋**：${idleExempt.join('、')}。\n` +
+        '    抽取的正則根本沒抽到它們，所以排不排除都一樣。\n' +
+        '    不是錯，但那幾行看起來像在守什麼，其實沒有 —— 要刪還是要修正則，站主決定。',
+    );
+  }
+
   const unreadable = [...usedFields].filter((u) => !declared.has(u));
   if (declared.size === 0 || unreadable.length > 0) {
     fieldReport =
