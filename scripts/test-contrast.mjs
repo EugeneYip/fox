@@ -388,6 +388,65 @@ await check(
 );
 
 /*
+ * ── 綠燈那幾行的數字，有沒有人在看 ──────────────────
+ *
+ * 第 8 輪（第三十二圈）實測：把這三行的數字一律印成 0 —— **三個都全綠**。
+ *
+ *   未使用：**65** 個 token 裡有 7 個⋯
+ *   涵蓋率：前景 **9** 種、純色背景 **7** 種，都在 PAIRS 裡 ✓
+ *   列印：**3** 個設 color-scheme 的選擇器，列印區塊都有覆蓋 ✓
+ *
+ * 那些數字就是那個勾的**範圍**。「3 個選擇器都有覆蓋」跟
+ * 「0 個選擇器都有覆蓋」是完全不同的兩句話，而後者是一個空勾 ——
+ * 這一整圈都在講這件事。
+ *
+ * 判準用**差值**：在真的 tokens.css 上加 N 個宣告，那個數字要跟著加 N。
+ * 不自己重算一次抽取（第 3 輪〔第三十二圈〕就是那樣把自己的 grep
+ * 跟腳本的正則算出兩個答案的）—— 差值不需要知道基準是多少。
+ */
+{
+  /** @param {string} tokens @param {string} [global] */
+  const countsOf = async (tokens, global) => {
+    const dir = await mkdtemp(join(tmpdir(), 'contrast-nums-'));
+    await mkdir(join(dir, 'src/styles'), { recursive: true });
+    await writeFile(join(dir, 'src/styles/tokens.css'), tokens, 'utf8');
+    await writeFile(join(dir, 'src/styles/global.css'), global ?? realGlobal, 'utf8');
+    let out = '';
+    try {
+      ({ stdout: out } = await run('node', [resolve(ROOT, 'scripts/check-contrast.mjs'), `--root=${dir}`]));
+    } catch (err) {
+      out = String(/** @type {{ stdout?: string }} */ (err)?.stdout ?? '');
+    }
+    await rm(dir, { recursive: true, force: true });
+    return {
+      declared: Number(/未使用：(\d+) 個 token/.exec(out)?.[1] ?? /(\d+) 個 token 都有人用/.exec(out)?.[1] ?? -1),
+      printers: Number(/列印：(\d+) 個設 color-scheme/.exec(out)?.[1] ?? -1),
+      out,
+    };
+  };
+
+  const before = await countsOf(realTokens);
+  /* 加三個誰也沒用的 token —— 宣告數要 +3 */
+  const plusThree = realTokens.replace(/(\n\})/, '\n  --probe-n1: 1px;\n  --probe-n2: 2px;\n  --probe-n3: 3px;$1');
+  const after = await countsOf(plusThree);
+  const okDeclared = before.declared > 0 && after.declared === before.declared + 3;
+  if (!okDeclared) failed++;
+  console.log(`  ${okDeclared ? '✓' : 'X'} 「未使用：N 個 token」的 N 是真的數出來的（加 3 個就要多 3）`);
+  if (!okDeclared) console.log(`        加之前 ${before.declared}、加之後 ${after.declared}`);
+
+  /* 多一個設 color-scheme 的選擇器，而列印區塊也覆蓋它 —— 選擇器數要 +1 */
+  const plusPrinter = realTokens.replace(/(\n\})/, "$1\n:root[data-theme='probe'] { color-scheme: dark; }\n");
+  const printer = await countsOf(
+    plusPrinter,
+    realGlobal.replace(/@media print\s*\{/, "@media print {\n  :root[data-theme='probe'] { color-scheme: light; }"),
+  );
+  const okPrinters = before.printers > 0 && printer.printers === before.printers + 1;
+  if (!okPrinters) failed++;
+  console.log(`  ${okPrinters ? '✓' : 'X'} 「列印：N 個選擇器」的 N 是真的數出來的（多一個就要多 1）`);
+  if (!okPrinters) console.log(`        加之前 ${before.printers}、加之後 ${printer.printers}`);
+}
+
+/*
  * ── 「有人用」是遞移的 ──────────────────────────────
  *
  * 第 8 輪（第三十一圈）量到的：`--shadow-soft` 沒有任何地方用，
