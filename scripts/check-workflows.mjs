@@ -44,6 +44,11 @@ const DIR = resolve(ROOT, '.github/workflows');
 
 /** @type {{ file: string, line: number, id: string, msg: string }[]} */
 const problems = [];
+
+/** @type {string[]} */
+const notes = [];
+
+/* ↑ 第 7 輪（第三十一圈）從第 572 行搬上來：部署路徑那一段要用它，而那一段在更前面。 */
 /**
  * 這支腳本認得的規則。
  *
@@ -345,12 +350,51 @@ const deploy = await readFile(resolve(DIR, 'deploy.yml'), 'utf8').catch(() => ''
  * （第 7 輪〔第十五圈〕實測：那一行註解讓「部署路徑上會跑什麼」多算了一個
  * build —— 我自己新寫的那段就先踩到了。）
  */
+/*
+ * package.json 讀一次就好。第 7 輪（第三十一圈）之前這個檔案讀了三次
+ * （行 115、481、512），而那時候只有它們用得到；現在部署路徑的必跑清單
+ * 也要從它推，再讀第四次就太多了。
+ */
+const pkgJson = JSON.parse(await readFile(resolve(ROOT, 'package.json'), 'utf8'));
+
 const deploySteps = deployStepsFrom(deploy);
-const DEPLOY_MUST_RUN = ['verify:all', 'test:units', 'test:built'];
+/*
+ * ── 部署路徑上非跑不可的那幾個，從 package.json 推出來 ──────
+ *
+ * 這裡本來寫死 `['verify:all', 'test:units', 'test:built']`。
+ * 那份清單今天是對的 —— 而它剛好等於「`verify:all` ＋ `test:tools` 的成員」。
+ *
+ * 第 7 輪（第三十一圈）實測那個「剛好」的代價：把
+ * `test:tools` 改成 `test:units && test:built && check:workflows`，
+ * 而 deploy.yml 沒有跑第三個 —— `check:workflows` 說**「沒有發現問題」**。
+ *
+ * 而且會連鎖：底下的 `gate-missing-in-check` 是從 deploy.yml 推的，
+ * 所以 deploy 漏掉的那一道，check.yml 也不會被要求。
+ * **一條沒有人選過的清單，安靜地決定了整條部署路徑蓋到哪裡。**
+ *
+ * `CLAUDE.md` 寫的規矩是「commit 之前跑 verify:all 與 test:tools」——
+ * 那才是這條規則真正的來源，所以從那裡推。
+ * 隔壁的 `gate-missing-in-check` 第 7 輪（第十五圈）就已經改成推導了，
+ * 這一條是那次沒跟上的那一半。
+ */
+/** @param {string} name 把複合 script 展開成它呼叫的那幾個 */
+const membersOf = (name) =>
+  [...String(pkgJson.scripts?.[name] ?? '').matchAll(/npm run ([a-z0-9:@-]+)/g)].map((m) => m[1]);
+const toolMembers = membersOf('test:tools');
+const DEPLOY_MUST_RUN = ['verify:all', ...toolMembers];
+if (toolMembers.length === 0) {
+  notes.push(
+    '部署路徑的必跑清單推不出來：package.json 沒有 `test:tools`，' +
+      '或者它沒有呼叫任何 npm script。這一條退回只要求 `verify:all` —— ' +
+      '**那不是「都有跑」，是沒有比對到。**',
+  );
+}
 /* deploy.yml 讀不到的話這一條是 0 —— 那才是實話 */
 saw('gate-not-on-deploy-path', deploy ? DEPLOY_MUST_RUN.length : 0);
 for (const required of DEPLOY_MUST_RUN) {
-  if (deploy && !deploySteps.includes(required)) {
+  /* 跑複合的那一個也算數 —— deploy.yml 現在是逐一列，但列成 test:tools 一樣對 */
+  const covered = deploySteps.includes(required) || (toolMembers.includes(required) && deploySteps.includes('test:tools'));
+  if (deploy && !covered) {
     add(
       '.github/workflows/deploy.yml',
       0,
@@ -446,7 +490,7 @@ for (const required of DEPLOY_MUST_RUN) {
  * 但爆在 CI 上比爆在這裡貴。
  */
 {
-  const pkg = JSON.parse(await readFile(resolve(ROOT, 'package.json'), 'utf8'));
+  const pkg = pkgJson;
   const allScripts = Object.values(pkg.scripts ?? {}).join(' && ');
   const testFiles = (await readdir(resolve(ROOT, 'scripts')).catch(() => [])).filter((f) =>
     /^test-.*\.mjs$/.test(f),
@@ -477,7 +521,7 @@ for (const required of DEPLOY_MUST_RUN) {
 }
 
 {
-  const pkg = JSON.parse(await readFile(resolve(ROOT, 'package.json'), 'utf8'));
+  const pkg = pkgJson;
   const gates = String(pkg.scripts?.['verify:all'] ?? '')
     .split(' && ')
     .map((/** @type {string} */ s) => s.replace('npm run ', '').trim())
@@ -529,8 +573,7 @@ for (const required of DEPLOY_MUST_RUN) {
  */
 const required = JSON.parse(await readFile(resolve(ROOT, 'package.json'), 'utf8')).engines?.node;
 const minMatch = /(\d+)\.(\d+)\.(\d+)/.exec(required ?? '');
-/** @type {string[]} */
-const notes = [];
+
 if (minMatch) {
   const min = minMatch.slice(1, 4).map(Number);
   const cur = process.versions.node.split('.').map(Number);

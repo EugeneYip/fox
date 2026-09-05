@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 41,200 行、2.1 MB、248 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 41,400 行、2.1 MB、249 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -41014,3 +41014,136 @@ const writingRules = RULES.filter((r) => !NOT_A_WRITING_RULE.has(r.id));
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
 **下一輪：7 — 建置與 CI**
+
+
+---
+
+### 2026-09-05 — 第 7 輪（第三十一圈）：建置與 CI
+
+**第三十一圈問：這件事，是我們選的，還是它剛好長成這樣？**
+
+#### 1. 兩條姊妹規則，一條推導、一條寫死
+
+`check:workflows` 有兩條在守「關卡有沒有在該跑的地方跑」：
+
+| 規則 | 清單哪裡來 |
+|---|---|
+| `gate-missing-in-check` | **從 `deploy.yml` ＋ `package.json` 推出來**（第 7 輪〔第十五圈〕改的，註解寫著「這樣加第七道關卡的時候不必記得回來改這裡」） |
+| `gate-not-on-deploy-path` | `const DEPLOY_MUST_RUN = ['verify:all', 'test:units', 'test:built']` —— **寫死** |
+
+那份寫死的清單今天是對的。而它剛好等於
+「`verify:all` ＋ `test:tools` 的成員」：
+
+```
+test:tools = npm run test:units && npm run test:built
+```
+
+**剛好相等，所以沒有人會發現它其實沒有在跟。**
+
+#### 2. 實測那個「剛好」的代價
+
+把 `test:tools` 改成三個成員（多一個 `check:workflows`），
+而 `deploy.yml` 只跑前兩個：
+
+```
+3 份 workflow，沒有發現問題。
+```
+
+**部署路徑漏掉一道關卡，這支腳本說沒事。**
+
+而且會**連鎖**：`gate-missing-in-check` 是從 `deploy.yml` 推的 ——
+deploy 漏掉的那一道，`check.yml` 也不會被要求。
+一條沒有人選過的清單，安靜地決定了整條部署路徑蓋到哪裡。
+
+#### 3. 改法：從 `CLAUDE.md` 真正的來源推
+
+`CLAUDE.md` 的規矩是「commit 之前跑 `verify:all` 與 `test:tools`」——
+那才是這條規則的來源。所以改成 `['verify:all', ...membersOf('test:tools')]`。
+
+三件事一起處理：
+
+- **跑複合的那一個也算數** —— `deploy.yml` 現在逐一列，但列成 `test:tools` 一樣對
+- **推不出來的時候要說**（沒有 `test:tools`、或它沒呼叫任何 script）——
+  不然那條規則會退回只要求 `verify:all`，而輸出跟「都有跑」長得一樣
+- `package.json` 本來讀了三次，順手收成一次
+
+改完再跑同一個突變：
+
+```
+X [gate-not-on-deploy-path] deploy.yml 沒有跑 npm run check:workflows。
+```
+
+#### 4. 那份測試語料本來也少了一半
+
+`base()` 的假 `package.json` **沒有 `test:tools`** ——
+所以推導在每一格上都推出空的，那條規則只要求 `verify:all`。
+補上之後語料才反映真的專案。
+
+**這一圈第七次踩到語料，而形狀又是新的：語料缺的不是案例，
+是被推導的那個來源。**
+
+#### 5. 排序問題，三輪之內第三次
+
+新的那段要用 `notes`，而 `notes` 宣告在第 572 行 —— 用它的地方在第 381 行。
+`ts(2448)`：變數在宣告前被使用。
+
+第 3 輪（`check-content.mjs` 的 `saw()` 排在報告後面）、
+第 6 輪（`EXTRA_RULE_IDS` 排在消費者後面）、這一輪（`notes`）——
+**三輪之內第三次，三個不同的檔案。**
+這個 repo 的腳本都是由上往下跑的一長段，而我一直在中間插東西。
+
+#### 6. 突變掃描：4 個，全紅
+
+| 突變 | 該紅的 | 結果 |
+|---|---|---|
+| 回到寫死的清單 | 「`test:tools` 多一個成員」 | 紅 ✓ |
+| 推不出來時不說話 | 「說『推不出來』」 | 紅 ✓ |
+| 跑複合的不算數 | 「複合的也算數」 | 紅 ✓ |
+| 展開時漏掉 `verify:all` | 兩個既有案例 | 紅 ✓ |
+
+### 這一輪改了什麼
+
+| 項目 | 之前 | 之後 |
+|---|---|---|
+| 部署必跑清單 | 寫死三個 | 從 `test:tools` 推 |
+| `test:tools` 多一個成員 | 沒有人發現 | 擋下來 |
+| deploy 跑複合的 `test:tools` | 會誤報 | 算數 |
+| 推不出來時 | 退回只要求 `verify:all` | 明講「沒有比對到」 |
+| `package.json` | 讀三次 | 讀一次 |
+| 測試語料 | 沒有 `test:tools` | 補上 |
+| 測試 | —— | 3 格（1 正 2 反） |
+
+### 待辦（不屬於這一輪）
+
+- **`.nvmrc` 的「22」與 `engines` 的 `>=22.19.0` 是兩種精度。**
+  腳本已經每次都說（CI 會解析成最新的 22.x），但沒有人決定要不要釘死
+  （→ 站主）
+- **我一直在腳本中間插東西，三輪三次撞到宣告順序。** 這些腳本是
+  由上往下跑的一長段，沒有任何東西提醒「這裡還看不到那個變數」——
+  除了型別關卡（它每次都抓到了）（→ 7 建置與 CI）
+- 上一輪與更早的都還在（`check:copy` 沒有 level 的概念、
+  27 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、`related` 單向、schema 的必填／選填沒被選過、
+  11 條預算裡 5 條的上限是挑的、另外四支檢查的嚴重度、
+  `CoverImage` 的 `sizes` 用 40rem、頁尾 `aria-current` 沒有視覺對應、
+  5 個沒人 `var()` 的 token、`check.yml` 跑過 0 次、`ci:sim` 只有手動跑、
+  `ui.ts` 的 `en` 要不要必填、`reveal('email')` 沒有人呼叫、4 條閒置豁免、
+  本機 `ahead 39, behind 1`、`npm run sync` 來源全失敗仍離開碼 0、
+  排程遲了四小時只有一筆、`ExternalLink.astro` 要刪還是接上去、
+  `PAGE_SIZE` 沒有呼叫者、`VideoFacade` 一次都沒算繪過、
+  `aria-live`／`role="status"` 沒有規則、`inlineStylesheets: always` 只到 98%、
+  9／11 條預算從來沒響過、圈末索引停在第二十六圈、開頭三個數字靠人記得、
+  `check:contrast` 沒有東西在守「每一段都要報主體數」、
+  `probe:served` 沒有自己的測試、`--real-install` 成功路徑沒測試、
+  視覺層 24 處實測沒重驗、導覽列橫捲沒有視覺提示、
+  本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  真的開一次螢幕閱讀器聽、`CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、16／28 條 a11y 規則沒有反向案例、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設、
+  `--patterns` 仍自己套樣板）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：8 — 視覺與排版**

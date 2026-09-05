@@ -33,6 +33,12 @@ const base = () => ({
     scripts: {
       'verify:all': 'npm run build && npm run check:a11y',
       'test:units': 'x', 'test:built': 'x', build: 'x', 'check:a11y': 'x',
+      /*
+       * 部署路徑的必跑清單是從 `test:tools` 推出來的（第 7 輪〔第三十一圈〕
+       * 從寫死改成推導）。base 少了它的話，那條規則在每個案例上都只要求
+       * `verify:all` —— 而那正是「沒有比對到」被讀成「都有跑」的樣子。
+       */
+      'test:tools': 'npm run test:units && npm run test:built',
     },
     engines: { node: '>=22.19.0' },
   }),
@@ -204,6 +210,27 @@ const CASES = {
    * 這一份 fixture 把 verify:all 那一步刪掉、只在註解裡留著它 ——
    * 字串比對的版本會安靜通過，那是最糟的一種綠燈。
    */
+  /*
+   * ── test:tools 多一個成員，deploy 沒跟上 ──────────────
+   *
+   * 第 7 輪（第三十一圈）實測：清單寫死成
+   * `['verify:all', 'test:units', 'test:built']` 的時候，
+   * 把 `test:tools` 改成三個成員而 deploy 只跑兩個 —— **沒有發現問題**。
+   * 而且會連鎖：`gate-missing-in-check` 是從 deploy.yml 推的，
+   * 所以 deploy 漏掉的那一道，check.yml 也不會被要求。
+   */
+  'gate-not-on-deploy-path（test:tools 多一個成員，deploy 沒跑）': {
+    expect: 'gate-not-on-deploy-path',
+    'package.json': JSON.stringify({
+      scripts: {
+        'verify:all': 'npm run build && npm run check:a11y',
+        'test:units': 'x', 'test:built': 'x', build: 'x', 'check:a11y': 'x',
+        'check:extra': 'x',
+        'test:tools': 'npm run test:units && npm run test:built && npm run check:extra',
+      },
+      engines: { node: '>=22.19.0' },
+    }),
+  },
   'gate-not-on-deploy-path（只出現在註解裡）': {
     expect: 'gate-not-on-deploy-path',
     '.github/workflows/deploy.yml': [
@@ -470,6 +497,51 @@ try {
       console.log('      這條規則沒有響。實際抓到：' +
         ([...new Set([...out.matchAll(/\[([a-z-]+)\]/g)].map((m) => m[1]))].join('、') || '（無）'));
     }
+  }
+
+  /*
+   * ── 部署路徑那一條的兩個反向案例 ────────────────────
+   *
+   * `CASES` 只驗「該響的有響」。這兩格驗的是**不該響的不響**，
+   * 以及**推不出來的時候要說出來** —— 少了後者，一份沒有 `test:tools`
+   * 的 package.json 會讓那條規則只要求 `verify:all`，
+   * 而輸出看起來跟「都有跑」一模一樣。
+   */
+  {
+    /* 反向一：deploy 跑的是複合的 test:tools，不是逐一列 —— 一樣算數 */
+    const composite = {
+      ...base(),
+      '.github/workflows/deploy.yml': [
+        'name: Deploy',
+        'jobs:',
+        '  build:',
+        '    steps:',
+        '      - run: npm run verify:all',
+        '      - run: npm run test:tools',
+        '',
+      ].join('\n'),
+    };
+    const out = await check(await build('case-deploy-composite', composite));
+    const ok = !out.includes('[gate-not-on-deploy-path]');
+    if (!ok) failed++;
+    console.log(`  ${ok ? '✓' : 'X'} deploy 跑複合的 test:tools 也算數（反向案例）`);
+    if (!ok) console.log('        ' + (out.split('\n').find((l) => l.includes('gate-not-on-deploy-path')) ?? ''));
+  }
+
+  {
+    /* 反向二：沒有 test:tools 的時候要說「推不出來」，不是安靜地只要求 verify:all */
+    const noTools = {
+      ...base(),
+      'package.json': JSON.stringify({
+        scripts: { 'verify:all': 'npm run build && npm run check:a11y', build: 'x', 'check:a11y': 'x' },
+        engines: { node: '>=22.19.0' },
+      }),
+    };
+    const out = await check(await build('case-no-tools', noTools));
+    const ok = /部署路徑的必跑清單推不出來/.test(out);
+    if (!ok) failed++;
+    console.log(`  ${ok ? '✓' : 'X'} 沒有 test:tools 時說「推不出來」而不是安靜放行`);
+    if (!ok) console.log('        ' + (out.split('\n').filter((l) => l.includes('必跑清單')).join(' ｜ ') || '（那一句沒印）'));
   }
 
   {
