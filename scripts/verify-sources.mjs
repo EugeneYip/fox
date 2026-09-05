@@ -12,7 +12,7 @@
  */
 import { sources as realSources } from '../src/config/sources.mjs';
 import { readFile } from 'node:fs/promises';
-import { PLATFORMS, getPlatform, fillTemplate } from '../src/config/platforms.data.mjs';
+import { PLATFORMS as realPlatforms, getPlatform, fillTemplate } from '../src/config/platforms.data.mjs';
 import { sourceFeedUrl } from './lib/source-feed-url.mjs';
 import { UA_VERIFY } from './lib/http.mjs';
 import { waitForHost, noteHostHit } from './lib/throttle.mjs';
@@ -50,6 +50,22 @@ const sourcesArg = argv.find((a) => a.startsWith('--sources='));
 const sources = sourcesArg
   ? JSON.parse(await readFile(sourcesArg.slice('--sources='.length), 'utf8'))
   : realSources;
+
+/*
+ * `--platforms=<json>` 同理，給 `--patterns` 那條路用。
+ *
+ * 第 4 輪（第三十二圈）量到：`--patterns` 這條路**一個測試都沒有**
+ * —— 它在測試檔裡只被註解提到過。而這一輪每一圈都在跑它，
+ * 它印的每一句（哪個平臺通過、哪個「回了合法的 feed 但一筆都沒有」）
+ * 從來沒有人確認過那個判斷是對的。
+ *
+ * 卡住的地方跟 `--sources=` 當年一樣：目錄是 `import` 進來的，換不掉。
+ */
+const platformsArg = argv.find((a) => a.startsWith('--platforms='));
+/** @type {typeof realPlatforms} */
+const PLATFORMS = platformsArg
+  ? JSON.parse(await readFile(platformsArg.slice('--platforms='.length), 'utf8'))
+  : realPlatforms;
 
 const UA = UA_VERIFY;
 const TIMEOUT = 15_000;

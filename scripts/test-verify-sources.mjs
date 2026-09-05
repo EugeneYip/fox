@@ -60,6 +60,16 @@ const server = createServer((req, res) => {
     res.end(FEED);
     return;
   }
+  if (req.url === '/empty') {
+    /* 合法的 RSS 2.0，**一個 <item> 都沒有** —— 綠燈卻什麼都沒證明 */
+    res.writeHead(200, { 'content-type': 'application/rss+xml' });
+    res.end(
+      '<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel>' +
+        '<title>空的</title><link>http://127.0.0.1/</link><description>x</description>' +
+        '</channel></rss>',
+    );
+    return;
+  }
   if (req.url === '/boom') {
     res.writeHead(500, { 'content-type': 'text/html' });
     res.end('<html><body>伺服器出錯</body></html>');
@@ -213,6 +223,71 @@ console.log('\nnpm run verify 的判斷\n' + '─'.repeat(56));
   check('別的平臺失敗時不附那句（反向案例）', !/一陣一陣地回 404/.test(out), out);
 }
 
+/*
+ * ── `--patterns` 那條路 ──────────────────────────────
+ *
+ * 第 4 輪（第三十二圈）量到：這條路**一個測試都沒有** ——
+ * 它在這個檔案裡只被註解提到過兩次。而輪替檢查每一圈都在跑它，
+ * 它印的每一句從來沒有人確認過那個判斷是對的。
+ *
+ * 卡住的地方跟 `--sources=` 當年一樣：平臺目錄是 import 進來的。
+ * 這一輪替它開了 `--platforms=`。
+ */
+console.log('\nnpm run verify -- --patterns 的判斷\n' + '─'.repeat(56));
+
+/** @param {unknown[]} platforms */
+async function patterns(platforms) {
+  const file = join(tmp, `p-${Math.random().toString(36).slice(2)}.json`);
+  await writeFile(file, JSON.stringify(platforms), 'utf8');
+  try {
+    const { stdout } = await run('node', [
+      resolve(ROOT, 'scripts/verify-sources.mjs'),
+      '--patterns',
+      `--platforms=${file}`,
+    ]);
+    return { out: stdout, code: 0 };
+  } catch (err) {
+    const e = /** @type {{ stdout?: string, code?: number }} */ (err);
+    return { out: String(e?.stdout ?? ''), code: typeof e?.code === 'number' ? e.code : -1 };
+  }
+}
+
+const plat = (/** @type {Record<string, unknown>} */ o) => ({
+  id: 'p1', name: 'P1', region: 'x', media: 'text', feedKind: 'rss',
+  homeTemplate: `${base}/{handle}`, confidence: 'verified', verifiedAt: '2026-09-05', ...o,
+});
+
+{
+  const { out, code } = await patterns([plat({ feedTemplate: `${base}/ok`, probeHandle: 'h' })]);
+  check('feed 有東西：✓ 而且沒有那句「一筆都沒有」', /✓ p1/.test(out) && !/一筆都沒有/.test(out) && code === 0, `${out}（exit ${code}）`);
+}
+
+{
+  /* 這一格是重點：200、合法的 feed、0 筆 —— 綠燈證明不了「讀得到東西」 */
+  const { out, code } = await patterns([plat({ id: 'pe', feedTemplate: `${base}/empty`, probeHandle: 'h' })]);
+  check(
+    '合法的 feed 但一筆都沒有：說出來（而且不算失敗）',
+    /1 個平臺回了合法的 feed 但\*\*一筆都沒有\*\*：pe/.test(out) && code === 0,
+    `${out}（exit ${code}）`,
+  );
+}
+
+{
+  const { out, code } = await patterns([plat({ id: 'pd', feedTemplate: `${base}/gone`, probeHandle: 'h' })]);
+  check('樣板打不通：✗ 而且擋得住', /✗ pd/.test(out) && code === 1, `${out}（exit ${code}）`);
+}
+
+{
+  /* pixnet 的形狀：有樣板、沒有 probeHandle —— 不該被打，也不該算成沒有樣板 */
+  const { out, code } = await patterns([plat({ id: 'pn', feedTemplate: `${base}/ok`, confidence: 'lookup-required' })]);
+  check(
+    '有樣板但沒有 probeHandle：不打它，而且在統計裡被點名',
+    !/✓ pn/.test(out) && /有樣板但沒有 probeHandle（pn）/.test(out) && code === 0,
+    `${out}（exit ${code}）`,
+  );
+}
+
+/* 收尾搬到這裡 —— `--patterns` 那幾格用的是同一個假伺服器與同一個暫存目錄 */
 server.close();
 await rm(tmp, { recursive: true, force: true });
 
