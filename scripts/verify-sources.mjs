@@ -20,10 +20,19 @@ import { countItems } from './lib/count-items.mjs';
 import { confidenceReport } from './lib/confidence-report.mjs';
 
 /**
- * 端點會間歇性回 404 的平臺。
- * 目前只有 YouTube —— 那是實測過的（見底下失敗訊息的註解）。
+ * 端點會間歇性壞掉的平臺。目前只有 YouTube。
+ *
+ * ── 名字與訊息本來都寫「404」，而那比實際行為窄 ──────────
+ *
+ * 第 4 輪（第二十九圈）連打三次，拿到 **404、404、500**（一分鐘之內）。
+ * 判斷的邏輯本來就是對的（看的是來源 id，不是狀態碼），
+ * 所以 500 也會印出那段提醒 —— 但**訊息只講 404**。
+ *
+ * 第一次跑的人看到 `500`、讀到一段只講 404 的說明，
+ * 會合理地以為那段不適用，然後照結尾那句去改 `platforms.data.mjs`。
+ * 常數叫 `FLAKY_404` 也是同一個問題：名字比行為窄。
  */
-const FLAKY_404 = new Set(['youtube']);
+const FLAKY_ENDPOINT = new Set(['youtube']);
 
 const argv = process.argv.slice(2);
 const ALL = argv.includes('--all');
@@ -222,11 +231,13 @@ if (PATTERNS) {
      * 而結尾那句話叫她「可能改版或下架，請更新 platforms.data.mjs」。
      * 照著做就會把一個好好的平臺從目錄裡改掉。
      */
-    const flaky = failedIds.filter((id) => FLAKY_404.has(id));
+    const flaky = failedIds.filter((id) => FLAKY_ENDPOINT.has(id));
     console.log(`${realFailures} 個平臺的 feed 樣板實測失敗 —— 可能改版或下架，請更新 platforms.data.mjs。`);
     if (flaky.length > 0) {
       console.log(
-        `  但先等一下：${flaky.join('、')} 的端點**會一陣一陣地回 404**（實測同一天上午全 404、中午全 200）。`,
+        `  但先等一下：${flaky.join('、')} 的端點**會一陣一陣地壞掉** ——` +
+          '不只 404，**500 也算**（2026-09-05 一分鐘內連打三次：404、404、500；' +
+          '2026-09-02 則是上午全 404、中午全 200）。',
       );
       console.log('  不要因為這一次就斷定它下架了 —— 過幾分鐘再跑一次 `npm run verify -- --patterns`。');
     }
@@ -268,7 +279,7 @@ if (PATTERNS) {
   const { lines, mismatches } = confidenceReport(PLATFORMS, {
     probed: probedIds,
     failed: failedIds,
-    flaky: FLAKY_404,
+    flaky: FLAKY_ENDPOINT,
     /* 拿來算「這個宣稱幾天前成立的」；用當地日期就夠，不需要時區精度 */
     today: new Date().toISOString().slice(0, 10),
   });
@@ -416,11 +427,12 @@ console.log(bad === 0 ? '全部正常。\n' : `${bad} 個來源有問題。\n`);
 if (bad > 0) {
   const flakyBad = badIds.filter((id) => {
     const p = getPlatform(sources.find((/** @type {any} */ s) => s.id === id)?.platform ?? '');
-    return p && FLAKY_404.has(p.id);
+    return p && FLAKY_ENDPOINT.has(p.id);
   });
   if (flakyBad.length > 0) {
     console.log(
-      `  等一下：${flakyBad.join('、')} 的端點**會一陣一陣地回 404**（實測同一天上午全 404、中午全 200）。\n` +
+      `  等一下：${flakyBad.join('、')} 的端點**會一陣一陣地壞掉** —— 不只 404，**500 也算**\n` +
+        '  （2026-09-05 一分鐘內連打三次：404、404、500；2026-09-02 則是上午全 404、中午全 200）。\n' +
         '  不要因為這一次就斷定它下架了 —— 過幾分鐘再跑一次。\n',
     );
   }

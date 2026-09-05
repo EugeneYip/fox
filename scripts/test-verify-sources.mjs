@@ -60,6 +60,11 @@ const server = createServer((req, res) => {
     res.end(FEED);
     return;
   }
+  if (req.url === '/boom') {
+    res.writeHead(500, { 'content-type': 'text/html' });
+    res.end('<html><body>伺服器出錯</body></html>');
+    return;
+  }
   res.writeHead(404, { 'content-type': 'text/html' });
   res.end('<html><body>沒有這個東西</body></html>');
 });
@@ -156,19 +161,46 @@ console.log('\nnpm run verify 的判斷\n' + '─'.repeat(56));
 }
 
 /*
- * 6. 那個「會一陣一陣回 404」的平臺失敗時，要附上那句話。
+ * 6. 那個「會一陣一陣壞掉」的平臺失敗時，要附上那句話。
  *
- * 沒有它的話，YouTube 偶發的 404 會被讀成「頻道下架了」——
+ * 沒有它的話，YouTube 偶發的失敗會被讀成「頻道下架了」——
  * 這個 repo 第一次就是這樣搞錯的，`--patterns` 模式早就有這句，
  * 一般模式沒有。
+ *
+ * ── 措辭本來只講 404，而那比實際行為窄 ──────────
+ *
+ * 判斷的邏輯看的是**來源 id** 不是狀態碼，所以 500 也會印那段提醒 ——
+ * 但訊息只講 404。第 4 輪（第二十九圈）連打三次拿到 **404、404、500**
+ * （一分鐘之內）。第一次跑的人看到 500、讀到一段只講 404 的說明，
+ * 會合理地以為那段不適用，然後照結尾那句去改 `platforms.data.mjs`，
+ * 把一個好好的平臺從目錄裡改掉。
+ *
+ * **邏輯對了不夠，措辭要跟得上邏輯。**
  */
 {
   const { out, code } = await verify([
     { id: 'yt', platform: 'youtube', enabled: true, feedUrl: `${base}/gone` },
   ]);
   check(
-    'YouTube 失敗時附上「會一陣一陣回 404」的提醒',
-    /一陣一陣地回 404/.test(out) && code === 1,
+    'YouTube 失敗時附上「會一陣一陣地壞掉」的提醒',
+    /一陣一陣地壞掉/.test(out) && code === 1,
+    `${out}（exit ${code}）`,
+  );
+  check(
+    '而且那段提醒講的不只 404（500 也算）',
+    /500 也算/.test(out),
+    out.split('\n').filter((l) => l.includes('一陣一陣')).join(' | '),
+  );
+}
+
+{
+  /* 500 走同一條路：判斷看的是來源 id，不是狀態碼 */
+  const { out, code } = await verify([
+    { id: 'yt500', platform: 'youtube', enabled: true, feedUrl: `${base}/boom` },
+  ]);
+  check(
+    'YouTube 回 500 時，同一段提醒照樣出現',
+    /一陣一陣地壞掉/.test(out) && code === 1,
     `${out}（exit ${code}）`,
   );
 }
