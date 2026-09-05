@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 46,300 行、2.4 MB、285 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 46,400 行、2.5 MB、286 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -46257,4 +46257,193 @@ X [taiwan-tai] dist/elsewhere/index.html
   workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：4 — 平臺 feed 實測**
+
+### 2026-09-06 — 第 4 輪（第三十六圈）：平臺 feed 實測
+
+（日期跳一天是對的：這個站的專案日釘在臺北，`projectDay()` 這時已經是 9月6日。）
+
+**第三十六圈問：這道檢查的邊界外面是什麼？那裡現在有幾個？**
+判準：**這一支說得出「它看不到什麼」嗎？而那些東西現在有幾個？**
+
+#### 1. 先照規矩實測一次網路
+
+`npm run verify -- --patterns` 用真實公開帳號打了 **11 個平臺，全部 200**：
+
+| | |
+|---|---|
+| 最快 | youtube 124ms（Atom、15 筆） |
+| 最慢 | github 870ms（Atom、30 筆） |
+| 回合法 feed 但 0 筆 | note（那支自己就會說：綠燈只證明端點還在） |
+| 查不準 | pixnet（樣板失效，而且沒有 probeHandle 可以打） |
+
+YouTube 今天是通的 —— 對照 `CLAUDE.md` 記的那次間歇性 404，
+以及第三十圈量到的那次排程 `status: "error"`。**這一格沒有問題。**
+
+#### 2. 那條邊界的外面：資料本身
+
+`--patterns` 打的是**網路**。而站上算繪用的不是網路，是
+`src/data/syndication.json`。
+
+那個檔案的第二行寫著：
+
+```json
+"$schema": "./syndication.schema.json"
+```
+
+那份 schema **真的存在**，從第一個 commit 就在，draft-07，
+宣告了 13 個欄位、其中 5 個必填。而 `git grep syndication.schema`
+只有兩個結果：寫出那一行的 `sync-core.mjs`，跟那一行本身。
+
+**編輯器會讀它。關卡不會。**
+
+邊界外面有多少東西：**9 筆 × 13 欄 ＋ 1 個來源 ＋ itemCount**。
+今天全部合格（實測 0 個違規、13 欄在 9 筆上都齊）——
+所以這不是壞掉的東西，是**沒有人在守的東西**。
+
+#### 3. 實測那個後果，不用猜
+
+把第一筆的 `url` 改名成 `urlx`（少一個必填欄）：
+
+| | |
+|---|---|
+| `npm run build` | **成功** |
+| 六道關卡 | **全綠** |
+| 兩套測試 | **全綠** |
+
+而產出裡那一筆變成：
+
+```html
+<a class="synd__link" target="_blank" rel="noopener noreferrer">
+```
+
+**一個沒有 href 的 `<a>`**，出現在 **6 個頁面**上。
+它跟正常的卡片長得一模一樣，但點不動、也 tab 不到。
+（還原之後重數：全站這種 `<a>` 是 **0 個** —— 那 6 個確實是突變造成的。）
+
+`check:a11y` 看不到它是**設計使然**，不是漏寫：那裡每一條跟連結有關的規則
+都以 `<a ... href=` 開頭，或是 `if (href === null) continue;`。
+沒有 href 的 `<a>` 依定義不是連結，所以每一條都**正確地**跳過它。
+
+消費端也接不住：`lib/syndication.ts` 對**選填**欄位有 `??` 退路
+（`media`、`summary`、`lang`、`tags`、`thumbnail`），
+對那 5 個必填欄位**一個都沒有**。沒有退路的那幾個，正好沒有人守。
+
+#### 4. 補上 —— 讀那份合約，不是重寫一份
+
+`scripts/lib/validate-schema.mjs`：draft-07 的一小塊，零相依。
+
+**它讀的是那份 schema 檔本身。** 手寫第二份「必填有哪些」就是這個 repo
+一犯再犯的「同一件事寫在兩個地方」—— 兩邊遲早不一樣，而不一樣的時候
+沒有人會發現。
+
+而這種驗證器最糟的失敗不是漏報，是「schema 寫了一條、驗證器看不懂、
+於是綠燈」。所以 `unsupported()` 會把看不懂的關鍵字**列出來**，不安靜略過。
+（今天那份 schema 用到的 8 個關鍵字全部看得懂。）
+
+`check:content` 新增 `syndication-schema`（第 20 條，**155 個節點**），
+跟著資料自己宣告的 `$schema` 走，不寫死路徑 ——
+寫死的話，哪天那一行改指到別處，這裡還會對著舊的驗得好好的。
+
+三個方向都實測過會響：
+
+| 突變 | 訊息 |
+|---|---|
+| 少一個必填欄 | `items[0]：少了必填的 url` |
+| 型別改錯 | `itemCount：型別應該是 integer，實際是 string` |
+| 不是合法網址 | `items[0].url：不是合法的 uri` |
+
+反方向也測了：把 `required` 的檢查改成空轉 → 測試紅 3 格；
+把 `unsupported()` 改成永遠回空 → 紅 2 格。
+
+#### 5. 順手撞到一個安靜的錯（第七次了）
+
+新規則明明判斷了 155 個節點，輸出卻把它列進**「這次沒有東西可看的規則」**。
+
+原因是那份名單算在第 1594 行，而新規則的 `saw()` 在第 1737 行 ——
+**東西又插在它的消費者後面了。** 這是我在這個 repo 第七次犯同一個形狀，
+而且這次錯得特別安靜：名單看起來完全正常。
+
+修法是把那段收攏移到**最後一條規則之後**，而不是把新規則往上搬 ——
+往上搬的話，下一條新規則還是會掉進同一個坑。現有規則沒有一條受影響
+（實測：1594 行之後原本一個 `saw()` 都沒有）。
+
+#### 6. 關卡自己抓到我兩件事
+
+`test:built` 的兩格守門，在我以為做完的時候紅了：
+
+- 「這些規則的訊息沒有講『改法：』」—— 我寫了下一步，但沒用那個字
+- 「這些規則沒有測試案例」
+
+兩條都是對的。補上之後 `test-content-rules` 多兩格（會響／補齊就不報），
+fixture 帶的是**真的那份 schema**（照著讀進來，不是另寫一份小的）。
+
+而加測試的時候我**又**把宣告插在 `@type` 註解與 `const CASES` 中間，
+於是那個 annotation 落到我的字串上 —— 這個檔案第 78 行的註解
+寫的就是這件事。型別關卡擋下來了。
+
+| | 之前 | 現在 |
+|---|---|---|
+| 資料的形狀 | 沒有人驗 | 155 個節點，每次 `check:content` |
+| 那份 schema | 只有編輯器讀 | 關卡讀同一份 |
+| 少一個必填欄 | 建置成功、關卡全綠 | 擋住，指得出是第幾筆 |
+| 驗證器的盲點 | —— | `unsupported()` 會說出來 |
+| 規則總數 | 19 | 20 |
+
+`verify:all` 六道全綠、`test:tools` 811 格全綠、`ci:sim` 在 HEAD 上全綠
+（動到 `test:units` 所以照規矩跑了）。
+
+### 待辦（不屬於這一輪）
+
+- **沒有 href 的 `<a>` 現在仍然沒有規則在看。** 這一輪是從資料那一端擋住的；
+  如果哪天別的地方也生出一個，`check:a11y` 一樣不會說話
+  （→ 1 無障礙）
+- **`note` 那種「合法但 0 筆」在 `sources.mjs` 裡沒有對應的警告** ——
+  真的加了一個沒在發文的來源，站上會安靜地少一塊（→ 4 平臺 feed 實測）
+- **`validate-schema` 只實作了 8 個關鍵字。** 那份 schema 哪天用到
+  `oneOf`／`pattern`，它會說「沒驗到」而不是紅 —— 說了不擋是刻意的，
+  但沒有人在看那句話（→ 3 內容結構）
+- 上一輪與更早的都還在（同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  `<details>`／`<summary>` 各 44 個沒有規則在看、`<time>` 82 個沒人看 `datetime`、
+  涵蓋範圍算不出來要讓規則自己宣告、`check:workflows` 的數字沒驗、
+  「掃了 61 個檔案、13713 行」沒驗、「身分規則：8 個值」不能印內容、
+  `--patterns` 那 11 個平臺的「N 筆」沒驗、
+  `SCHEMA_STRUCTURAL` 與「走不到的是哪一個」還沒驗、
+  node 與 python 的 gzip 差 0.9% 沒人查過為什麼、
+  另外 22 個 a11y `--verbose` 數字還沒驗、搜尋結果的連結沒有任何無障礙檢查看過、
+  `tokens.css` 註解裡的對比值沒有東西在守、`domain-drift` 只看三份、
+  `rule-not-documented` 只守 id、`strictReferrerPolicy: false` 那條路沒有測試、
+  `verifiedAt` 仍然手寫、`field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、`docs/A11Y.md` 那三個瀏覽器量的數字沒人對、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `audit:privacy` 沒有 needles 時本機 exit 0、
+  我連續七次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  `test-ci-sim` 那一格在有負載時會紅、要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 10 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `check:perf` 那句「全是 favicon」是寫死的描述、7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  28 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、`related` 單向、schema 的必填／選填沒被選過、
+  11 條預算裡 5 條的上限是挑的、另外四支檢查的嚴重度、
+  `CoverImage` 的 `sizes` 用 40rem、
+  `check.yml` 跑過 0 次、`ci:sim` 只有手動跑、`ui.ts` 的 `en` 要不要必填、
+  `reveal('email')` 沒有人呼叫、4 條閒置豁免、本機 `ahead 49, behind 1`、
+  `npm run sync` 來源全失敗仍離開碼 0、排程遲了四小時只有一筆、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `VideoFacade` 一次都沒算繪過、`aria-live`／`role="status"` 沒有規則、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、`probe:served` 沒有自己的測試、
+  `--real-install` 成功路徑沒測試、視覺層 24 處實測沒重驗、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  真的開一次螢幕閱讀器聽、`CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：5 — 隱私與安全**
