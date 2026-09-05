@@ -491,7 +491,19 @@ const budgets = [
         : 'detail 那一行就是實際觸發的檔案。先問它能不能壓：圖片改 WebP／AVIF，或把解析度降到實際顯示的尺寸。',
     value: biggestAsset.raw,
     limit: 60 * 1024,
-    detail: biggestAsset.path,
+    /*
+     * ── 「最大單一檔案」其實不含 HTML 與文字資源 ──────────
+     *
+     * 第 2 輪（第三十五圈）用第二種算法查 dist 裡真正最大的檔案，
+     * 得到 `index.html` 35.2 KB，而這一條說 24.9 KB —— 差的不是數字，是**範圍**：
+     * `assets` 濾掉了 HTML 與 text-like（那兩類各有自己的預算：
+     * 「最大單頁 HTML」與「最大的文字資源」）。
+     *
+     * 三條加起來確實蓋得住，但**這一條的名字比它量的東西大**。
+     * 拿 `ls -S dist` 對照的人會以為它算錯了 —— 我就是那樣以為的。
+     * 名字有十幾處註解與歷史紀錄在引用，不改名；改成讓 detail 把範圍說出來。
+     */
+    detail: `${biggestAsset.path}（只比非 HTML、非文字的資源 —— 那兩類各有自己的預算）`,
     why:
       '不含 HTML 與搜尋索引（那兩個有自己的預算）。目前最大的是 og/default.png，24.9 KB。' +
       '超過 60 KB 的靜態資源該先問是不是能壓 —— 上面 detail 那一行就是實際觸發的檔案。',

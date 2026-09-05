@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 44,900 行、2.4 MB、275 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 45,000 行、2.4 MB、276 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -44911,4 +44911,131 @@ dist/en/search/index.html：1 個
   workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：2 — 效能**
+
+### 2026-09-05 — 第 2 輪（第三十五圈）：效能
+
+**第三十五圈問：我怎麼知道這個數字是對的？有第二種算法算過嗎？**
+判準：**這個數字有沒有被第二種方法算過一次？兩種方法給的答案一樣嗎？**
+
+`check:perf` 是全 repo 印最多數字的一支。用第二種算法（python 直接走 `dist/`，
+自己的 zlib）把能獨立數的都數一次。
+
+#### 1. 六個一模一樣
+
+| | 關卡 | 獨立數 |
+|---|---|---|
+| 頁數 | 44 | 44 ✓ |
+| HTML 合計（raw） | 793.3 KB | 793.3 KB ✓ |
+| dist 總計 | 888.8 KB | 888.8 KB ✓ |
+| 圖片檔 | 7 個、42.9 KB | 7 個、42.9 KB ✓ |
+| CSP 雜湊（單頁最多） | 36 | 36 ✓ |
+| stylesheet 連結 | 47 | 47 ✓ |
+
+#### 2. 兩個差一點點 —— 是 gzip 實作的差
+
+`HTML 合計（gzip）`：關卡 287.5、我 284.9。
+`最大單頁 HTML（gzip）`：關卡 10.5、我 10.3。
+
+兩邊都是 level 9，差的是 node 的 zlib 與 python 的 zlib。
+**這件事第 2 輪（第三十三圈）已經記過一次**（那次量到 14.0 vs 14.1），
+所以不是新發現，是同一個已知差異又出現一次 —— 而且方向一致（node 略大）。
+
+#### 3. 一個差很多 —— 而且**兩邊都對**
+
+`最大單一檔案`：關卡 **24.9 KB**（`og/default.png`），
+我直接問「`dist/` 裡最大的檔案是哪個」得到 **35.2 KB**（`dist/index.html`）。
+
+差的不是數字，是**範圍**：
+
+```
+const assets = files.filter((f) => !f.path.endsWith('.html') && !isTextLike(f.path));
+```
+
+HTML 與文字資源被濾掉了 —— 因為那兩類**各有自己的預算**
+（「最大單頁 HTML」與「最大的文字資源」）。三條加起來確實蓋得住。
+
+**但這一條的名字比它量的東西大。** 拿 `ls -S dist` 對照的人會以為它算錯了 ——
+我就是那樣以為的，而且花了一段時間才確定不是。
+
+#### 4. 改法：不改名，改成把範圍說出來
+
+「最大單一檔案」這個名字在 `check-perf.mjs` 有 12 處註解、
+`test-perf-budgets.mjs` 有 7 處、`REVIEW-LOG.md` 有十幾處歷史紀錄在引用。
+改名會把那些引用全部弄斷，而**數字本來就是對的**。
+
+改成讓報告自己說：
+
+```
+  ✓ 最大單一檔案
+      24.9 KB / 上限 60.0 KB   ████████············ 42%
+      og/default.png（只比非 HTML、非文字的資源 —— 那兩類各有自己的預算）
+```
+
+#### 5. 突變與測試
+
+| 突變 | 結果 |
+|---|---|
+| 把那句範圍說明拿掉 | 那一行消失 → 測試紅 ✓ |
+
+測試兩格：說明要在，而且**那一條仍然是綠的**（加一句說明不該把通過的預算變成失敗）。
+
+#### 6. 這一圈的問題，在這一層得到的答案
+
+**九個數字裡六個第二種算法完全一致，兩個是已知的 gzip 實作差，
+一個差在範圍而不是算術。** 這一支的計數沒有問題。
+
+跟上一輪一樣，收穫在**追差異**：兩種算法不一樣的時候，
+差的那一塊要嘛是盲點（上一輪：script 裡的連結），
+要嘛是**名字與範圍對不上**（這一輪）。兩種都不是「數字錯了」。
+
+| | 之前 | 現在 |
+|---|---|---|
+| 9 個數字 | 沒有第二種算法驗過 | 全部驗過，差異都解釋得出來 |
+| 「最大單一檔案」 | 名字比範圍大 | 報告會說它不含哪兩類 |
+| 測試 | —— | 2 格 |
+
+### 待辦（不屬於這一輪）
+
+- **node 與 python 的 gzip 差約 0.9%**（287.5 vs 284.9）。兩次量到方向一致，
+  但沒有人查過為什麼（可能是 header 或 `memLevel` 預設不同）。
+  不影響預算判斷（同一支腳本前後一致），但「這個數字是對的」的答案目前是
+  「對 node 而言」（→ 2 效能）
+- 上一輪與更早的都還在（另外 22 個 a11y `--verbose` 數字還沒驗、
+  搜尋結果的連結沒有任何無障礙檢查看過、
+  `tokens.css` 註解裡的對比值沒有東西在守、`domain-drift` 只看三份、
+  `rule-not-documented` 只守 id、`strictReferrerPolicy: false` 那條路沒有測試、
+  `verifiedAt` 仍然手寫、`field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、`docs/A11Y.md` 那三個瀏覽器量的數字沒人對、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `audit:privacy` 沒有 needles 時本機 exit 0、
+  我連續六次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  `test-ci-sim` 那一格在有負載時會紅、要不要讓列表顯示詩詞的 `title`、
+  「涵蓋率：前景 N 種」那兩個數字沒人驗、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 10 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `check:perf` 那句「全是 favicon」是寫死的描述、7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  28 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、`related` 單向、schema 的必填／選填沒被選過、
+  11 條預算裡 5 條的上限是挑的、另外四支檢查的嚴重度、
+  `CoverImage` 的 `sizes` 用 40rem、
+  `check.yml` 跑過 0 次、`ci:sim` 只有手動跑、`ui.ts` 的 `en` 要不要必填、
+  `reveal('email')` 沒有人呼叫、4 條閒置豁免、本機 `ahead 48, behind 1`、
+  `npm run sync` 來源全失敗仍離開碼 0、排程遲了四小時只有一筆、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `VideoFacade` 一次都沒算繪過、`aria-live`／`role="status"` 沒有規則、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、`probe:served` 沒有自己的測試、
+  `--real-install` 成功路徑沒測試、視覺層 24 處實測沒重驗、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  真的開一次螢幕閱讀器聽、`CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：3 — 內容結構**

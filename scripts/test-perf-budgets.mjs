@@ -881,6 +881,32 @@ for (const [key, value] of Object.entries(CASES)) {
     console.log('  · 說明數字的漂移檢查：沒有 dist/，這兩格沒有檢查');
     console.log('      （CI 上 test:units 跑在 build 之前。真正在守它的是 verify:all 裡的 check:perf。）');
   } else {
+/*
+ * ── 「最大單一檔案」要說出它其實不含哪些 ──────────
+ *
+ * 第 2 輪（第三十五圈）用第二種算法查 dist 裡真正最大的檔案：`index.html`
+ * 35.2 KB，而這一條說 24.9 KB。差的不是數字是**範圍** ——
+ * `assets` 濾掉 HTML 與 text-like（那兩類各有自己的預算）。
+ * 名字比量的東西大，拿 `ls -S dist` 對照的人會以為它算錯。
+ *
+ * 這一格守的是那句範圍說明還在。兩個方向：該有的字要在，
+ * 而且那一條**仍然是綠的**（說明不該把一條通過的預算變成失敗）。
+ */
+{
+  const { out, code } = await runPerf(['--verbose']);
+  const line = out.split('\n').find((l) => l.includes('那兩類各有自己的預算')) ?? '';
+  const okSays = line !== '';
+  if (!okSays) failed++;
+  console.log(`  ${okSays ? '\u2713' : 'X'} 「最大單一檔案」說得出它不含 HTML 與文字資源`);
+  if (!okSays) {
+    console.log('        ' + (out.split('\n').find((l) => l.includes('最大單一檔案')) ?? '（那一條沒印）'));
+  }
+
+  const okStillGreen = code === 0;
+  if (!okStillGreen) failed++;
+  console.log(`  ${okStillGreen ? '\u2713' : 'X'} 加了那句說明之後這一支仍然是綠的（exit ${code}）`);
+}
+
   const clean = (await runPerf()).out;
   const okQuiet = !clean.includes('說明裡的數字過期');
   if (!okQuiet) failed++;
