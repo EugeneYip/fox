@@ -69,6 +69,71 @@ const enPage = (o = {}) =>
     .replace('<footer>頁尾</footer>', '<footer>Footer</footer>');
 
 /**
+ * 每一條規則是 `error` 還是 `warn`。
+ *
+ * ── 為什麼要有這份表 ──────────────────────────────
+ *
+ * **`warn` 不會讓關卡紅燈。** 所以 error／warn 是一個真正的二選一：
+ * 一條規則設成 warn，等於說「這件事違反了也可以出貨」。
+ *
+ * 第 1 輪（第十四圈）的突變掃描量到：把 `skip-link` 從 error 改回 warn，
+ * **所有案例照樣綠**。那一輪加了 per-case 的 `level` 來釘住它。
+ *
+ * 第 1 輪（第三十一圈）再量了一次：28 條規則裡，**只有 3 條**
+ * 的嚴重度被釘住（`skip-link`、`input-label`、`same-name-different-target`）。
+ * 其餘 25 條可以被安靜地翻面。
+ *
+ * 所以改成一張**規則層級**的表：per-case 的 `level` 只釘得到有寫的那幾格，
+ * 而嚴重度是規則的性質，不是某一格案例的性質。一份表、28 條、全部釘住。
+ *
+ * ── 那四條 warn，為什麼是 warn ──────────────────────
+ *
+ * 誠實地說：**原本的理由沒有寫下來，已經找不回來了。**
+ * 底下這四句是第 1 輪（第三十一圈）寫的 —— 不是考古出來的，
+ * 是現在能說得出口的理由。寫下來是為了讓下一個人有東西可以反對。
+ *
+ * @type {Record<string, 'error' | 'warn'>}
+ */
+const SEVERITY = {
+  'aria-ref': 'error',
+  'blank-rel': 'error',
+  'button-name': 'error',
+  'current-page-unmarked': 'error',
+  'decorative-glyph-in-name': 'error',
+  'duplicate-id': 'error',
+  'duplicate-landmark-name': 'error',
+  'empty-heading': 'error',
+  'focus-outline-removed': 'error',
+  'fullwidth-in-english': 'error',
+  h1: 'error',
+  /* WCAG 沒有「標題層級不可以跳」這一條成功準則 —— 它是可讀性的啟發式判斷，
+     而內容有時真的會跳一層。所以提醒，不擋。 */
+  'heading-order': 'warn',
+  'html-lang': 'error',
+  'img-alt': 'error',
+  'input-label': 'error',
+  landmark: 'error',
+  'lang-content-mismatch': 'error',
+  'link-name': 'error',
+  /* 只在「同一頁有兩個以上 nav」時才響。多個 nav 沒有名字是**難用**，
+     不是不能用 —— 螢幕閱讀器仍然進得去，只是地標清單上分不出誰是誰。 */
+  'nav-label': 'warn',
+  'positive-tabindex': 'error',
+  'reduced-motion-blanket': 'error',
+  /* WCAG 2.4.9（連結目的，僅連結本身）是 **AAA**，不是 AA。
+     而且同名不同目標在分頁、語言切換上有合理的形式。 */
+  'same-name-different-target': 'warn',
+  'skip-link': 'error',
+  'sr-only-broken': 'error',
+  title: 'error',
+  'unlabelled-cjk': 'error',
+  'unlabelled-cjk-attr': 'error',
+  /* 沒有可及名稱的 `<section>` 不會被曝露成 region —— 它退化成一個普通的
+     容器，不是壞掉。少一個地標是可惜，不是障礙。 */
+  'unnamed-region': 'warn',
+};
+
+/**
  * 每一條規則一個案例。
  *
  * `file` 是相對於假 dist 的路徑（有些規則只看 en/ 底下）。
@@ -79,12 +144,12 @@ const enPage = (o = {}) =>
  * `quiet` 是**反向案例**：那一條規則**不該**響。
  * 少了反向案例，「把規則放寬到永遠不響」也會通過。
  *
- * `level` 釘住嚴重度（`'error'` 或 `'warn'`）。**warn 不會讓關卡紅燈**，
+ * 嚴重度不寫在案例上 —— 它是**規則**的性質，統一放在上面的 `SEVERITY`。
  * 所以「這一條是 error」是一個會被安靜改掉的事實 ——
  * 第 1 輪（第十四圈）的突變掃描量到：把 skip-link 從 error 改回 warn，
  * 所有案例照樣綠。
  *
- * @type {Record<string, { file?: string, html: string, also?: Record<string, string>, rule?: string, quiet?: boolean, coFires?: string[], level?: 'error'|'warn' }>}
+ * @type {Record<string, { file?: string, html: string, also?: Record<string, string>, rule?: string, quiet?: boolean, coFires?: string[] }>}
  */
 const CASES = {
   'html-lang': { html: page().replace('<html lang="zh-Hant-TW">', '<html>') },
@@ -122,7 +187,6 @@ const CASES = {
    * 站上真的有（首頁兩個「看全部→」）。
    */
   'same-name-different-target': {
-    level: 'warn',
     html: page({
       body: '<a href="/archive">看全部</a><a href="/elsewhere">看全部</a>',
     }),
@@ -203,20 +267,19 @@ const CASES = {
   'input-label': { html: page({ body: '<input type="text">' }) },
   'duplicate-id': { html: page({ body: '<p id="dup">一</p><p id="dup">二</p>' }) },
   'aria-ref': { html: page({ body: '<p aria-labelledby="不存在的id">指到不存在的東西</p>' }) },
-  /* `level` 是第 5 輪（第十四圈）加的：那一輪把這條升成 error，
-     而第 1 輪（第十四圈）的突變掃描示範過「改回 warn」不會有任何東西說話。 */
+  /* 這條在第 5 輪（第十四圈）從 warn 升成 error；嚴重度現在釘在 SEVERITY 裡。 */
   'blank-rel': {
-    level: 'error',
     html: page({ body: '<a href="https://example.com" target="_blank">外連沒有 rel</a>' }),
   },
   /*
-   * `level: 'error'` 是第 1 輪（第十四圈）加的。那一輪把這條從 warn 升成
-   * error（那個連結是 Base.astro 為每一頁畫的，44／44 都有，沒有正當例外），
-   * 而突變掃描當場指出「改回 warn」所有案例照樣綠 —— warn 不會讓關卡紅燈，
-   * 所以嚴重度本身也要有東西守著。
+   * 第 1 輪（第十四圈）把這條從 warn 升成 error —— 那個連結是 Base.astro
+   * 為每一頁畫的，44／44 都有，沒有正當例外。
+   *
+   * 那一輪的突變掃描當場指出「改回 warn」所有案例照樣綠。
+   * 嚴重度現在釘在 `SEVERITY` 裡（第 1 輪〔第三十一圈〕從 per-case 搬過去，
+   * 因為 per-case 只釘得到 28 條裡的 3 條）。
    */
   'skip-link': {
-    level: 'error',
     html: page().replace('<a class="skip-link" href="#main">跳到主要內容</a>', ''),
   },
   /*
@@ -241,7 +304,6 @@ const CASES = {
   /* 「回到頂端」那種：連結在錨點**後面**，救不了要穿過導覽列的人 */
   'skip-link（連結在錨點之後，還是要報）': {
     rule: 'skip-link',
-    level: 'error',
     html: page({ body: '<p>內文</p><a href="#main">回到主要內容</a>' }).replace(
       '<a class="skip-link" href="#main">跳到主要內容</a>',
       '',
@@ -250,7 +312,6 @@ const CASES = {
   /* 指向不存在的錨點：按下去什麼都不會發生 */
   'skip-link（錨點不存在，還是要報）': {
     rule: 'skip-link',
-    level: 'error',
     html: page()
       .replace('<a class="skip-link" href="#main">跳到主要內容</a>', '<a href="#nope">跳到主要內容</a>')
       .replace('<main id="main">', '<main>'),
@@ -534,7 +595,7 @@ try {
     }
   }
 
-  for (const [label, { file, html, also, rule, quiet, coFires, level }] of Object.entries(CASES)) {
+  for (const [label, { file, html, also, rule, quiet, coFires }] of Object.entries(CASES)) {
     const id = rule ?? label;
     const dir = await mkdtemp(join(tmpdir(), 'a11y-one-'));
     const target = join(dir, file ?? 'index.html');
@@ -550,12 +611,22 @@ try {
     const ok = quiet ? !fired : fired;
     if (!ok) failed++;
     console.log(`  ${ok ? '✓' : 'X'} ${label}`);
-    if (level && fired) {
-      /* 輸出裡 error 是 `X [id]`、warn 是 `! [id]` */
-      const mark = level === 'error' ? 'X' : '!';
-      if (!out.includes(`${mark} [${id}]`)) {
+    /*
+     * 嚴重度照 SEVERITY 那張表驗 —— **每一格都驗**，不是只驗有寫 level 的那幾格。
+     * 見那張表上面的說明：第 1 輪（第三十一圈）之前只有 3 條被釘住。
+     */
+    const want = SEVERITY[id];
+    if (fired) {
+      if (!want) {
         failed++;
-        console.log(`      嚴重度不對：預期 ${level}（輸出應該是「${mark} [${id}]」）`);
+        console.log(`      SEVERITY 表裡沒有 ${id} —— 加規則就要決定它是 error 還是 warn。`);
+      } else {
+        /* 輸出裡 error 是 `X [id]`、warn 是 `! [id]` */
+        const mark = want === 'error' ? 'X' : '!';
+        if (!out.includes(`${mark} [${id}]`)) {
+          failed++;
+          console.log(`      嚴重度不對：預期 ${want}（輸出應該是「${mark} [${id}]」）`);
+        }
       }
     }
     /*
@@ -770,6 +841,38 @@ try {
     failed += uncounted.length;
     console.log(`\n  X 這些規則沒有呼叫 saw()：${uncounted.join('、')}`);
     console.log('      沒有計數的話，「這次沒有東西可看」那份名單就會漏掉它們。');
+  }
+
+  /*
+   * ── 每一條規則都要決定它是 error 還是 warn ──────────
+   *
+   * 上面那個「案例響的時候比對嚴重度」只驗得到**有案例會響**的規則。
+   * 一條規則要是漏進 `SEVERITY`，它的嚴重度就沒有人釘 ——
+   * 而 `warn` 不會讓關卡紅燈，所以那是「這件事違反了也可以出貨」
+   * 被安靜地決定掉。
+   *
+   * 兩個方向都要比：漏掉的（規則在、表上沒有）與多出來的（表上有、
+   * 規則已經刪了）。只比一邊的話，表會慢慢變成一份過期的名單。
+   */
+  const rated = new Set(Object.keys(SEVERITY));
+  const unrated = [...declared].filter((r) => !rated.has(r));
+  const stale = [...rated].filter((r) => !declared.has(r));
+  if (unrated.length > 0 || stale.length > 0) {
+    failed += unrated.length + stale.length;
+    if (unrated.length > 0) {
+      console.log(`\n  X 這些規則不在 SEVERITY 表裡：${unrated.join('、')}`);
+      console.log('      加規則就要決定它是 error 還是 warn —— warn 不會讓關卡紅燈。');
+    }
+    if (stale.length > 0) {
+      console.log(`\n  X SEVERITY 表裡有已經不存在的規則：${stale.join('、')}`);
+      console.log('      刪規則的時候順手把它從表上拿掉。');
+    }
+  } else {
+    const warns = [...rated].filter((r) => SEVERITY[r] === 'warn').sort();
+    console.log(
+      `  ✓ ${rated.size} 條規則的嚴重度都釘住了` +
+        `（${rated.size - warns.length} 條 error、${warns.length} 條 warn：${warns.join('、')}）`,
+    );
   }
 
   /*
