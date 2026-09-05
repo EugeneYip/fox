@@ -14,11 +14,25 @@ import PageHeader from '@components/layout/PageHeader.astro';
 import { localePaths } from '@i18n/paths';
 import { privacy } from '@config/privacy';
 import { pick } from '@i18n/utils';
+import { site } from '@config/site';
 import type { Locale } from '@config/site';
 
 export const getStaticPaths = () => localePaths();
 
 const { locale } = Astro.props as { locale: Locale };
+
+/*
+ * ── 那個網域也是抄的 ──────────
+ *
+ * 底下影片那一段對訪客說「YouTube 會知道你是從 bellafoxy.com 來的」。
+ * 網域寫死了兩次（中英各一），而 `site.url` 就在 `@config/site` 裡 ——
+ * 這一頁本來就 import 了它的**型別**，只是沒 import 值。
+ *
+ * 第 6 輪（第三十四圈）：跟上一輪那句 rel 的承諾是同一個形狀 ——
+ * 答案在系統裡，而對訪客說的那一句自己抄了一份。
+ * 換網域的時候，最不該說錯的就是這一頁。
+ */
+const host = new URL(site.url).host;
 const title = pick({ 'zh-TW': '隱私', en: 'Privacy' }, locale) ?? '隱私';
 
 interface Section {
@@ -90,7 +104,7 @@ const CONTENT: Record<Locale, { lead: string; sections: Section[] }> = {
            * referrerPolicy 是 strict-origin-when-cross-origin ——
            * YouTube 會知道你從這個網域來。兩件事不一樣，就分開講。
            */
-          '按下播放之後，就進入 YouTube 自己的隱私政策範圍了。那個影片框會讓 YouTube 知道你是從 bellafoxy.com 來的（只有網域，不含是哪一頁）—— 下面「對外連結」那一條講的是連結，不含這個。',
+          `按下播放之後，就進入 YouTube 自己的隱私政策範圍了。那個影片框會讓 YouTube 知道你是從 ${host} 來的（只有網域，不含是哪一頁）—— 下面「對外連結」那一條講的是連結，不含這個。`,
         ],
       },
       {
@@ -157,7 +171,7 @@ const CONTENT: Record<Locale, { lead: string; sections: Section[] }> = {
         heading: 'Video',
         paragraphs: [
           embedSentence.en,
-          'Once you press play, YouTube’s own privacy policy takes over. That frame does tell YouTube you came from bellafoxy.com — the domain only, not which page. The rule under “Outbound links” below is about links, not about this.',
+          `Once you press play, YouTube’s own privacy policy takes over. That frame does tell YouTube you came from ${host} — the domain only, not which page. The rule under “Outbound links” below is about links, not about this.`,
         ],
       },
       {

@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 44,400 行、2.4 MB、271 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 44,500 行、2.4 MB、272 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -44357,4 +44357,133 @@ export const externalLinkRel = privacy.strictReferrerPolicy
   workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：6 — 文案與語氣**
+
+### 2026-09-05 — 第 6 輪（第三十四圈）：文案與語氣
+
+**第三十四圈問：這個答案，系統裡已經有了嗎？如果有，為什麼沒用上？**
+判準：**這個數字、這個判斷，是重新算的，還是從已經有的地方拿的？
+如果是重新算的，兩邊什麼時候會分岔？**
+
+文案這一層天生就有兩份：**規則怎麼判**（`check-copy.mjs`）與
+**文件怎麼說**（`CLAUDE.md`、`docs/CONTENT.md`）。
+`rule-not-documented` 已經在守「每條規則的 id 兩份文件都要提到」——
+但那只守 id，**沒有守描述**。
+
+#### 1. 文件描述的邊界，跟規則真的判的一樣（沒發現問題）
+
+`CLAUDE.md` 對三條規則的**範圍**寫了很具體的話：
+
+- 「`straight-quotes` 擋的是『兩側都是漢字』的情況；中英混排時兩側是拉丁字母的那種不算」
+- 「`cjk-latin-space` 規則只看字母，不看數字」
+- 「`halfwidth-ellipsis` 同樣只看漢字後面那種」
+
+拿真的規則跑，一句一句對：
+
+| 樣本 | 結果 |
+|---|---|
+| `他說"你好"就走了。` | `[straight-quotes]` 響 ✓ |
+| `他說 "hello" 就走了。` | 不響 ✓ |
+| `今天是 9月2日。` | 不響 ✓ |
+| `用Astro建的站。` | `[cjk-latin-space]` 響 ✓ |
+
+**四個邊界都跟文件說的一樣。** 而且 `test-copy-rules.mjs` 裡本來就有對應的
+反向樣本（`9月2` 出現 6 次、英文引號 29 次、英文省略號 5 次）。
+
+#### 2. `check:copy` 算出來的數字，沒有人手抄（沒發現問題）
+
+它每次會印：191 個介面字串、35 個沒被算繪（18%）、108 組英文覆蓋 100%、
+61 個檔案、13709 行、8 條規則、1 條閒置。
+
+`grep` 過 `CLAUDE.md`、`docs/CONTENT.md`、`ARCHITECTURE.md`、`AGENTS.md`、
+`README.md` —— **一個都沒有被抄進文件**。站名（`site.name`）也沒有被硬寫進
+任何一句面向讀者的文案（只出現在註解，以及 `sources.mjs` 裡那個
+**頻道**名稱 —— 那是 YouTube 上真的叫這個，不是抄站名）。
+
+#### 3. 找到的那一個：對訪客說的那句話裡，網域是抄的
+
+`/privacy` 的影片那一段：
+
+> 那個影片框會讓 YouTube 知道你是從 **bellafoxy.com** 來的（只有網域，不含是哪一頁）
+
+中英各一句，網域**寫死了兩次**。而 `site.url` 就在 `@config/site` 裡 ——
+**這一頁本來就 import 了它的型別，只是沒 import 值。**
+
+跟上一輪那句 `rel` 的承諾是同一個形狀，同一個檔案：
+答案在系統裡，而對訪客說的那一句自己抄了一份。
+換網域的時候，最不該說錯的就是這一頁。
+
+改成 `const host = new URL(site.url).host`。突變驗證：
+把 `site.url` 改成 `https://example.test` 再建置，中英兩句都跟著變成
+`example.test`（之前會照樣說 bellafoxy.com）。
+
+#### 4. 這一輪我的第一次量測什麼都沒證明
+
+我先寫了一份 fixture，把四個「文件說不該響」的例子放進去跑，得到
+「沒有發現問題」，差點就寫成「四個例外都對」。
+
+但同一份輸出上還有一行：**「這次沒有東西可判斷的規則（7 條）：⋯⋯
+straight-quotes、halfwidth-ellipsis⋯⋯」** —— 那幾條**根本沒有主體**。
+純英文的句子連掃都沒掃到，「沒有發現問題」證明的是「沒東西可判斷」。
+
+要證明邊界，樣本必須落在規則的範圍**裡面**才行 —— 也就是上面第 1 節
+那四句（每一句都有漢字，兩個方向各兩句）。
+這是這一組圈第十四次「我的量法錯」，而這次是**這個 repo 追了好幾圈的
+那個形狀（空綠燈）出現在我自己的探針上**。
+
+#### 5. 這一圈的問題，在這一層得到的答案
+
+文案這一層對「兩份會分岔」的防備做得比想像中好 ——
+規則的 id 有雙向檢查、描述的邊界有反向樣本、報告的數字沒有人手抄。
+
+漏的那一個不在規則裡，在**內容**裡：一句對訪客講事實的話，
+把一個 config 裡的值抄了下來。
+
+| | 之前 | 現在 |
+|---|---|---|
+| 隱私頁的網域 | 中英各寫死一次 | 從 `site.url` 取 |
+| 文件描述的規則邊界 | —— | 這一輪逐條驗過，四個都對 |
+| `check:copy` 的數字 | —— | 逐份 grep 過，沒有人手抄 |
+
+### 待辦（不屬於這一輪）
+
+- **網域在 `src/config/site.ts`、`astro.config.mjs`、`public/CNAME` 三個地方各有一份，
+  而沒有任何東西比對它們。** 今天三份一致（都是 `bellafoxy.com`）；
+  deploy.yml 只檢查 `dist/CNAME` **存在**，不看值（→ 7 建置與 CI）
+- **`rule-not-documented` 只守 id，不守描述。** 這一輪是用手把三條規則的
+  描述跟行為對過的；要常設就得把文件裡的邊界寫成可執行的樣本（→ 6 文案）
+- 上一輪與更早的都還在（`strictReferrerPolicy: false` 那條路沒有測試、
+  `verifiedAt` 仍然手寫、`field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、`docs/A11Y.md` 那三個瀏覽器量的數字沒人對、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `audit:privacy` 沒有 needles 時本機 exit 0、搜尋頁的 client script 沒有自動測試、
+  我連續六次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  `test-ci-sim` 那一格在有負載時會紅、要不要讓列表顯示詩詞的 `title`、
+  `REVIEW-LOG.md` 開頭三個數字手寫、「涵蓋率：前景 N 種」那兩個數字沒人驗、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  另外幾支的 `--verbose` 數字沒人驗、乾淨基底上 10 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `check:perf` 那句「全是 favicon」是寫死的描述、7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  28 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、`related` 單向、schema 的必填／選填沒被選過、
+  11 條預算裡 5 條的上限是挑的、另外四支檢查的嚴重度、
+  `CoverImage` 的 `sizes` 用 40rem、
+  `check.yml` 跑過 0 次、`ci:sim` 只有手動跑、`ui.ts` 的 `en` 要不要必填、
+  `reveal('email')` 沒有人呼叫、4 條閒置豁免、本機 `ahead 48, behind 1`、
+  `npm run sync` 來源全失敗仍離開碼 0、排程遲了四小時只有一筆、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `VideoFacade` 一次都沒算繪過、`aria-live`／`role="status"` 沒有規則、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、`probe:served` 沒有自己的測試、
+  `--real-install` 成功路徑沒測試、視覺層 24 處實測沒重驗、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  真的開一次螢幕閱讀器聽、`CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：7 — 建置與 CI**
