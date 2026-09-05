@@ -768,6 +768,113 @@ if (l10nPairs.length > 0) {
   }
 }
 
+/*
+ * ── 邊界外面是什麼？那裡現在有幾個？ ────────────────
+ *
+ * 第 6 輪（第三十六圈）加的。這一支的範圍那一行早就說得出**什麼**不在裡面
+ * （「程式碼註解與內容正文不在範圍內」），但從來沒說過**那裡有多少東西** ——
+ * 而沒有數字的範圍說明，讀起來仍然像「剩下的都看過了」。
+ *
+ * 量出來的兩件事：
+ *
+ *   1. 程式碼註解比這一支掃的語料**大三倍**。這個 repo 的註解密度是刻意
+ *      偏高的（CLAUDE.md 寫的：長期低頻維護，半年後回來要看得懂），
+ *      所以「不掃註解」漏掉的不是零星幾行。
+ *   2. **草稿正文是發佈那一刻才第一次被檢查的。** 正文之所以不掃，理由是
+ *      「發佈後會進 dist」—— 但草稿不會進 dist。她寫的時候全綠，
+ *      按下發佈才第一次有人看，而那時候紅的是 CI。
+ *
+ * 這裡只報數字，不擋也不判斷對錯：
+ * CLAUDE.md 的約定寫的是「**網站上**的中文」，而註解不在網站上 ——
+ * 把規則擴到註解會是我自己發明的規矩，不是這個專案的約定。
+ * 而且那些命中裡有一部分是**刻意在引用違規本身**
+ * （規則自己的反例、測試案例的說明），跟 CLAUDE.md 當年被整份豁免同一個原因。
+ */
+{
+  /** @param {string} dir @returns {AsyncGenerator<string>} */
+  async function* codeWalk(dir) {
+    for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+      const full = resolve(dir, e.name);
+      if (e.isDirectory()) {
+        if (['node_modules', 'dist', '.astro', '.git'].includes(e.name)) continue;
+        yield* codeWalk(full);
+      } else yield full;
+    }
+  }
+  const CJK = /[\u4e00-\u9fff]/;
+  let commentCjk = 0;
+  /** @type {Map<string, number>} */
+  const commentHits = new Map();
+  for (const dir of ['src', 'scripts']) {
+    for await (const f of codeWalk(resolve(ROOT, dir))) {
+      if (!/\.(ts|tsx|mjs|astro|css)$/.test(f)) continue;
+      let inBlock = false;
+      for (const line of (await readFile(f, 'utf8')).split('\n')) {
+        const t = line.trim();
+        let isComment = false;
+        if (inBlock) {
+          isComment = true;
+          if (t.includes('*/')) inBlock = false;
+        } else if (t.startsWith('/*')) {
+          isComment = true;
+          if (!t.includes('*/')) inBlock = true;
+        } else if (t.startsWith('//')) isComment = true;
+        if (!isComment || !CJK.test(line)) continue;
+        commentCjk += 1;
+        for (const r of RULES) {
+          r.bad.lastIndex = 0;
+          const m = line.match(r.bad);
+          if (m) commentHits.set(r.id, (commentHits.get(r.id) ?? 0) + m.length);
+        }
+      }
+    }
+  }
+
+  /* 草稿：正文一個字都沒有人看過，直到它被發佈 */
+  let draftFiles = 0;
+  let draftCjk = 0;
+  for await (const f of codeWalk(resolve(ROOT, 'src/content'))) {
+    if (!/\.mdx?$/.test(f)) continue;
+    const text = await readFile(f, 'utf8');
+    if (!/^draft:\s*true\s*$/m.test(text)) continue;
+    draftFiles += 1;
+    for (const line of text.replace(/^---[\s\S]*?\n---\n/, '').split('\n')) {
+      if (CJK.test(line)) draftCjk += 1;
+    }
+  }
+
+  const total = [...commentHits.values()].reduce((n, v) => n + v, 0);
+  const top = [...commentHits.entries()].sort((a, b) => b[1] - a[1]);
+  /*
+   * ── 0 在這裡是壞消息，不是好消息 ──────────
+   *
+   * 這個 repo 的註解密度是刻意偏高的，所以「一行含漢字的註解都沒有」
+   * 幾乎一定是**走錯路徑**，不是真的很乾淨。
+   * 不擋這一下的話，`--root=` 指到別處時這則筆記會印出一個漂亮的 0，
+   * 而那讀起來像「邊界外面什麼都沒有」。
+   * 跟 audit:privacy 的「一個檔案都沒掃到」是同一件事。
+   */
+  if (commentCjk === 0) {
+    notes.push(
+      '這一支看不到的地方**這次沒有量到** —— ' +
+        `${resolve(ROOT, 'src')} 與 ${resolve(ROOT, 'scripts')} 底下\n` +
+        '    一行含漢字的註解都沒有。這個 repo 不會這樣，所以這通常表示路徑指錯了\n' +
+        '    （`--root=` 指到別處，或是在別的專案上跑）。不是「邊界外面什麼都沒有」。',
+    );
+  } else notes.push(
+    `這一支看不到的地方，現在有這些東西：\n` +
+      `    · **程式碼註解**（src ＋ scripts）：${commentCjk} 行含漢字 —— ` +
+      `這一支掃的是 ${scanned.cjkLines} 行，也就是**邊界外面比裡面大 ` +
+      `${(commentCjk / Math.max(scanned.cjkLines, 1)).toFixed(1)} 倍**。\n` +
+      `      拿同一套規則掃過去命中 ${total} 處（${top.map(([id, n]) => `${id} ${n}`).join('、')}）。\n` +
+      `      這裡不擋也不判斷對錯：約定寫的是「網站上的中文」，而註解不在網站上；\n` +
+      `      而且那些命中裡有一部分是刻意在引用違規本身（規則的反例、測試案例的說明）。\n` +
+      `    · **草稿正文**：${draftFiles} 篇、${draftCjk} 行含漢字。正文不掃的理由是\n` +
+      `      「發佈後會進 dist」—— 但**草稿不會進 dist**。寫的時候全綠，\n` +
+      `      按下發佈才第一次有人看，而那時候紅的是 CI。`,
+  );
+}
+
 console.log('\n文案慣例檢查\n' + '─'.repeat(56));
 
 /*

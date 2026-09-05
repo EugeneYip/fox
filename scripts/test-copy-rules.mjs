@@ -1087,6 +1087,37 @@ for (const [name, { hit, miss, expect, coFires }] of Object.entries(CASES)) {
 
 console.log('─'.repeat(64));
 /*
+ * ── 邊界那則筆記，兩個方向都要對 ──────────
+ *
+ * 第 6 輪（第三十六圈）加的。那則筆記報的是「這一支看不到的地方
+ * 現在有幾個」——而它最可能的壞法不是報錯，是**報一個漂亮的 0**：
+ * 路徑指錯的時候一行註解都走不到，於是印出「邊界外面什麼都沒有」。
+ *
+ * 所以兩格：有註解的時候數得出來，沒有的時候要**說自己沒量到**。
+ */
+{
+  const withCode = await build({
+    'dist/index.html': html('<p>乾淨的一頁。</p>'),
+    'src/x.ts': '/*\n * 這是一行含漢字的註解。\n */\nexport const x = 1;\n',
+  });
+  const out = await check(withCode);
+  const m = /(\d+) 行含漢字/.exec(out);
+  const okCount = m !== null && Number(m[1]) > 0;
+  if (!okCount) failed++;
+  console.log(`  ${okCount ? '✓' : 'X'} 邊界那則筆記數得出程式碼註解` + (m ? `（${m[1]} 行）` : ''));
+  if (!okCount) console.log('        ' + out.split('\n').filter(Boolean).slice(-6).join(' | '));
+
+  /* 反向：沒有 src／scripts 的時候不能印 0，要說自己沒量到 */
+  const noCode = await build({ 'dist/index.html': html('<p>乾淨的一頁。</p>') });
+  const out2 = await check(noCode);
+  const okEmpty = /這次沒有量到/.test(out2) && !/0 行含漢字/.test(out2);
+  if (!okEmpty) failed++;
+  console.log(`  ${okEmpty ? '✓' : 'X'} 走不到程式碼時說「沒量到」，不印一個漂亮的 0`);
+  if (!okEmpty) console.log('        ' + out2.split('\n').filter(Boolean).slice(-6).join(' | '));
+}
+
+console.log('─'.repeat(64));
+/*
  * ── 第一次跑的人看得到什麼 ──────────
  *
  * 第 6 輪（第二十九圈）：這一支本來說「掃了 61 個檔案、13647 行」——
