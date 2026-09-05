@@ -686,6 +686,16 @@ async function* walkSurf(dir) {
 
   /** 任何 `var(--x)` 用到的 token —— 給下面「宣告了卻沒有人用」那一段 */
   const anyUse = new Set();
+  /**
+   * `tokens.css` **以外**的地方用到的那些 —— 遞移計算的起點。
+   *
+   * `anyUse` 包含 tokens.css 自己，而那個檔案裡的 `var()` 只是在
+   * 組合別的 token（`--shadow-soft` 由 near／far 組成）。
+   * 拿 `anyUse` 當起點的話，一個沒人用的組合 token 會把它的零件一起撐活。
+   * 見底下「未使用」那一段的說明。
+   * @type {Set<string>}
+   */
+  const outsideUse = new Set();
   /** @type {Map<string, Set<string>>} 前景 token → 用在哪 */
   const fgUse = new Map();
   /** @type {Map<string, Set<string>>} 純色背景 token → 用在哪 */
@@ -696,7 +706,10 @@ async function* walkSurf(dir) {
     // 註解裡的 var(--c-x) 不算數
     const text = raw.replace(/\/\*[\s\S]*?\*\//g, ' ');
     const where = file.slice(ROOT.length + 1);
-    for (const m of text.matchAll(/var\(\s*(--[\w-]+)/g)) anyUse.add(m[1]);
+    for (const m of text.matchAll(/var\(\s*(--[\w-]+)/g)) {
+      anyUse.add(m[1]);
+      if (!where.endsWith('styles/tokens.css')) outsideUse.add(m[1]);
+    }
     // 逐個宣告切開 —— 屬性名決定它是前景還是背景，不是拿整段去猜
     for (const decl of text.split(/[;{}]/)) {
       const colon = decl.indexOf(':');
@@ -734,14 +747,53 @@ async function* walkSurf(dir) {
     const declared = [
       ...new Set([...stripComments(css).matchAll(/^\s*(--[a-z][\w-]*)\s*:/gm)].map((m) => m[1])),
     ];
-    const unused = declared.filter((t) => !anyUse.has(t));
+    /*
+     * ── 「有人用」要遞移地算 ────────────────────────────
+     *
+     * 第 8 輪（第三十一圈）量到的：`--shadow-soft` 沒有任何地方用，
+     * 而 `--shadow-soft-near` 與 `--shadow-soft-far` **只被它引用** ——
+     *
+     *   --shadow-soft: 0 1px 2px var(--shadow-soft-near), 0 4px 16px var(--shadow-soft-far);
+     *
+     * 直接數 `var()` 的話，那兩個看起來是活的。**它們是被一個死掉的
+     * token 撐著的。** 三個都是死的，而報告只說一個。
+     *
+     * （對照組：`--shadow-lift` 有三個地方在用，所以 `--shadow-lift-near/-far`
+     * 是真的活著。同一種結構，兩種答案 —— 只看直接引用分不出來。）
+     *
+     * 所以反覆剝：把這一輪算出來的沒人用的拿掉，重算誰還被誰引用，
+     * 直到不再變少。**這不是「更嚴格」，是原本那個數字本來就沒說完。**
+     */
+    /** token → 它自己那一行 `var()` 了誰（`--shadow-soft` → near/far） */
+    /** @type {Map<string, string[]>} */
+    const refs = new Map();
+    for (const line of stripComments(css).split('\n')) {
+      const m = /^\s*(--[a-z][\w-]*)\s*:(.*)$/.exec(line);
+      if (!m) continue;
+      const inner = [...m[2].matchAll(/var\(\s*(--[\w-]+)/g)].map((x) => x[1]);
+      refs.set(m[1], [...(refs.get(m[1]) ?? []), ...inner]);
+    }
+    /** 從 tokens.css 以外的地方被用到的那些 —— 遞移的起點 */
+    const rooted = new Set(declared.filter((t) => outsideUse.has(t)));
+    /* 從根往下展開：活著的 token 引用到的也活著 */
+    const alive = new Set(rooted);
+    const stack = [...rooted];
+    while (stack.length > 0) {
+      const t = /** @type {string} */ (stack.pop());
+      for (const child of refs.get(t) ?? []) if (!alive.has(child)) { alive.add(child); stack.push(child); }
+    }
+    const unused = declared.filter((t) => !alive.has(t));
+    const direct = unused.filter((t) => !anyUse.has(t));
+    const onlyByDead = unused.filter((t) => anyUse.has(t));
+
     console.log('\n' + '─'.repeat(78));
     /* 開頭的「未使用：」是給 test-contrast 的段落狀態機認的，跟上面幾段一致 */
     if (unused.length === 0) {
       console.log(`未使用：宣告的 ${declared.length} 個 token 都有人用 ✓`);
     } else {
-      console.log(`未使用：${declared.length} 個 token 裡有 ${unused.length} 個沒有任何地方 var() 它 —`);
-      for (const t of unused) console.log(`  ✗ ${t}`);
+      console.log(`未使用：${declared.length} 個 token 裡有 ${unused.length} 個沒有人真的用到 —`);
+      for (const t of direct) console.log(`  ✗ ${t}`);
+      for (const t of onlyByDead) console.log(`  ✗ ${t}　（只被上面那些沒人用的 token 引用，不是真的活著）`);
       console.log('  不是錯，但轉了不會有任何效果。要刪還是要接上去，站主決定。');
     }
   }

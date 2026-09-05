@@ -388,6 +388,78 @@ await check(
 );
 
 /*
+ * ── 「有人用」是遞移的 ──────────────────────────────
+ *
+ * 第 8 輪（第三十一圈）量到的：`--shadow-soft` 沒有任何地方用，
+ * 而 `--shadow-soft-near`／`-far` **只被它引用** —— 直接數 `var()` 的話
+ * 那兩個看起來是活的，實際上是被一個死掉的 token 撐著。
+ *
+ * 對照組在同一份 fixture 裡：`--probe-live` 有真的地方在用，
+ * 所以它的零件也真的活著。**同一種結構、兩種答案 —— 少了對照組，
+ * 「一律當成死的」跟「遞移地算」在輸出上分不出來。**
+ */
+{
+  /** 在 :root 的結尾之前插幾個測試用的 token */
+  const withProbes = realTokens.replace(
+    /(\n\})/,
+    [
+      '',
+      '  --probe-dead-part: 1px;',
+      '  --probe-dead: 0 0 2px var(--probe-dead-part);',
+      '  --probe-live-part: 2px;',
+      '  --probe-live: 0 0 4px var(--probe-live-part);',
+      '$1',
+    ].join('\n'),
+  );
+  await check(
+    '只被沒人用的 token 引用，也算沒人用',
+    {
+      tokens: withProbes,
+      global: realGlobal + '\n.probe { box-shadow: var(--probe-live); }\n',
+    },
+    {
+      exit: 0,
+      checked: 42,
+      /* 死的那一組兩個都要列出來；活的那一組一個都不能列 */
+      unusedHas: ['--probe-dead', '--probe-dead-part'],
+      unusedHasNot: ['--probe-live', '--probe-live-part'],
+    },
+  );
+
+  /*
+   * 兩種死法要分得開。
+   *
+   * `--probe-dead` 是**沒有人 var() 它**；`--probe-dead-part` 是
+   * **有人 var()，但那個人自己是死的**。對讀的人是兩件事：
+   * 前者刪掉就好，後者要先看它的主人還要不要。
+   * 少了這一格，「兩個都印一樣的一行」照樣全綠。
+   */
+  const dir = await mkdtemp(join(tmpdir(), 'contrast-dead-'));
+  await mkdir(join(dir, 'src/styles'), { recursive: true });
+  await writeFile(join(dir, 'src/styles/tokens.css'), withProbes, 'utf8');
+  await writeFile(
+    join(dir, 'src/styles/global.css'),
+    realGlobal + '\n.probe { box-shadow: var(--probe-live); }\n',
+    'utf8',
+  );
+  let out = '';
+  try {
+    ({ stdout: out } = await run('node', [resolve(ROOT, 'scripts/check-contrast.mjs'), `--root=${dir}`]));
+  } catch (err) {
+    out = String(/** @type {{ stdout?: string }} */ (err)?.stdout ?? '');
+  }
+  await rm(dir, { recursive: true, force: true });
+  const partLine = out.split('\n').find((l) => l.includes('--probe-dead-part')) ?? '';
+  const ownerLine = out.split('\n').find((l) => /✗\s*--probe-dead\s*$/.test(l.trim())) ?? '';
+  const okLabel = /只被上面那些沒人用的 token 引用/.test(partLine) && ownerLine !== '';
+  if (!okLabel) failed++;
+  console.log(`  ${okLabel ? '✓' : 'X'} 兩種死法分得開（沒人用 vs 只被死的用）`);
+  if (!okLabel) {
+    console.log('        零件那行：' + (partLine.trim() || '（沒印）') + '　主人那行：' + (ownerLine.trim() || '（沒印）'));
+  }
+}
+
+/*
  * ── fallback 跟 light-dark() 的淺色值分岔 ──────────
  *
  * 同一個淺色值在 tokens.css 裡寫了兩次（一行單值給舊瀏覽器、一行
