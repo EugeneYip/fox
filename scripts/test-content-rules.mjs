@@ -914,6 +914,112 @@ try {
   }
 
   /*
+   * ── 從 src/pages 走不到的元件 ────────────────────────
+   *
+   * 第 3 輪（第三十圈）加的。跟上面的同步資料一樣**只說話、不擋** ——
+   * 「要刪還是要接上去」是站主的決定。
+   *
+   * 這幾格守的是四件會讓它安靜失效的事：別名解不開、遞移沒走完、
+   * glob 不算數、以及反過來的誤報。
+   */
+  {
+    /**
+     * @param {string} label
+     * @param {Record<string, string>} tree `src/` 底下的相對路徑 → 內容
+     * @param {(out: string) => boolean} want
+     */
+    const withSrc = async (label, tree, want) => {
+      const dir = await build(`unreached-${label}`, {
+        content: { 'poems/wu-yi-xiang.md': poem() },
+        dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花') },
+      });
+      const fake = join(dir, 'fakesrc');
+      for (const [rel, body] of Object.entries(tree)) {
+        await mkdir(dirname(join(fake, rel)), { recursive: true });
+        await writeFile(join(fake, rel), body, 'utf8');
+      }
+      const { out } = await checkWithCode(dir, [`--src=${fake}`]);
+      const ok = want(out);
+      if (!ok) failed++;
+      console.log(`  ${ok ? '✓' : 'X'} ${label}`);
+      if (!ok) {
+        const said = out.split('\n').filter((l) => /走不到|元件/.test(l)).join(' ｜ ');
+        console.log('        ' + (said || '（完全沒提到元件）'));
+      }
+      await rm(dir, { recursive: true, force: true });
+    };
+
+    const named = (/** @type {string} */ f) => (/** @type {string} */ out) =>
+      new RegExp('· .*components/' + f).test(out);
+    const quiet = (/** @type {string} */ f) => (/** @type {string} */ out) => !named(f)(out);
+
+    await withSrc(
+      '沒有人 import 的元件：說出來',
+      { 'pages/index.astro': '<p>x</p>', 'components/Orphan.astro': '<p>孤兒</p>' },
+      named('Orphan.astro'),
+    );
+
+    /* 反向一：相對路徑 import 得到就不該報 */
+    await withSrc(
+      '頁面用相對路徑 import 它：不報（反向案例）',
+      {
+        'pages/index.astro': "---\nimport Used from '../components/Used.astro';\n---\n<Used />",
+        'components/Used.astro': '<p>有人用</p>',
+      },
+      quiet('Used.astro'),
+    );
+
+    /*
+     * 反向二：別名。別名是從 tsconfig.json 讀的 ——
+     * 少了這一格，「別名一律解不開」的寫法會讓**每一個**元件都被報成走不到，
+     * 而那時候第一格照樣是綠的（它本來就該被報）。
+     */
+    await withSrc(
+      '頁面用 @components 別名 import 它：不報（反向案例）',
+      {
+        'pages/index.astro': "---\nimport Used from '@components/Used.astro';\n---\n<Used />",
+        'components/Used.astro': '<p>有人用</p>',
+      },
+      quiet('Used.astro'),
+    );
+
+    /* 反向三：遞移 —— 頁面 → 甲 → 乙，乙也算走得到 */
+    await withSrc(
+      '隔一層 import 到的也算走得到（反向案例）',
+      {
+        'pages/index.astro': "---\nimport A from '@components/A.astro';\n---\n<A />",
+        'components/A.astro': "---\nimport B from '@components/B.astro';\n---\n<B />",
+        'components/B.astro': '<p>乙</p>',
+      },
+      quiet('B.astro'),
+    );
+
+    /*
+     * 正向二：甲是死的，那只有甲在 import 的乙也是死的。
+     * 只數「有沒有人 import」的寫法在這一格會說乙有人用。
+     */
+    await withSrc(
+      '只有死元件在 import 的元件，也是死的',
+      {
+        'pages/index.astro': '<p>x</p>',
+        'components/Dead.astro': "---\nimport B from '@components/OnlyFromDead.astro';\n---\n<B />",
+        'components/OnlyFromDead.astro': '<p>乙</p>',
+      },
+      (out) => named('Dead.astro')(out) && named('OnlyFromDead.astro')(out),
+    );
+
+    /* 反向四：import.meta.glob 也算 import —— identity.local.ts 就是這樣進來的 */
+    await withSrc(
+      'import.meta.glob 進來的也算走得到（反向案例）',
+      {
+        'pages/index.astro': "---\nconst m = import.meta.glob('@components/Globbed.astro');\n---\n<p>x</p>",
+        'components/Globbed.astro': '<p>glob</p>',
+      },
+      quiet('Globbed.astro'),
+    );
+  }
+
+  /*
    * ── 一個內容檔都沒有的時候，不能說「沒有發現問題」──────
    *
    * 第 3 輪（第二十五圈）量到：`--content=` 指到空目錄時，這支腳本印

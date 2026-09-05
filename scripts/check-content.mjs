@@ -54,6 +54,8 @@ const CONTENT = arg('content') ?? resolve(ROOT, 'src/content');
 const GUIDE = arg('guide') ?? resolve(ROOT, 'docs/CONTENT.md');
 /* `--syndication=` 同理，給「同步資料放了多久」那一項換一份假的用 */
 const SYNDICATION = arg('syndication') ?? resolve(ROOT, 'src/data/syndication.json');
+/* `--src=` 同理，給 component-unreached 的案例換一份假的原始碼樹用 */
+const SRC = arg('src') ?? resolve(ROOT, 'src');
 
 /** @param {string} dir @returns {AsyncGenerator<string>} */
 async function* walk(dir) {
@@ -830,6 +832,138 @@ const emptyBlocks = (/** @type {string} */ html) => {
  * 於是「綠得因為空」的規則反而最容易從「誰是空的」名單上消失。
  * 所以十一條全部先歸零。`test:content-pipeline` 有一格守這份清單跟實際規則一致。
  */
+/*
+ * ── 從 src/pages 走不到的元件 ────────────────────────
+ *
+ * 第 3 輪（第三十圈）問「這件事如果整個拿掉，會有誰發現」。
+ * 內容這一層的答案很具體：**`src/components/ui/ExternalLink.astro`
+ * 沒有任何一個檔案 import 它**，它那句「（在新分頁開啟）」
+ * 從來沒有進過 `dist/`，而整個拿掉不會有任何一道關卡出聲。
+ *
+ * `check:copy` 已經會說「191 個介面字串裡 35 個從來沒有被算繪出來」，
+ * 但那句話把兩種東西算成同一種：
+ *
+ *   · 「**還沒**算繪」—— 空狀態、分頁的字，等她寫出那種內容就會出現
+ *   · 「**永遠不會**算繪」—— 掛在沒有人 import 的元件上
+ *
+ * 前者在等內容，後者在等人發現。這條規則只管後者。
+ *
+ * ── 為什麼要走遞移，不只數「有沒有人 import」──
+ *
+ * 甲 import 乙、而甲自己是死的話，乙也是死的。直接數 importer
+ * 會說乙有一個人用。今天兩種算法答案一樣（12 個元件），但那是巧合。
+ *
+ * ── 為什麼只報 components/ ──
+ *
+ * 靜態走 import 會漏掉三種**依慣例載入**的檔案，實測都在名單上：
+ *   · `content.config.ts` —— Astro 自己讀，沒有人 import 它
+ *   · `identity.local.ts` —— 走 `import.meta.glob`（所以下面也認 glob）
+ *   · `identity.local.example.ts` —— 樣板，本來就不該有人 import
+ * 三個都不是死的。只報 `components/` 底下的 `.astro`，
+ * 那些**一定**是靠 import 進來的 —— 於是 0 誤報。
+ */
+{
+  /** tsconfig 的 paths 是別名的唯一來源 —— 寫死一份就會跟它分岔 */
+  const tsconfig = await readFile(resolve(ROOT, 'tsconfig.json'), 'utf8').catch(() => '');
+  /** @type {[string, string][]} */
+  const aliases = [];
+  for (const m of tsconfig.matchAll(/"(@[\w-]*\/)\*"\s*:\s*\[\s*"src\/([^"*]*)\*"/g)) {
+    aliases.push([m[1], m[2]]);
+  }
+  if (aliases.length === 0) {
+    notes.push('元件可達性沒有檢查：tsconfig.json 讀不到、或裡面沒有 paths 別名。');
+  } else {
+    /** @type {string[]} */
+    const files = [];
+    for await (const f of walk(SRC)) if (/\.(astro|ts|mjs|mdx)$/.test(f)) files.push(f);
+    const have = new Set(files);
+    /** 補副檔名／index，補不出來就回 null（那是套件，不是本地檔案） */
+    const land = (/** @type {string} */ p) => {
+      if (have.has(p)) return p;
+      for (const e of ['.astro', '.ts', '.mjs', '.mdx']) if (have.has(p + e)) return p + e;
+      for (const e of ['.astro', '.ts', '.mjs']) if (have.has(resolve(p, 'index' + e))) return resolve(p, 'index' + e);
+      return null;
+    };
+
+    /** @type {Map<string, string[]>} */
+    const edges = new Map();
+    for (const f of files) {
+      const text = await readFile(f, 'utf8').catch(() => '');
+      const specs = [
+        ...[...text.matchAll(/import\s+[^'"]*from\s*['"]([^'"]+)['"]/g)].map((m) => m[1]),
+        ...[...text.matchAll(/import\s*['"]([^'"]+)['"]/g)].map((m) => m[1]),
+        /* glob 也算 —— identity.local.ts 就是這樣進來的 */
+        ...[...text.matchAll(/import\.meta\.glob[^(]*\(\s*['"]([^'"]+)['"]/g)].map((m) => m[1]),
+      ];
+      /** @type {string[]} */
+      const out = [];
+      for (const spec of specs) {
+        /** @type {string | null} */
+        let abs = null;
+        for (const [a, r] of aliases) if (spec.startsWith(a)) abs = resolve(SRC, r + spec.slice(a.length));
+        if (abs === null && /^\.\.?\//.test(spec)) abs = resolve(dirname(f), spec);
+        if (abs === null) continue;
+        const hit = land(abs);
+        if (hit) out.push(hit);
+      }
+      edges.set(f, out);
+    }
+
+    const seen = new Set();
+    const stack = files.filter((f) => f.startsWith(resolve(SRC, 'pages')));
+    if (stack.length === 0) {
+      notes.push('元件可達性沒有檢查：src/pages 底下一個檔案都沒有，走不出起點。');
+    } else {
+      while (stack.length > 0) {
+        const f = /** @type {string} */ (stack.pop());
+        if (seen.has(f)) continue;
+        seen.add(f);
+        for (const d of edges.get(f) ?? []) stack.push(d);
+      }
+      const components = files.filter(
+        (f) => f.startsWith(resolve(SRC, 'components')) && f.endsWith('.astro'),
+      );
+      /*
+       * 這裡不進 RULES，也不呼叫 saw() —— 跟底下「同步資料放了多久」
+       * 同一個理由（見那一段的說明）。那兩個是給會報 problem 的規則用的。
+       *
+       * 第一版又把它登記成規則了，`test:content-rules` 當場說
+       * 「RULES 名單裡有不存在的規則」。**同一個坑，這個 repo 踩第二次。**
+       * 主體數（看過幾個元件）改成寫在筆記的第一句裡。
+       */
+      const orphans = components.filter((f) => !seen.has(f)).sort();
+      /*
+       * ── 為什麼是筆記，不是錯 ──
+       *
+       * 跟 `check:contrast` 的「未使用的 token」同一種：不是寫錯了，
+       * 是**沒有接上去**，而「要刪還是要接上去」是站主的決定。
+       *
+       * 這裡把決定需要的數字一起印出來，免得那個決定要靠人再去量一次：
+       * 有幾個地方在自己手寫同一件事。`ExternalLink.astro` 的說明第一句
+       * 就是「統一在這裡處理⋯免得每個地方各寫各的」—— 而實際上
+       * 每個地方真的各寫各的。**那不是死程式碼，是沒插上電的解法。**
+       */
+      if (orphans.length > 0) {
+        /** @type {string[]} */
+        const handRolled = [];
+        for (const f of files) {
+          if (orphans.includes(f)) continue;
+          const text = await readFile(f, 'utf8').catch(() => '');
+          if (/target\s*=\s*["']_blank["']/.test(text)) handRolled.push(relative(ROOT, f));
+        }
+        notes.push(
+          `${components.length} 個元件裡，**${orphans.length} 個從 src/pages 沿著 import 走不到**：\n` +
+            orphans.map((f) => '      · ' + relative(ROOT, f)).join('\n') +
+            '\n    它們裡面的字一行都不會進 dist/，整個刪掉今天不會有任何一道關卡出聲。\n' +
+            `    同時：另外 **${handRolled.length} 個地方**自己手寫了 target="_blank"。\n` +
+            '    所以這不是「沒有人需要的程式碼」，是**沒插上電的解法** ——\n' +
+            '    要刪還是要接上去，站主決定（接上去會改到那些連結的外觀）。',
+        );
+      }
+    }
+  }
+}
+
 const RULES = [
   'no-title',
   'poem-title-bracketed',
