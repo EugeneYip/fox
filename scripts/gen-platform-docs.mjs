@@ -9,6 +9,7 @@
  * 所以文件是產生的，資料只有一份。
  */
 import { writeFile, readFile } from 'node:fs/promises';
+import { projectDay } from './lib/project-day.mjs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PLATFORMS } from '../src/config/platforms.data.mjs';
@@ -100,7 +101,7 @@ const doc = `# 平臺對照表
 > 這份文件是產生的，不要手改。
 > 改 \`src/config/platforms.data.mjs\`，然後執行 \`node scripts/gen-platform-docs.mjs\`。
 >
-> 內容最後變動：${new Date().toISOString().slice(0, 10)}　共 ${PLATFORMS.length} 個平臺
+> 內容最後變動：${projectDay()}　共 ${PLATFORMS.length} 個平臺
 
 ## 取得方式一覽
 

@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 45,200 行、2.4 MB、277 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 45,300 行、2.4 MB、278 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -45160,4 +45160,150 @@ HTML 與文字資源被濾掉了 —— 因為那兩類**各有自己的預算**
   workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：4 — 平臺 feed 實測**
+
+### 2026-09-05 — 第 4 輪（第三十五圈）：平臺 feed 實測
+
+**第三十五圈問：我怎麼知道這個數字是對的？有第二種算法算過嗎？**
+判準：**這個數字有沒有被第二種方法算過一次？兩種方法給的答案一樣嗎？**
+
+#### 1. 那個 9，四種算法都說 9
+
+| 算法 | 結果 |
+|---|---|
+| `verify` 的 Atom 解析器 | 9 筆 |
+| `syndication.json` 的 `itemCount` 欄位 | 9 |
+| 同一個檔案的 `items.length` | 9 |
+| 那個檔案裡 `sources['youtube-foxpoetry'].itemCount` | 9 |
+| 我自己抓一次，數 `<entry>` | 9 |
+| 同一次，數 `<yt:videoId>` | 9 |
+
+#### 2. 目錄的分割也加得起來
+
+平臺 24 個，`confidence` 分佈 `verified 11 / lookup-required 9 / documented 4` = 24。
+再往下拆一層（有沒有 `feedTemplate`、有沒有 `probeHandle`）：
+
+```
+verified         共11 ｜沒樣板0  ｜有樣板沒 probeHandle 0            ｜打得到11 ｜加總11
+lookup-required  共9  ｜沒樣板8  ｜有樣板沒 probeHandle 1（pixnet）  ｜打得到0  ｜加總9
+documented       共4  ｜沒樣板4  ｜有樣板沒 probeHandle 0            ｜打得到0  ｜加總4
+```
+
+跟報告印的**一字不差**，每一個子分割也都加得回總數。
+（那個三分法是第 4 輪〔第三十一圈〕為了不讓 `pixnet` 消失在
+「8 個沒有樣板」那句話裡才拆的 —— 這一輪等於替它做了一次獨立驗算。）
+
+#### 3. 找到的那一個：「幾天前」用的是 UTC，而這個專案不是
+
+報告最後一行：
+
+```
+verified  11 個　⋯⋯　最舊的宣稱：2026-09-05（0 天前）
+```
+
+那個「幾天前」= `today − verifiedAt`，而 `today` 是
+
+```
+today: new Date().toISOString().slice(0, 10),   // ← UTC
+```
+
+**這個專案把時區釘成 `Asia/Taipei`** —— `src/lib/dates.ts` 兩處，
+而且 `test:portability` 有兩格在守它。`lib/sync-core.mjs` 也早就用對了
+（它比對兩次同步是不是同一天）。**只有這一支用 UTC。**
+
+當下實測：
+
+```
+現在 UTC        2026-09-05T17:14Z
+verify 用的今天  2026-09-05（UTC）
+專案釘的今天    2026-09-06（Asia/Taipei）
+→ 用 UTC 算「0 天前」，用專案的時區算「1 天前」
+```
+
+**兩種算法現在就給不同答案。** 臺北的 00:00–08:00 那八小時都會這樣。
+
+差一天不會讓任何東西壞掉 —— 但那一行存在的理由**就是新鮮度**，
+而它系統性地把宣稱算得比實際新（最多一天）。
+
+#### 4. 改法：抽一支，讓「今天」只有一種算法
+
+`scripts/lib/project-day.mjs` —— `projectDay()`。
+`verify-sources.mjs` 與 `gen-platform-docs.mjs` 都改用它
+（後者寫在產生的文件裡，`stripDate()` 本來就把那一行排除在比對外，
+所以只是顯示，但沒有理由留第二種算法）。
+
+#### 5. 突變與測試
+
+| 突變 | 結果 |
+|---|---|
+| `projectDay()` 的時區改回 `UTC` | 報告從「1 天前」變回「0 天前」 ✓ |
+| `verify-sources` 改回自己用 UTC 算 | 原始碼掃描那一格紅 ✓ |
+
+測試加在 `test-portability.mjs`（時區那幾格的隔壁）兩格：
+
+1. `projectDay()` 在**兩種算法會分岔的那個時刻**（`2026-09-05T17:00Z`）
+   要給 `2026-09-06`。
+2. `scripts/` 底下不能再有人自己用 UTC 算今天。
+
+第二格第一版**當場抓到自己** —— 它的訊息裡就有 `at.toISOString().slice(0,10)`
+（用來印出「UTC 是哪一天」對照）。那不是缺陷：拿**固定時刻**換 UTC 是合法的，
+壞的是拿 `new Date()`。把樣式收緊成「`new Date()` 緊接著 `toISOString`」之後
+兩邊都對了。
+
+#### 6. 這一圈的問題，在這一層得到的答案
+
+**這一輪是四輪裡第一次「第二種算法真的抓到東西」** ——
+前三輪查了 20 個數字，全部要嘛一致、要嘛差在範圍而不是算術。
+
+而這一次抓到的形狀跟前三輪不一樣：不是範圍沒說清楚，是**同一個問題
+（今天是哪一天）在這個 repo 裡有兩種算法，而其中一種跟專案自己的規定相反**。
+
+| | 之前 | 現在 |
+|---|---|---|
+| 「今天」 | 三個地方三種寫法（UTC ×2、Taipei ×1） | 一支 `projectDay()` |
+| 「最舊的宣稱幾天前」 | 最多少算一天 | 照專案的時區 |
+| 下一個人再寫一份 | 沒有人擋 | 原始碼掃描會紅 |
+
+### 待辦（不屬於這一輪）
+
+- **`--patterns` 那 11 個平臺的「N 筆」沒有第二種算法驗過。** 它們是即時的
+  網路數字，兩次抓可能就不一樣，要驗得先想清楚怎麼固定語料（→ 4 平臺 feed）
+- 上一輪與更早的都還在（`SCHEMA_STRUCTURAL` 與「走不到的是哪一個」還沒驗、
+  node 與 python 的 gzip 差 0.9% 沒人查過為什麼、
+  另外 22 個 a11y `--verbose` 數字還沒驗、搜尋結果的連結沒有任何無障礙檢查看過、
+  `tokens.css` 註解裡的對比值沒有東西在守、`domain-drift` 只看三份、
+  `rule-not-documented` 只守 id、`strictReferrerPolicy: false` 那條路沒有測試、
+  `verifiedAt` 仍然手寫、`field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、`docs/A11Y.md` 那三個瀏覽器量的數字沒人對、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `audit:privacy` 沒有 needles 時本機 exit 0、
+  我連續六次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  `test-ci-sim` 那一格在有負載時會紅、要不要讓列表顯示詩詞的 `title`、
+  「涵蓋率：前景 N 種」那兩個數字沒人驗、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 10 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `check:perf` 那句「全是 favicon」是寫死的描述、7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  28 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、`related` 單向、schema 的必填／選填沒被選過、
+  11 條預算裡 5 條的上限是挑的、另外四支檢查的嚴重度、
+  `CoverImage` 的 `sizes` 用 40rem、
+  `check.yml` 跑過 0 次、`ci:sim` 只有手動跑、`ui.ts` 的 `en` 要不要必填、
+  `reveal('email')` 沒有人呼叫、4 條閒置豁免、本機 `ahead 48, behind 1`、
+  `npm run sync` 來源全失敗仍離開碼 0、排程遲了四小時只有一筆、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `VideoFacade` 一次都沒算繪過、`aria-live`／`role="status"` 沒有規則、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、`probe:served` 沒有自己的測試、
+  `--real-install` 成功路徑沒測試、視覺層 24 處實測沒重驗、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  真的開一次螢幕閱讀器聽、`CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：5 — 隱私與安全**

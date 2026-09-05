@@ -17,6 +17,7 @@ import { sourceFeedUrl } from './lib/source-feed-url.mjs';
 import { UA_VERIFY } from './lib/http.mjs';
 import { waitForHost, noteHostHit } from './lib/throttle.mjs';
 import { countItems } from './lib/count-items.mjs';
+import { projectDay } from './lib/project-day.mjs';
 import { confidenceReport } from './lib/confidence-report.mjs';
 
 /**
@@ -297,7 +298,8 @@ if (PATTERNS) {
     failed: failedIds,
     flaky: FLAKY_ENDPOINT,
     /* 拿來算「這個宣稱幾天前成立的」；用當地日期就夠，不需要時區精度 */
-    today: new Date().toISOString().slice(0, 10),
+    /* 專案的時區是 Asia/Taipei，不是 UTC —— 理由與實測在 lib/project-day.mjs */
+    today: projectDay(),
   });
   console.log('目錄上的 confidence，這一輪對得上嗎');
   for (const l of lines) console.log(l);

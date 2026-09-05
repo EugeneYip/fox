@@ -110,6 +110,59 @@ check(
 );
 
 /*
+ * ── 2b. 腳本那一側：「今天」只能有一種算法 ──────────────
+ *
+ * 上面兩條守的是 `src/lib/dates.ts`（站上的日期）。
+ * `scripts/` 那一側是另一半 —— 而第 4 輪（第三十五圈）實測撞到：
+ * `verify-sources.mjs` 用 `toISOString().slice(0, 10)`（**UTC**）算
+ * 「最舊的宣稱是幾天前」，當下 UTC 是 2026-09-05、臺北已經是 2026-09-06，
+ * 於是報告說「0 天前」而照專案自己的時區是「1 天前」。
+ * （`lib/sync-core.mjs` 早就用對了 —— 同一件事兩種算法。）
+ *
+ * 兩格：`projectDay()` 在兩邊不同的那個時刻要給臺北那一天；
+ * 而且 `scripts/` 裡不能再有人自己用 UTC 算今天。
+ */
+{
+  const { projectDay } = await import('./lib/project-day.mjs');
+  /* 這個時刻 UTC 還是 09-05，臺北已經 09-06 —— 兩種算法唯一會分岔的那八小時 */
+  const at = new Date('2026-09-05T17:00:00Z');
+  check(
+    `projectDay() 在臺北的凌晨時段給的是臺北那一天（${projectDay(at)}，UTC 是 ${at.toISOString().slice(0, 10)}）`,
+    projectDay(at) === '2026-09-06',
+    projectDay(at),
+  );
+
+  /*
+   * 掃原始碼：`scripts/` 底下不該再有人自己用 UTC 算「今天」。
+   * 這一格擋的是**下一個人再寫一份** —— 第三十四圈整整八輪都在講這個。
+   */
+  const { readdir } = await import('node:fs/promises');
+  const bad = [];
+  for (const dir of ['scripts', 'scripts/lib']) {
+    for (const f of await readdir(resolve(ROOT, dir))) {
+      if (!f.endsWith('.mjs') || f === 'project-day.mjs') continue;
+      const rel = `${dir}/${f}`;
+      const text = await readFile(resolve(ROOT, rel), 'utf8');
+      /* 註解裡提到它是可以的（解釋為什麼不用），所以先把註解拿掉 */
+      const code = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      /*
+       * 只抓「**現在**的 UTC 日期」那一種 —— `new Date()` 緊接著 toISOString。
+       * 拿一個固定時刻去 `toISOString()` 是合法的（這一格自己的訊息就在做，
+       * 它要印出「UTC 是哪一天」來對照）。第一版沒分這兩種，當場抓到自己。
+       */
+      if (/new Date\(\s*\)\s*\.\s*toISOString\(\)\s*\.\s*slice\(\s*0\s*,\s*10\s*\)/.test(code)) {
+        bad.push(rel);
+      }
+    }
+  }
+  check(
+    `scripts/ 底下沒有人自己用 UTC 算今天（掃到 ${bad.length} 處）`,
+    bad.length === 0,
+    bad.join('、'),
+  );
+}
+
+/*
  * ── 3. 真的換一個時區跑一次 ────────────────────────────
  *
  * 上面兩條都是讀原始碼。這一條是**真的在別的時區底下算一次** ——
