@@ -234,13 +234,71 @@ const upToDate = Boolean(previous) && stripDate(String(previous)) === stripDate(
  * 本機有沒有未提交的改動都不影響結果，而且用的是**同一份產生邏輯** ——
  * 沒有第二份實作可以跟本體走鐘。
  */
+/*
+ * ── 那個「23」原本是寫死的 ──────────
+ *
+ * 下面失敗訊息裡寫著「那 23 個中文字串」。23 是第 6 輪（第十四圈）數出來的，
+ * 而**這支腳本手上就有那份資料** —— `PLATFORMS` 走一遍就數得出來。
+ *
+ * 第 4 輪（第三十四圈）：這一圈問「這個答案系統裡已經有了嗎」。
+ * 有，就在同一個檔案的 import 上。而寫死的那一份只會在**檢查失敗的時候**
+ * 被人看到 —— 也就是最不該給錯數字的那一刻。
+ *
+ * （順帶：這一輪重數過，資料裡確實還是 23 個，全部出現在 docs/PLATFORMS.md、
+ * 一個都沒有出現在 dist/。當年那句話今天仍然成立。）
+ */
+/** @param {unknown} v @param {Set<string>} out */
+function collectCjk(v, out) {
+  if (typeof v === 'string') {
+    if (/[\u4e00-\u9fff]/.test(v)) out.add(v);
+  } else if (Array.isArray(v)) {
+    for (const x of v) collectCjk(x, out);
+  } else if (v && typeof v === 'object') {
+    for (const x of Object.values(v)) collectCjk(x, out);
+  }
+}
+/** @type {Set<string>} */
+const cjkStrings = new Set();
+collectCjk(PLATFORMS, cjkStrings);
+
+/*
+ * ── CLAUDE.md 也抄了一份那個數字 ──────────
+ *
+ * 「`platforms.data.mjs` 裡有 23 個中文字串一個都沒有出現在 dist/」——
+ * 那句話寫在 CLAUDE.md 的「開發流程」那一節，用來說明
+ * `check:generated` 不只是文件整潔的問題。
+ *
+ * 它是手抄的。而正確的數字這支腳本剛剛算出來了。
+ * 抓不到那句說法時**不安靜跳過** —— 說出「這一格沒有在守」
+ * （第 1 輪〔第三十四圈〕在 A11Y.md 上學到的）。
+ */
+let claudeDrift = false;
+{
+  const claudeAt = new URL('../CLAUDE.md', import.meta.url);
+  const text = await readFile(claudeAt, 'utf8').catch(() => '');
+  const m = /裡有 (\d+) 個中文字串/.exec(text);
+  if (text === '') {
+    console.log('⚠ 讀不到 CLAUDE.md —— 那句「N 個中文字串」沒有跟這裡對過。');
+  } else if (!m) {
+    console.log('⚠ CLAUDE.md 裡找不到「裡有 N 個中文字串」這句 —— 這一格沒有在守。');
+    console.log('  文件換了寫法的話，這裡的樣式要跟著改。');
+    claudeDrift = true;
+  } else if (Number(m[1]) !== cjkStrings.size) {
+    console.log(`X CLAUDE.md 說「裡有 ${m[1]} 個中文字串」，實際是 ${cjkStrings.size} 個。`);
+    console.log('  那個數字這支腳本每跑一次就算一次 —— CLAUDE.md 裡那一份是手抄的。');
+    console.log('  改法：把 CLAUDE.md「開發流程」那一節的數字換成上面這個。');
+    claudeDrift = true;
+  }
+}
+
 if (process.argv.includes('--check')) {
+  if (claudeDrift) process.exit(1);
   if (upToDate) {
-    console.log(`✓ docs/PLATFORMS.md 是最新的（${PLATFORMS.length} 個平臺）`);
+    console.log(`✓ docs/PLATFORMS.md 是最新的（${PLATFORMS.length} 個平臺、${cjkStrings.size} 個中文字串，CLAUDE.md 的數字也對得上）`);
   } else {
     console.log('X docs/PLATFORMS.md 跟 platforms.data.mjs 對不上了。');
     console.log('  跑 `node scripts/gen-platform-docs.mjs` 重新產生。');
-    console.log('  這件事會影響的不只是文件：`platforms.data.mjs` 裡那 23 個中文字串');
+    console.log(`  這件事會影響的不只是文件：\`platforms.data.mjs\` 裡那 ${cjkStrings.size} 個中文字串`);
     console.log('  一個都沒有出現在 dist/ 裡，check:copy 是靠這份文件才校對到它們的。');
     process.exit(1);
   }
