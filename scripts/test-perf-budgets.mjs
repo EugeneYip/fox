@@ -219,6 +219,59 @@ console.log('─'.repeat(64));
 }
 
 /*
+ * ── 架構文件說 JavaScript 有幾段，要跟產出對得上 ──────────────
+ *
+ * 第 2 輪（第三十七圈）：`docs/ARCHITECTURE.md` 在「決定性的因素是
+ * 0 KB JavaScript」下面兩行寫著「目前全站的 JavaScript 只有四小段」，
+ * 而產出裡**一直是五段** —— 少掉的那一段是 `Base.astro` 裡
+ * 算繪前套用偏好的那個 script：641 B、每一頁都有、**跑在畫面出現之前**。
+ * 講效能的人最想知道的就是那一段。
+ *
+ * 關卡預設只在量真的 `dist/` 時比（假站的段數本來就不一樣），
+ * 所以這裡用 `--arch=` 指一份假文件才驗得到。
+ *
+ * 三個方向：對得上要出聲、對不上要擋、**文件換了寫法要說「這一格沒有在守」**。
+ */
+{
+  const dir = await mkdtemp(join(tmpdir(), 'perf-arch-'));
+  /*
+   * 兩段不一樣的 script，**一頁一段**，而且第一頁那段在兩頁上都有。
+   *
+   * 刻意不把兩段都放在第一頁：那樣的話「只掃第一頁」這種壞法
+   * 仍然數得到 2 段，這一格就守不住走漏頁面。
+   * （突變掃描抓到的：第一版就是兩段都在 index.html。）
+   */
+  await writeFile(join(dir, 'index.html'), page({ head: '<script>var a=1</script>', body: '<p>第一頁</p>' }), 'utf8');
+  await writeFile(join(dir, 'two.html'), page({ head: '<script>var a=1</script>', body: '<script>var b=2</script>' }), 'utf8');
+
+  const archAt = join(dir, 'arch.md');
+  const withArch = async (/** @type {string} */ body) => {
+    await writeFile(archAt, body, 'utf8');
+    return check(dir, [`--arch=${archAt}`]);
+  };
+
+  const agree = await withArch('目前全站的 JavaScript 只有二小段：a 與 b。\n');
+  const okAgree = /有 2 段，產出裡數到 2 段 ✓/.test(agree) && verdictOk(agree);
+  if (!okAgree) failed++;
+  console.log(`  ${okAgree ? '✓' : 'X'} 對得上的時候會出聲（不是沉默通過）`);
+  if (!okAgree) console.log('        ' + agree.split('\n').filter((l) => /ARCHITECTURE|段/.test(l)).slice(0, 2).join(' ｜ '));
+
+  const drift = await withArch('目前全站的 JavaScript 只有四小段：主題切換⋯⋯\n');
+  const okDrift = /說全站的 JavaScript 有 4 段，產出裡是 2 段/.test(drift) && !verdictOk(drift);
+  if (!okDrift) failed++;
+  console.log(`  ${okDrift ? '✓' : 'X'} 數字漂掉時抓得到，而且擋得住`);
+  if (!okDrift) console.log('        ' + drift.split('\n').filter((l) => /ARCHITECTURE|段/.test(l)).slice(0, 2).join(' ｜ '));
+
+  const reworded = await withArch('這一份完全沒有講 JavaScript 有幾段。\n');
+  const okLoud = /找不到「全站的 JavaScript 只有N小段」那句話 —— 這一格沒有在守/.test(reworded);
+  if (!okLoud) failed++;
+  console.log(`  ${okLoud ? '✓' : 'X'} 文件換了寫法時說「這一格沒有在守」`);
+  if (!okLoud) console.log('        ' + reworded.split('\n').filter((l) => /ARCHITECTURE|沒有在守/.test(l)).slice(0, 2).join(' ｜ '));
+
+  await rm(dir, { recursive: true, force: true });
+}
+
+/*
  * ── 每一條預算都要說得出「改法」──────────────────────
  *
  * 第 2 輪（第十七圈）量到：11 條預算的 `why` 是 37–358 字的來歷與分析，

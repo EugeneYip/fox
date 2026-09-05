@@ -125,9 +125,12 @@ const rendered = images.filter((f) => referenced.has(norm(f.path)));
 
 /** 每頁內嵌的 JavaScript（排除 JSON-LD，那是資料不是程式） */
 /** @param {string} text */
+function inlineScriptBodies(text) {
+  return [...text.matchAll(/<script(?![^>]*ld\+json)[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1]);
+}
+/** @param {string} text */
 function inlineJsBytes(text) {
-  const scripts = [...text.matchAll(/<script(?![^>]*ld\+json)[^>]*>([\s\S]*?)<\/script>/gi)];
-  return scripts.reduce((n, m) => n + m[1].length, 0);
+  return inlineScriptBodies(text).reduce((n, b) => n + b.length, 0);
 }
 
 /*
@@ -744,6 +747,77 @@ if (!process.argv.some((a) => a.startsWith('--dir='))) {
     `\n說明裡的現值：${wording}（${checkedLabels.join('、') || '—'}）` +
       `，其餘 ${budgets.length - checkedLabels.length} 條的說明沒有寫現值，沒東西可比。`,
   );
+}
+
+/*
+ * ── `docs/ARCHITECTURE.md` 說全站的 JavaScript 有幾段 ────────────
+ *
+ * 第 2 輪（第三十七圈）加的。這一圈問「這一條規則，是誰要求的？
+ * 寫在哪份文件裡？兩邊還一致嗎？」
+ *
+ * 效能這一支的 11 條預算**沒有任何一份文件寫過** —— 它們只活在這個檔案裡
+ * （這件事記進待辦，不在這一輪動）。但 `docs/ARCHITECTURE.md` 對 JavaScript
+ * 講了一句**數得出來**的話：
+ *
+ *   「目前全站的 JavaScript 只有四小段：主題切換、語言下拉、
+ *     詩詞直橫排切換、站內搜尋。」
+ *
+ * 那句話是整份架構文件裡**唯一一句可以被產出打臉的效能宣稱**，
+ * 而且它就在「決定性的因素是 0 KB JavaScript」下面兩行 ——
+ * 讀的人是拿它來理解這個站的取捨的。
+ *
+ * 量出來是 **5 段**，不是四段。第五段是 `Base.astro` 裡那一小段
+ * 在算繪前套用已存主題與直橫排的 script（順便設 `dataset.js`）——
+ * 它 641 B、**每一頁都有**、而且**跑在畫面出現之前**，
+ * 正是講效能的人最會想知道的那一段。它不在那份清單上。
+ *
+ * 這裡比的是「幾段」，不是「哪幾段」：段落的名字是人寫的散文，
+ * 而數量是產出算得出來的。
+ */
+const archOverride = process.argv.find((a) => a.startsWith('--arch='))?.slice('--arch='.length);
+if (archOverride !== undefined || !process.argv.some((a) => a.startsWith('--dir='))) {
+  const archPath = archOverride === undefined ? resolve(ROOT, 'docs/ARCHITECTURE.md') : resolve(archOverride);
+  const arch = await readFile(archPath, 'utf8').catch(() => '');
+  /** 產出裡**不重複**的內嵌 script（同一段會出現在很多頁上） */
+  const distinct = new Set();
+  for (const text of htmlTexts) {
+    for (const body of inlineScriptBodies(text)) {
+      const t = body.trim();
+      if (t !== '') distinct.add(t);
+    }
+  }
+  const CN = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
+  const m = /JavaScript 只有([一二三四五六七八九十]|\d+)小段/.exec(arch);
+  if (arch === '') {
+    console.log('\n⚠ 讀不到 docs/ARCHITECTURE.md —— 那句「全站的 JavaScript 有幾段」沒有對過。');
+  } else if (!m) {
+    console.log(
+      '\n⚠ docs/ARCHITECTURE.md 裡找不到「全站的 JavaScript 只有N小段」那句話 —— 這一格沒有在守。\n' +
+        '  文件換了寫法的話這裡的樣式要跟著改（不然它會安靜地什麼都不比）。',
+    );
+    staleDocs += 1;
+  } else {
+    const claimed = CN[/** @type {keyof typeof CN} */ (m[1])] ?? Number(m[1]);
+    /*
+     * 對得上的時候也要出聲 —— 不然「對得上」跟「這一格沒在比」長得一樣。
+     * 旁邊那條「說明裡的現值：比對了 N 條」是同一個道理。
+     */
+    if (claimed === distinct.size) {
+      console.log(
+        `\ndocs/ARCHITECTURE.md 說全站的 JavaScript 有 ${claimed} 段，產出裡數到 ${distinct.size} 段 ✓`,
+      );
+    }
+    if (claimed !== distinct.size) {
+      staleDocs += 1;
+      console.log(
+        `\n✗ docs/ARCHITECTURE.md 說全站的 JavaScript 有 ${claimed} 段，產出裡是 ${distinct.size} 段。\n` +
+          '      那句話就在「決定性的因素是 0 KB JavaScript」下面兩行 ——\n' +
+          '      讀的人是拿它來理解這個站的取捨的，數字不對等於那個取捨說不清楚。\n' +
+          '      改法：把那一句的數字與清單改成現在真的有的幾段\n' +
+          '      （`npm run check:perf -- --verbose` 會列出每一段多大、出現在幾頁）。',
+      );
+    }
+  }
 }
 
 console.log('\n效能預算（量 gzip 後的大小，那才是實際下載量）');
