@@ -594,7 +594,9 @@ for (const [name, { hit, miss, expect, coFires }] of Object.entries(CASES)) {
     await mkdir(join(dir, 'src/i18n'), { recursive: true });
     await writeFile(
       join(dir, 'src/i18n/ui.ts'),
-      "export const ui = { 'a': { 'zh-TW': '這句在屬性裡' }, 'b': { 'zh-TW': '這句從未出現' } };\n",
+      /* `c` 帶 `{n}`、`d` 只有一個字 —— 兩種都會被跳過，讓「跳過了幾個」有東西可數 */
+      "export const ui = { 'a': { 'zh-TW': '這句在屬性裡' }, 'b': { 'zh-TW': '這句從未出現' }," +
+        " 'c': { 'zh-TW': '第 {n} 頁' }, 'd': { 'zh-TW': '頁' } };\n",
       'utf8',
     );
     /*
@@ -612,6 +614,24 @@ for (const [name, { hit, miss, expect, coFires }] of Object.entries(CASES)) {
     const ok = /1 個（?\d*%?）?/.test(out) && /從來沒有被算繪出來/.test(out) && /這句從未出現/.test(out);
     if (!ok) failed++;
     console.log(`  ${ok ? '✓' : 'X'} 數得出「幾個介面字串從來沒被算繪出來」`);
+
+    /*
+     * ── 那個分母要說得出自己是怎麼來的 ──────────
+     *
+     * 第 6 輪（第三十五圈）用第二種算法對這個數字：那兩個檔案裡一共 236 個
+     * 字串值，扣掉單字與帶 `{佔位符}` 的 45 個才是 191 —— **19% 被跳過了**。
+     * 只印 191 的話，「35 個沒被算繪」會被讀成 35／236。
+     *
+     * 這一格驗的是那句話在，而且**跳過的數字是真的數出來的**（不是寫死的 0）。
+     * fixture 的 ui.ts 裡刻意放了一個帶佔位符的字串，所以它一定大於 0。
+     */
+    const skip = /另外跳過 (\d+) 個單字或帶/.exec(out);
+    const okSkip = skip !== null && Number(skip[1]) > 0;
+    if (!okSkip) failed++;
+    console.log(
+      `  ${okSkip ? '✓' : 'X'} 那個分母說得出自己跳過了幾個` + (skip ? `（${skip[1]} 個）` : ''),
+    );
+    if (!okSkip) console.log('        ' + (out.split('\n').find((l) => l.includes('分母')) ?? '（那一行沒印）'));
     if (!ok) console.log('        ' + out.split('\n').filter((l) => l.includes('算繪')).join('\n        ') || '        （那一段完全沒印）');
 
     /*

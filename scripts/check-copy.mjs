@@ -274,6 +274,12 @@ let renderedHtml = '';
 /** ui.ts／site.ts 裡的固定字串（不含帶佔位符的與單字元的） */
 /** @type {{ rel: string, value: string }[]} */
 const uiStrings = [];
+/*
+ * 被跳過的那些（單字、帶 `{佔位符}` 的）要數 —— 第 6 輪（第三十五圈）用第二種
+ * 算法對這兩個數字時量到：那兩個檔案裡一共 236 個字串值，跳掉 45 個（19%）。
+ * 「191 個裡有 35 個沒被算繪」不說分母哪來的話，會被讀成 35／236。
+ */
+let uiSkipped = 0;
 /**
  * 每一組「帶 'zh-TW' 的文案物件」，以及它有沒有 `en`。
  *
@@ -508,6 +514,7 @@ for (const rel of ['src/i18n/ui.ts', 'src/config/site.ts']) {
    */
   for (const v of values) {
     if (v.length > 1 && !v.includes('{')) uiStrings.push({ rel, value: v });
+    else uiSkipped++;
   }
 }
 
@@ -701,6 +708,8 @@ for (const f of await readdir(resolve(ROOT, '.github/workflows')).catch(() => []
       const sample = never.slice(0, 6).map((u) => u.value.slice(0, 14)).join('、');
       notes.push(
         `${uiStrings.length} 個介面字串裡，**${never.length} 個（${pct}%）從來沒有被算繪出來**。\n` +
+          `    （分母是 \`ui.ts\` 與 \`site.ts\` 的字串值，另外跳過 ${uiSkipped} 個` +
+          '單字或帶 `{佔位符}` 的 —— 那種算繪之後長得不一樣，比不到。）\n' +
           `    例如：${sample}${never.length > 6 ? '⋯' : ''}\n` +
           '    多數是為了還沒發生的狀態寫的（空狀態、分頁、影片預覽卡⋯），\n' +
           '    慣例檢查掃得到它們，但**沒有人看過它們長在頁面上的樣子** ——\n' +
@@ -725,6 +734,7 @@ if (l10nPairs.length > 0) {
   if (missing.length === 0) {
     notes.push(
       `英文覆蓋：${l10nPairs.length} 組文案全部都有 en（100%）。\n` +
+        '    （數的是 `ui.ts` 與 `site.ts` 裡每一個有 `zh-TW` 的物件 —— 不只 `ui.ts`。）\n' +
         '    這一項不擋 —— `ui.ts` 的 `en` 型別上是選填（`Partial`），少一句只會安靜地退回中文。\n' +
         '    所以數字寫在這裡：它從 100% 掉下來的時候，要有人看得見。',
     );
