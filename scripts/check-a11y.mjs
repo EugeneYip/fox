@@ -160,6 +160,7 @@ const RULE_IDS = [
   'skip-link',
   'focus-outline-removed',
   'reduced-motion-blanket',
+  'doc-names-real-rule',
 ];
 
 if (process.argv.includes('--list-rules')) {
@@ -1173,18 +1174,101 @@ if (linksInScripts > 0) {
   );
 }
 
-const idleRules = [...subjects.entries()].filter(([, n]) => n === 0).map(([id]) => id).sort();
 let docDrift = false;
 /* `--doc=` 是給測試用的：帶了它就比對那一份，`--dir=` 的語料才驗得到這一格 */
 const docOverride = process.argv.find((a) => a.startsWith('--doc='))?.slice('--doc='.length);
-if (docOverride !== undefined || !process.argv.some((a) => a.startsWith('--dir='))) {
-  const docPath = docOverride === undefined ? resolve(ROOT, 'docs/A11Y.md') : resolve(docOverride);
-  const doc = await readFile(docPath, 'utf8').catch(() => '');
+const checkDoc = docOverride !== undefined || !process.argv.some((a) => a.startsWith('--dir='));
+/*
+ * 文件先讀、`doc-names-real-rule` 先 `saw()` —— **都要在 `idleRules` 之前**。
+ *
+ * 第一版把它放在底下那個區塊裡，於是它明明判斷了 5 個 id，
+ * 卻同時出現在「這次沒有東西可看的規則」名單上（而且因為名單變了，
+ * 上面那條閒置名單的比對還跟著紅了一次）。
+ * 東西插在它的消費者後面 —— 這是我在這個 repo 第八次犯同一個形狀。
+ */
+/* 不比對文件的時候也要登記 0 —— 少了這一步，這條規則會整個從計數裡消失 */
+if (!checkDoc) saw('doc-names-real-rule', 0);
+const doc = checkDoc
+  ? await readFile(
+      docOverride === undefined ? resolve(ROOT, 'docs/A11Y.md') : resolve(docOverride),
+      'utf8',
+    ).catch(() => '')
+  : '';
+/*
+ * 這一段要在 `idleRules` **之前**：它自己也會 `saw()`，
+ * 排在後面的話那條規則會同時「判斷過 5 個」又出現在「沒有東西可看」名單上
+ * （第一版就是這樣，而且連帶讓下面那條閒置名單的比對紅了一次）。
+ */
+  /*
+   * ── 文件點名的規則 id，還存在嗎 ────────────────────
+   *
+   * 第 1 輪（第三十七圈）加的。這一圈問「這一條規則，是誰要求的？
+   * 寫在哪份文件裡？兩邊還一致嗎？」
+   *
+   * `docs/A11Y.md` 不是規則目錄（它寫的是**自動不了**的那三件事），
+   * 但它在講那三件事的時候會**點名規則當證據**：
+   * 「`check:a11y` 的 `positive-tabindex` 也在守這一條」、
+   * 「焦點框本身是自動守住的：`focus-outline-removed` 這條規則」。
+   * 今天點到 5 個 id。
+   *
+   * 那幾句是給**做人工走查的人**看的 —— 他讀到那一句就會跳過那一項。
+   * 所以規則要是改了名或被刪掉，那份文件會變成一個**假的保證**。
+   *
+   * 實測過會不會被別人抓到：把 `focus-outline-removed` 在腳本裡
+   * 5 處全部改名，`check:a11y` 離開碼 **0**、`check:doc-links` 0、
+   * `test:doc-links` 0；只有 `test:a11y-rules` 紅 —— 而它紅的理由是
+   * **它自己的 fixture 也寫著那個名字**。改名的人本來就要改那份 fixture，
+   * 改完就綠了，而文件還在那裡指著一條不存在的規則。
+   *
+   * 「一條都沒點到」也要說話：那句話八成是文件改了寫法，
+   * 而不是文件真的不再提規則 —— 安靜放行的話這一格就沒有在守了。
+   */
+  if (doc !== '') {
+    const named = [...new Set([...doc.matchAll(/`([a-z][a-z-]{3,})`/g)].map((m) => m[1]))]
+      .filter((id) => RULE_IDS.includes(id) || /^[a-z]+(-[a-z]+)+$/.test(id));
+    const claimed = named.filter((id) => RULE_IDS.includes(id));
+    const ghosts = named.filter(
+      (id) => !RULE_IDS.includes(id) && /^(aria|img|link|button|input|focus|skip|heading|html|lang|nav|svg|duplicate|empty|positive|current|sr|unnamed|unlabelled|fullwidth|decorative|same|blank|reduced)-/.test(id),
+    );
+    saw('doc-names-real-rule', claimed.length);
+    if (claimed.length === 0) {
+      console.log(
+        '\n⚠ docs/A11Y.md 一個規則 id 都沒點到 —— 這一格沒有在守。\n' +
+          '  那份文件本來會拿規則當證據（「這一條 check:a11y 已經在守」）。\n' +
+          '  一個都抓不到，通常是文件換了寫法，不是它真的不再提規則。',
+      );
+    }
+    for (const g of ghosts) {
+      docDrift = true;
+      console.log(
+        `\n✗ docs/A11Y.md 點名了 \`${g}\`，而 RULE_IDS 裡沒有這一條。\n` +
+          '      那份文件是給做人工走查的人看的 —— 他讀到「這一條已經自動守住」\n' +
+          '      就會跳過那一項。指到一條不存在的規則，等於一個假的保證。\n' +
+          '      改法：規則改名的話文件跟著改；真的刪掉的話，把那句話改成\n' +
+          '      「這一項現在沒有自動守」，不要留著。',
+      );
+    }
+}
+
+/*
+ * `doc-names-real-rule` 不進這份名單。
+ *
+ * 這份名單底下印的話是「**站上沒有這種元素**」，而那一條看的不是站上的元素，
+ * 是 `docs/A11Y.md` 點名了幾個規則 id。放進去的話那句話會對它說謊。
+ *
+ * 而且它的主體數會隨 `--doc=` 有沒有帶而變（測試用 `--dir=` 時不比對文件），
+ * 於是「文件抄的閒置名單」那一格會因為這條規則進進出出而假紅一次。
+ */
+const idleRules = [...subjects.entries()]
+  .filter(([id, n]) => n === 0 && id !== 'doc-names-real-rule')
+  .map(([id]) => id)
+  .sort();
+if (checkDoc && doc === '') {
+  console.log('\n⚠ 讀不到 docs/A11Y.md —— 閒置名單沒有跟文件對過。');
+} else if (checkDoc) {
   /* 「（目前 N 條：a、b、c）」——括號裡那一串就是被抄下來的答案 */
   const claim = /這次沒有東西可看的規則」（目前 \d+ 條：\s*([^）]+)）/.exec(doc.replace(/\n/g, ''));
-  if (doc === '') {
-    console.log('\n⚠ 讀不到 docs/A11Y.md —— 閒置名單沒有跟文件對過。');
-  } else if (!claim) {
+  if (!claim) {
     console.log(
       '\n⚠ docs/A11Y.md 裡找不到閒置名單的說法 —— 這一格沒有在守。\n' +
         '  文件換了寫法的話，這裡的樣式要跟著改（不然它會安靜地什麼都不比）。',

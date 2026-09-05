@@ -102,6 +102,8 @@ const SEVERITY = {
   'decorative-glyph-in-name': 'error',
   'duplicate-id': 'error',
   'duplicate-landmark-name': 'error',
+  /* 文件指到一條不存在的規則，是給人工走查的人一個假的保證 —— 擋。 */
+  'doc-names-real-rule': 'error',
   'empty-heading': 'error',
   'focus-outline-removed': 'error',
   'fullwidth-in-english': 'error',
@@ -1062,7 +1064,23 @@ try {
     await rm(dir, { recursive: true, force: true });
   }
 
-  const missing = [...declared].filter((r) => !covered.has(r));
+/*
+ * 不是「一頁踩一條」那種規則的，在別的地方驗。
+ *
+ * `doc-names-real-rule` 看的是 `docs/A11Y.md` 點名了哪些規則 id，
+ * 不是頁面上的元素 —— 做不出「剛好違反它一次」的假頁面。
+ * 它的三格在上面那個 `--doc=` 區塊裡（點名真的、點名假的、一個都沒點）。
+ *
+ * 這份豁免要**指得出在哪裡驗**，不然它就只是一個放行的洞。
+ */
+const TESTED_ELSEWHERE = new Map([['doc-names-real-rule', '上面的 --doc= 區塊']]);
+const missing = [...declared].filter((r) => !covered.has(r) && !TESTED_ELSEWHERE.has(r));
+if (TESTED_ELSEWHERE.size > 0) {
+  console.log(
+    `\n  · 不做假頁面、在別處驗的規則（${TESTED_ELSEWHERE.size} 條）：` +
+      [...TESTED_ELSEWHERE].map(([r, w]) => `${r}（${w}）`).join('、'),
+  );
+}
   if (missing.length > 0) {
     failed += missing.length;
     console.log(`\n  X 這些規則沒有測試案例：${missing.join('、')}`);
@@ -1179,9 +1197,22 @@ console.log('─'.repeat(64));
   const claim = (/** @type {string[]} */ ids) =>
     `跑完還會列出「這次沒有東西可看的規則」（目前 ${ids.length} 條：\n${ids.join('、')}）。\n`;
 
-  /* 這份語料實際閒置了哪幾條 —— 從 --verbose 的計數讀，不自己重算一次 */
+  /*
+   * 這份語料實際閒置了哪幾條 —— 讀**關卡自己印的那份名單**，不從計數重算。
+   *
+   * 原本是掃 `--verbose` 裡計數為 0 的行。那跟關卡的名單曾經一樣，
+   * 到第 1 輪（第三十七圈）就不一樣了：`doc-names-real-rule` 的計數是 0
+   * （沒帶 `--doc=` 時不比對文件），但它**刻意不進**那份名單
+   * —— 名單底下寫的是「站上沒有這種元素」，而它看的不是元素。
+   *
+   * 兩種算法算同一件事，就會有一天分岔。用關卡自己的答案。
+   */
   const verbose = await runCheck(dir, ['--verbose']);
-  const actual = [...verbose.matchAll(/^\s*0\s+([a-z0-9-]+)\s*$/gm)].map((m) => m[1]).sort();
+  const actual = (/這次沒有東西可看的規則（\d+ 條）：(.+)/.exec(verbose)?.[1] ?? '')
+    .split('、')
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .sort();
 
   const okSetup = actual.length > 0;
   if (!okSetup) failed++;
@@ -1204,6 +1235,39 @@ console.log('─'.repeat(64));
   if (!okLoud) failed++;
   console.log(`  ${okLoud ? '\u2713' : 'X'} 文件換了寫法時說「這一格沒有在守」，不是安靜通過`);
   if (!okLoud) console.log('        ' + reworded.out.split('\n').filter((l) => /名單|沒有在守/.test(l)).join(' ｜ '));
+
+
+  /*
+   * ── 文件點名的規則 id，還存在嗎 ──────────
+   *
+   * 第 1 輪（第三十七圈）：`docs/A11Y.md` 不是規則目錄，但它在講
+   * 「自動不了的那三件事」時會**點名規則當證據**
+   * （「焦點框本身是自動守住的：`focus-outline-removed` 這條規則」）。
+   * 那句話是給做人工走查的人看的 —— 他讀到就會跳過那一項。
+   *
+   * 實測過那個缺口：把 `focus-outline-removed` 在腳本裡全部改名，
+   * `check:a11y` 離開碼 0、`check:doc-links` 0、`test:doc-links` 0。
+   * 只有這支測試紅，而它紅是因為**它自己的 fixture 也寫著那個名字** ——
+   * 改名的人本來就要改 fixture，改完就綠了，文件還指著一條不存在的規則。
+   */
+  const good = await run1(claim(actual) + '焦點框是自動守住的：`focus-outline-removed` 這條規則。\n');
+  const okReal = good.code === 0 && !/點名了/.test(good.out);
+  if (!okReal) failed++;
+  console.log(`  ${okReal ? '\u2713' : 'X'} 文件點名真的存在的規則時不誤報`);
+  if (!okReal) console.log('        ' + good.out.split('\n').filter((l) => /點名/.test(l)).join(' ｜ '));
+
+  const ghost = await run1(claim(actual) + '焦點框是自動守住的：`focus-outline-gone` 這條規則。\n');
+  const okGhost = ghost.code === 1 && /點名了 `focus-outline-gone`/.test(ghost.out);
+  if (!okGhost) failed++;
+  console.log(`  ${okGhost ? '\u2713' : 'X'} 文件指到不存在的規則時抓得到，而且擋得住（exit ${ghost.code}）`);
+  if (!okGhost) console.log('        ' + ghost.out.split('\n').filter((l) => /點名|規則/.test(l)).slice(0, 2).join(' ｜ '));
+
+  /* 反向：一個都沒點到要說話，不然文件改寫之後這一格會安靜地什麼都不比 */
+  const noneNamed = await run1(claim(actual) + '這一份完全不提任何規則的名字。\n');
+  const okNone = /一個規則 id 都沒點到 —— 這一格沒有在守/.test(noneNamed.out);
+  if (!okNone) failed++;
+  console.log(`  ${okNone ? '\u2713' : 'X'} 文件一個規則都沒點到時說「這一格沒有在守」`);
+  if (!okNone) console.log('        ' + noneNamed.out.split('\n').filter((l) => /點到|沒有在守/.test(l)).join(' ｜ '));
 
   await rm(dir, { recursive: true, force: true });
 }
