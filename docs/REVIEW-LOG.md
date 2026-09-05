@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 48,200 行、2.5 MB、294 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 48,400 行、2.5 MB、295 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -47719,4 +47719,146 @@ const saved = localStorage.getItem('fox-theme');
   `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：5 — 隱私與安全**
+
+### 2026-09-06 — 第 5 輪（第三十七圈）：隱私與安全
+
+**第三十七圈問：這一條規則，是誰要求的？寫在哪份文件裡？**
+判準：**這條規則寫在哪份文件裡？那份文件是給誰看的？兩邊還一致嗎？**
+
+#### 1. 這一支的答案特別清楚：要求它的是那一頁
+
+其他幾支的規則來歷都要推敲（WCAG？專案約定？沒人寫過？）。
+隱私不一樣 —— `/privacy` 是一份**寫給讀者**的承諾書，
+而且它就在 `dist/` 裡，跟事實放在同一個資料夾。
+
+把那一頁的承諾逐條列出來，對照現在有沒有東西在守：
+
+| 那一頁承諾 | 誰在守 |
+|---|---|
+| 不用分析服務 | `analytics` ✓ |
+| 不用外部字型／CDN／圖片 | `google-fonts`、`third-party-cdn`、`built-third-party-request` ✓ |
+| 不嵌入會自動載入的第三方 | `raw-youtube-embed` ✓ |
+| localStorage 只有兩項 | `storage-not-documented`、`storage-documented-not-used` ✓ |
+| 宣告 CSP 只載自己的網域 | `csp-missing`、`csp-no-default-src`、`csp-unsafe-inline` ✓ |
+| 外部連結一律 `noreferrer` | `external-link-rel-broken-promise` ✓（第三十四圈加的） |
+| **不使用 cookie** | **沒有人** |
+| **影片框用 `youtube-nocookie.com`** | **沒有人** |
+
+八條裡六條有人守。**沒守的那兩條，今天都是真的** ——
+`document.cookie` 在產出裡 **0 次**，CSP 的 `frame-src` 就是
+`https://www.youtube-nocookie.com`。
+但**沒有東西讓它們保持為真**。
+
+#### 2. 影片那一條特別值得守
+
+那一頁對讀者說「用的是 youtube-nocookie.com」。
+
+而 `VideoFacade` **到今天一次都沒有算繪過**（站上還沒有影片，
+`grep -rc video-facade dist` → 一個都沒有）。也就是說，
+那段組網址的程式**沒有人跑過**。
+
+真正擋著的是 CSP 的 `frame-src` —— 瀏覽器層級的規則。
+而在這一輪之前，**沒有任何一條規則拿 CSP 去跟那一頁的承諾對**：
+`frame-src` 裡多一個網域，三條 CSP 規則都不會說話。
+
+#### 3. 兩條新規則，都從那一頁的可見文字讀承諾
+
+- `cookie-promised-none`（主體 44）：那一頁說「不使用 cookie」時，
+  產出裡任何 `document.cookie =` 都是打臉。
+  **只讀取不算** —— 讀 cookie 不會建立 cookie。
+- `csp-frame-host-unpromised`（主體 44）：`frame-src` 允許的每一個主機，
+  都要是那一頁提過的網域。
+
+作法跟第三十四圈那條 rel 規則一樣：**承諾印在頁面上，事實在隔壁的檔案裡，
+兩個都在 `dist/`**，不需要讀 TypeScript。
+
+實測兩個方向：
+
+| 突變 | 結果 |
+|---|---|
+| CSP 多開 `https://player.vimeo.com` | `✗ CSP 允許把 player.vimeo.com 放進 iframe，而 /privacy 沒有跟讀者提過` → exit 1 |
+| 產出裡加一行 `document.cookie = "a=1"` | `✗ /privacy 對讀者說「不使用 cookie」，而這裡在設一個` → exit 1 |
+
+反向也測了：把 cookie 那條關掉 → 測試紅 1 格；把主機比對改成一律放行 → 紅 1 格。
+
+#### 4. 第一版把 44 頁全部誤報了
+
+抽「那一頁提過哪些網域」的正則寫成 `[\w-]+(?:\.[\w-]+)+\.[a-z]{2,}` ——
+**至少三段**。而 `youtube-nocookie.com` 只有兩段，於是一個都沒抽到，
+每一頁的 `frame-src` 都變成「沒承諾過」。
+
+`必須修正 44` 那一行是我自己造的，不是站上的問題。
+
+| | 之前 | 現在 |
+|---|---|---|
+| 那一頁的承諾 | 8 條裡 6 條有人守 | 8 條全部 |
+| CSP 的 `frame-src` | 沒有規則看它 | 每個主機都要被承諾過 |
+| cookie | 沒有規則看它 | 設了就擋 |
+| 規則數 | 28 | 30 |
+
+`verify:all` 六道全綠、`test:tools` 835 格全綠、`ci:sim` 在 HEAD 上全綠。
+
+### 待辦（不屬於這一輪）
+
+- **`VideoFacade` 仍然一次都沒有算繪過。** 這一輪替它加了一道 CSP 的守門，
+  但那段組網址的程式本身還是沒有人跑過（→ 8 視覺與排版／站主）
+- **那一頁還有兩句沒有被機械地對過**：「不設定帳號」與
+  「GitHub 會保有伺服器層級的存取紀錄」—— 前者沒東西可量，
+  後者是關於別人的系統，這個 repo 查不到（→ 5 隱私與安全）
+- 上一輪與更早的都還在（`verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  `note` 的「合法但 0 筆」連續兩圈都在、
+  那個偶發紅燈兩輪兩次且假設不重現、
+  那 9 條「維護者的事」的規則沒有文件、
+  11 條預算的上限沒有文件、`ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  `check:workflows` 的 9 條規則文件提到 0 條、
+  七支關卡只有兩支有 `--list-rules`、`SEVERITY` 的 WCAG 推理住在測試檔註解裡、
+  29 條裡只有 2 條提到 WCAG、
+  瀏覽器掃描沒有變成工具、只走了 4 頁、
+  `check.yml` 永遠不會自己觸發（→ 站主）、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  `reveal('email')` 沒有人呼叫、沒有 href 的 `<a>` 沒有規則在看、
+  `validate-schema` 只實作 8 個關鍵字、同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  `<details>`／`<summary>` 各 44 個沒有規則在看、`<time>` 82 個沒人看 `datetime`、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `--patterns` 那 11 個平臺的「N 筆」沒驗、
+  `SCHEMA_STRUCTURAL` 與「走不到的是哪一個」還沒驗、
+  node 與 python 的 gzip 差 0.9% 沒人查過為什麼、
+  另外 22 個 a11y `--verbose` 數字還沒驗、搜尋結果的連結沒有任何無障礙檢查看過、
+  `tokens.css` 註解裡的對比值沒有東西在守、`domain-drift` 只看三份、
+  `rule-not-documented` 只守 id、`strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、`docs/A11Y.md` 那三個瀏覽器量的數字沒人對、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `audit:privacy` 沒有 needles 時本機 exit 0、
+  我連續九次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 13 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `check:perf` 那句「全是 favicon」是寫死的描述、7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  30 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、`related` 單向、schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、`CoverImage` 的 `sizes` 用 40rem、
+  `ui.ts` 的 `en` 要不要必填、
+  4 條閒置豁免、本機 `ahead 96, behind 2`、
+  `npm run sync` 來源全失敗仍離開碼 0、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `aria-live`／`role="status"` 沒有規則、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、`probe:served` 沒有自己的測試、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  真的開一次螢幕閱讀器聽、`CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：6 — 文案與語氣**
