@@ -288,6 +288,25 @@ console.log('─'.repeat(56));
   const okPerStep = /✓ verify:all\s+\d+ 秒/.test(out);
   ok('每一步都說得出花了幾秒', okPerStep, out.split('\n').filter((l) => l.includes('✓')).join(' | '));
 
+  /*
+   * ── 螢幕上那幾個數字要加得起來 ──────────
+   *
+   * 第 7 輪（第三十五圈）用第二種算法對 `ci:sim` 的數字，撞到這個：
+   * 每一步印的是各自四捨五入的秒數，而合計是先加原始毫秒再四捨五入 ——
+   * `68 + 20 + 1 = 89`，而那一行寫「合計 90 秒」。
+   *
+   * 差一秒不影響判斷，但讀的人會停下來重算（我就停了）。
+   * 現在合計改用螢幕上那幾個數字算，所以**這一格可以直接驗加法**。
+   */
+  const steps = [...out.matchAll(/^\s+[✓X] \S+\s+(\d+) 秒$/gm)].map((m) => Number(m[1]));
+  const totalShown = Number(/合計 (\d+) 秒/.exec(out)?.[1] ?? -1);
+  const sum = steps.reduce((a, b) => a + b, 0);
+  ok(
+    `每一步印出來的秒數加起來就是合計（${steps.join(' + ')} = ${sum}，合計 ${totalShown}）`,
+    steps.length > 0 && totalShown === sum,
+    out.split('\n').filter((l) => /秒/.test(l)).join(' | '),
+  );
+
   const named = /合計 \d+ 秒，最久的是 (\S+)（(\d+)%）/.exec(out);
   /* 慢的那一步是 verify:all（忙等 700ms），beta 只是 echo */
   const okTotal = named !== null && named[1] === 'verify:all' && Number(named[2]) >= 50;

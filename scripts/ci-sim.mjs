@@ -333,12 +333,26 @@ try {
    * 三個步驟長得一樣的時候，要說出時間花在哪。
    */
   if (timings.length > 0) {
-    const total = timings.reduce((n, x) => n + x.ms, 0);
-    const slowest = timings.reduce((a, b) => (b.ms > a.ms ? b : a));
-    console.log(
-      `  合計 ${(total / 1000).toFixed(0)} 秒，最久的是 ${slowest.step}` +
-        `（${Math.round((slowest.ms / total) * 100)}%）`,
-    );
+    /*
+     * ── 螢幕上的數字要加得起來 ──────────
+     *
+     * 原本每一步印的是**各自四捨五入**的秒數，而合計是**先加原始毫秒再四捨五入**。
+     * 兩種算法，於是印出來的三個數字加起來可能不等於印出來的合計。
+     *
+     * 第 7 輪（第三十五圈）實測撞到：`68 + 20 + 1 = 89`，而那一行寫「合計 90 秒」。
+     * 差一秒不影響任何判斷 —— 但讀的人會停下來重算一次（我就停了），
+     * 而這支腳本存在的理由就是讓人相信它說的話。
+     *
+     * 所以合計與百分比都改用**螢幕上那幾個數字**去算。
+     * 代價是合計最多差 n×0.5 秒（三步約 1.5 秒 / 90 秒），換到的是自洽。
+     * 挑「最久的是哪一步」仍然用原始毫秒 —— 那是判斷，不是顯示。
+     */
+    const shown = timings.map((x) => Math.round(x.ms / 1000));
+    const total = shown.reduce((n, x) => n + x, 0);
+    let slowestAt = 0;
+    for (let i = 1; i < timings.length; i++) if (timings[i].ms > timings[slowestAt].ms) slowestAt = i;
+    const pct = total > 0 ? Math.round((shown[slowestAt] / total) * 100) : 0;
+    console.log(`  合計 ${total} 秒，最久的是 ${timings[slowestAt].step}（${pct}%）`);
   }
 
   /*
