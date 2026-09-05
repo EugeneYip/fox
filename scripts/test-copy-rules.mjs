@@ -128,6 +128,34 @@ const CASES = {
       ),
     },
   },
+  /*
+   * ── 同步回來的標題與摘要也不掃 ──────────────────────
+   *
+   * 第 3 輪（第三十六圈）實測：把一支 YouTube 影片標題塞一個「台」再建置，
+   * `taiwan-tai` 紅 → `verify:all` 紅 → 部署停住。**而那行字在這個 repo 裡改不了**
+   * （`syndication.json` 是同步產生的，手改會被下一次同步蓋掉）。
+   *
+   * 判準跟「引用的原文」同一條：CLAUDE.md 管的是站名與正式文案。
+   *
+   * `miss` 是標題與摘要（別的平臺打的字）；
+   * `hit` 是 `synd__why` —— **那一句是站主在這個 repo 裡自己寫的**，
+   * 所以照樣要掃。少了這一格，把整個 `synd__` 前綴一起排除也會通過。
+   */
+  'taiwan-tai（同步回來的標題不掃，但 why 要掃）': {
+    expect: 'taiwan-tai',
+    hit: {
+      'dist/index.html': html(
+        '<li class="synd__item"><h3 class="synd__title">在台灣的影片標題</h3>' +
+          '<p class="synd__why">這個平台的挑選理由</p></li>',
+      ),
+    },
+    miss: {
+      'dist/index.html': html(
+        '<li class="synd__item"><h3 class="synd__title">在台灣的影片標題</h3>' +
+          '<p class="synd__summary muted">影片說明裡也有台灣兩個字</p></li>',
+      ),
+    },
+  },
   'halfwidth-punct': {
     hit: { 'dist/index.html': html('<p>今天天氣很好,我們出去走走.</p>') },
     miss: {

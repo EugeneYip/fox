@@ -216,7 +216,26 @@ const TEXT_LEVEL = new Set([
  *
  * 代價：原文裡真的打錯字，這支不會說話。它本來也不是校對工具。
  */
-const QUOTED = ['poem__original'];
+/*
+ * ── 同步回來的標題與摘要，也不是這個站的文案 ──────────
+ *
+ * 第 3 輪（第三十六圈）問「這道檢查的邊界外面是什麼」，
+ * 結果撞到的是**邊界裡面多了東西**：同步回來的 9 支影片，
+ * 標題與說明是**在 YouTube 上打的字**，而這一支掃 `dist/`，所以照樣掃到它們。
+ *
+ * 實測：把一支影片標題裡塞一個「台」再建置 —— `taiwan-tai` 紅、
+ * `verify:all` 紅、CI 紅、部署停住。**而那一行字在這個 repo 裡改不了**
+ * （`syndication.json` 是 `sync-feeds.mjs` 產生的，手改會被下一次同步蓋掉）。
+ *
+ * 而「台／臺」正是 YouTube 標題最可能出現的那種隨手用字。
+ *
+ * 判準跟上面那條一模一樣：CLAUDE.md 的約定管的是**站名與正式文案**，
+ * 別人（或她在別的平臺）寫的字就是那些字。所以一起拿掉。
+ *
+ * **`synd__why` 不拿掉** —— 那一句是站主在這個 repo 裡自己寫的
+ * （見 `SyndicationList.astro` 的註解：「why 是站主自己寫的，summary 來自對方平臺」）。
+ */
+const QUOTED = ['poem__original', 'synd__title', 'synd__summary'];
 
 /**
  * 把 class 含 QUOTED 的元素連同內容整個拿掉。

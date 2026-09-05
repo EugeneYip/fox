@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 46,100 行、2.4 MB、284 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 46,300 行、2.4 MB、285 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -46122,4 +46122,139 @@ text-like 有（`.xml`／`.json`／`.txt`／`.svg`／`.webmanifest`⋯⋯）、
   workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：3 — 內容結構**
+
+### 2026-09-05 — 第 3 輪（第三十六圈）：內容結構
+
+**第三十六圈問：這道檢查的邊界外面是什麼？那裡現在有幾個？**
+判準：**這一支說得出「它看不到什麼」嗎？而那些東西現在有幾個？**
+
+前兩輪找的都是「邊界外面漏了什麼」。這一輪撞到相反的一種：
+**邊界裡面多了東西 —— 而那些東西不是這個 repo 的。**
+
+#### 1. 站上有一批文字不是這裡寫的
+
+`src/data/syndication.json` 有 **9 支影片**，標題與說明共 **1420 個字**。
+那些字是**在 YouTube 上打的**，同步腳本抓回來、建置時畫進頁面。
+
+而 `check:copy` 掃的是 `dist/` —— 所以它們照樣被當成這個站的文案在校對。
+
+#### 2. 實測：一個「台」就能讓部署停住
+
+把第一支影片的標題塞一個「台」再建置：
+
+```
+X [taiwan-tai] dist/elsewhere/index.html
+```
+
+`check:copy` 紅 → `test:built` 紅 → CI 紅 → **部署停住**。
+
+而那一行字**在這個 repo 裡改不了**：`syndication.json` 是
+`sync-feeds.mjs` 產生的，手改會被下一次同步蓋掉（CLAUDE.md 也明寫「不要手改」）。
+要修只能去 YouTube 改標題。
+
+**而「台／臺」正是 YouTube 標題最可能出現的隨手用字。**
+（今天那 9 支的 1420 個字裡一個違規都沒有 —— 台 0、半形逗號 0、
+直引號 0、半形省略號 0、漢字與拉丁字母沒空格 0。所以這是等著發生的，不是正在發生的。）
+
+#### 3. 這個 repo 早就有這條界線了
+
+`check-copy.mjs` 裡有一份 `QUOTED` 清單，註解寫得很清楚：
+
+> CLAUDE.md 的約定寫得很清楚，「臺」不用「台」指的是**站名與正式文案**。
+> 引用別人的詩，原文的字就是原文的字 —— 標點、用字都不該被這個站的書寫慣例改寫。
+
+那份清單原本只有一個 `poem__original`。
+**同步回來的標題與摘要是完全一樣的東西**，只是來源從古人換成了另一個平臺。
+
+所以加進去：`QUOTED = ['poem__original', 'synd__title', 'synd__summary']`。
+
+#### 4. 但 `synd__why` 不能一起排除
+
+`SyndicationList.astro` 的註解自己寫著：
+「`why` 是站主自己寫的（跟著頁面語言），`summary` 來自對方平臺」。
+
+**那一句是在這個 repo 裡寫的，照樣要掃。** 而且它真的畫在畫面上
+（`dist/index.html` 與 `dist/en/index.html` 各一處）。
+
+#### 5. 突變 —— 邊界的兩側各釘一次
+
+| 突變 | 結果 |
+|---|---|
+| 把 `synd__title`／`synd__summary` 從 `QUOTED` 拿掉 | 「不該抓的沒抓」紅 ✓ |
+| **把 `synd__why` 也加進 `QUOTED`** | **「該抓的有抓到」紅 ✓** |
+
+第二個是重點：少了它，「整個 `synd__` 前綴一起排除」也會通過 ——
+而那會把站主自己寫的那一句一起放掉。
+
+（過程中我的第一個反向探針又挑錯了：拿詩的**原文**去塞「台」，
+結果沒紅 —— 因為 `poem__original` 本來就在 `QUOTED` 裡。
+改用 `description`（站主自己寫的）才驗到。）
+
+#### 6. 這一圈的問題，在這一層得到的答案
+
+三輪三種邊界問題：
+
+| 輪 | 邊界外面／裡面 | 幾個 |
+|---|---|---|
+| 1 無障礙 | 外面**漏了**沒人守的東西 | 99 個 SVG |
+| 2 效能 | 外面是**刻意不守**但沒說出口的 | 176 個圖示／manifest 連結 |
+| 3 內容結構 | **裡面多了**不屬於這裡的東西 | 9 支影片、1420 個字 |
+
+第三種最危險，因為它的失效方式是**紅燈**而不是綠燈 ——
+一個沒有人做錯任何事的紅燈，而且擋住部署。
+
+| | 之前 | 現在 |
+|---|---|---|
+| 同步回來的標題／摘要 | 當成本站文案校對 | 跟引用的原文同一條界線 |
+| `synd__why` | 掃 | 不變（那是站主寫的） |
+| 測試 | —— | 1 格兩個方向 |
+
+### 待辦（不屬於這一輪）
+
+- **同步回來的文字現在完全沒有人看了。** 這是刻意的取捨（跟引用原文一樣），
+  但如果哪天想知道「她的標題有沒有打錯字」，得換一個不擋建置的方式報
+  （→ 3 內容結構）
+- 上一輪與更早的都還在（圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  `<details>`／`<summary>` 各 44 個沒有規則在看、`<time>` 82 個沒人看 `datetime`、
+  涵蓋範圍算不出來要讓規則自己宣告、`check:workflows` 的數字沒驗、
+  「掃了 61 個檔案、13713 行」沒驗、「身分規則：8 個值」不能印內容、
+  `--patterns` 那 11 個平臺的「N 筆」沒驗、
+  `SCHEMA_STRUCTURAL` 與「走不到的是哪一個」還沒驗、
+  node 與 python 的 gzip 差 0.9% 沒人查過為什麼、
+  另外 22 個 a11y `--verbose` 數字還沒驗、搜尋結果的連結沒有任何無障礙檢查看過、
+  `tokens.css` 註解裡的對比值沒有東西在守、`domain-drift` 只看三份、
+  `rule-not-documented` 只守 id、`strictReferrerPolicy: false` 那條路沒有測試、
+  `verifiedAt` 仍然手寫、`field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、`docs/A11Y.md` 那三個瀏覽器量的數字沒人對、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `audit:privacy` 沒有 needles 時本機 exit 0、
+  我連續六次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  `test-ci-sim` 那一格在有負載時會紅、要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 10 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `check:perf` 那句「全是 favicon」是寫死的描述、7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  28 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、`related` 單向、schema 的必填／選填沒被選過、
+  11 條預算裡 5 條的上限是挑的、另外四支檢查的嚴重度、
+  `CoverImage` 的 `sizes` 用 40rem、
+  `check.yml` 跑過 0 次、`ci:sim` 只有手動跑、`ui.ts` 的 `en` 要不要必填、
+  `reveal('email')` 沒有人呼叫、4 條閒置豁免、本機 `ahead 48, behind 1`、
+  `npm run sync` 來源全失敗仍離開碼 0、排程遲了四小時只有一筆、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `VideoFacade` 一次都沒算繪過、`aria-live`／`role="status"` 沒有規則、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、`probe:served` 沒有自己的測試、
+  `--real-install` 成功路徑沒測試、視覺層 24 處實測沒重驗、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  真的開一次螢幕閱讀器聽、`CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：4 — 平臺 feed 實測**
