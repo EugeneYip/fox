@@ -30,6 +30,26 @@ const PLATFORMS = [
 ];
 const none = new Set();
 
+/*
+ * ── 沒打到的理由要加得起來 ────────────────────────
+ *
+ * 第 4 輪（第三十一圈）量到的：`lookup-required` 有 9 個，而那一行寫
+ * 「一個都沒打（**8 個**沒有樣板）」—— 第 9 個是 `pixnet`，它有樣板、
+ * 只是沒有 `probeHandle`。8 解釋不了 9，而讀的人會把括號當成全部的理由。
+ *
+ * 這份語料刻意做出三種沒打到的情況（沒樣板／有樣板沒帳號／兩個都有），
+ * 因為只有一種的話，「只算沒樣板的」跟「三種都算」在輸出上是同一個數字。
+ *
+ * @type {{id: string, confidence?: string, feedTemplate?: string, probeHandle?: string, verifiedAt?: string}[]}
+ */
+const MIXED = [
+  { id: 'v1', confidence: 'verified', feedTemplate: 'https://{handle}/rss', probeHandle: 'x', verifiedAt: '2026-09-05' },
+  { id: 'n1', confidence: 'lookup-required' },
+  { id: 'n2', confidence: 'lookup-required' },
+  { id: 'h1', confidence: 'lookup-required', feedTemplate: 'https://{handle}/rss' },
+  { id: 'u1', confidence: 'lookup-required', feedTemplate: 'https://{handle}/rss', probeHandle: 'z' },
+];
+
 console.log('\nconfidence 與實測的對照\n' + '─'.repeat(56));
 
 {
@@ -145,6 +165,23 @@ console.log('\nconfidence 與實測的對照\n' + '─'.repeat(56));
   );
   const v = lines.find((l) => l.includes('verified')) ?? '';
   check('沒傳今天的日期時不印「NaN 天前」（反向案例）', v.includes('2026-01-01') && !/NaN/.test(v), v);
+}
+
+{
+  const { lines } = confidenceReport(MIXED, { probed: ['v1'], failed: [], flaky: none });
+  const l = lines.find((x) => x.includes('lookup-required')) ?? '';
+  /* 三種理由的數字加起來要等於那一組沒打到的總數（4 個裡沒打到 4 個） */
+  const nums = [...l.matchAll(/(\d+) 個(?:沒有樣板|有樣板但沒有 probeHandle|兩個都有卻沒打到)/g)].map((m) => Number(m[1]));
+  check('沒打到的理由加起來等於那一組的總數', nums.length === 3 && nums.reduce((a, b) => a + b, 0) === 4, l);
+  check('有樣板沒帳號的會被點名', /有樣板但沒有 probeHandle（h1）/.test(l), l);
+  check('兩個都有卻沒打到的會被點名（那不該發生）', /兩個都有卻沒打到\*\*（u1）/.test(l), l);
+}
+
+{
+  /* 反向：那一組真的全部打過的時候，不要多印「另外 N 個沒打」 */
+  const { lines } = confidenceReport(MIXED, { probed: ['v1', 'n1', 'n2', 'h1', 'u1'], failed: [], flaky: none });
+  const l = lines.find((x) => x.includes('lookup-required')) ?? '';
+  check('那一組全部打過時不說「另外 N 個沒打」', !/另外/.test(l), l);
 }
 
 console.log(failed === 0 ? '\n全部通過。\n' : `\n${failed} 項失敗。\n`);

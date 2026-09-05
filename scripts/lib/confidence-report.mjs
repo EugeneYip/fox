@@ -42,15 +42,49 @@ export function confidenceReport(platforms, { probed, failed, flaky, today }) {
   for (const [conf, list] of [...groups.entries()].sort(([a], [b]) => (a < b ? -1 : 1))) {
     const hit = list.filter((p) => probedSet.has(p.id));
     const bad = hit.filter((p) => failedSet.has(p.id));
-    const noTemplate = list.filter((p) => !p.feedTemplate).length;
+    /*
+     * ── 沒打到的那些，理由要**加得起來** ──────────────
+     *
+     * 第 4 輪（第三十一圈）量到的：`lookup-required` 有 9 個，
+     * 而這一行寫「這一輪一個都沒打（**8 個**沒有樣板）」——
+     * 第 9 個是 `pixnet`，它**有樣板**，只是沒有 `probeHandle`。
+     *
+     * 8 解釋不了 9。而讀的人會把括號裡那句當成全部的理由，
+     * 於是 pixnet 就消失在一個看起來完整的句子裡。
+     *
+     * 而它正好是最該被看見的那一種：它的樣板 2026-09-02 實測**已經失效**
+     * （四個真實部落格全回 HTML 不是 feed），留在資料裡當紀錄 ——
+     * 但沒有 probeHandle 就沒有任何一輪會再打它一次。
+     * 「有樣板」在目錄上跟一個活著的樣板長得一模一樣。
+     *
+     * 所以拆成三種，而且加起來一定等於沒打到的總數：
+     *   沒有樣板 —— 沒有東西可打
+     *   有樣板但沒有 probeHandle —— 有東西可打，但沒有帳號打它
+     *   兩個都有卻沒打到 —— 不該發生，發生了要說出來
+     */
+    const unprobed = list.filter((p) => !probedSet.has(p.id));
+    const noTemplate = unprobed.filter((p) => !p.feedTemplate);
+    const noHandle = unprobed.filter((p) => p.feedTemplate && !p.probeHandle);
+    const unexplained = unprobed.filter((p) => p.feedTemplate && p.probeHandle);
+    /** @type {string[]} */
+    const why = [];
+    if (noTemplate.length > 0) why.push(`${noTemplate.length} 個沒有樣板`);
+    if (noHandle.length > 0) {
+      why.push(`${noHandle.length} 個有樣板但沒有 probeHandle（${noHandle.map((p) => p.id).join('、')}）——沒有帳號可以打，等於這個樣板沒有人再驗過`);
+    }
+    if (unexplained.length > 0) {
+      why.push(`**${unexplained.length} 個兩個都有卻沒打到**（${unexplained.map((p) => p.id).join('、')}）`);
+    }
 
     let line = `  ${conf.padEnd(16)} ${String(list.length).padStart(2)} 個`;
     if (hit.length === 0) {
-      line += `　這一輪一個都沒打（${noTemplate} 個沒有樣板）`;
+      line += `　這一輪一個都沒打（${why.join('、')}）`;
     } else if (bad.length === 0) {
       line += `　這一輪真的打過 ${hit.length} 個，全部通過`;
+      if (why.length > 0) line += `；另外 ${unprobed.length} 個沒打（${why.join('、')}）`;
     } else {
       line += `　這一輪真的打過 ${hit.length} 個，其中 ${bad.length} 個失敗`;
+      if (why.length > 0) line += `；另外 ${unprobed.length} 個沒打（${why.join('、')}）`;
     }
     /*
      * ── 這個宣稱是什麼時候成立的 ──────────
