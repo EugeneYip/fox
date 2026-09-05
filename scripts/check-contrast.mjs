@@ -696,6 +696,16 @@ async function* walkSurf(dir) {
    * @type {Set<string>}
    */
   const outsideUse = new Set();
+  /**
+   * 每一個 `var(--x)` 出現在哪些檔案，以及**任何地方**宣告過的 `--x:`。
+   * 兩個相減就是「指到不存在的 token」。宣告要收全 src ——
+   * 元件自己會宣告區域變數（`--drift`、`--delay`、`--poem-orientation`⋯⋯），
+   * 只比對 tokens.css 的話那些會被誤報。
+   * @type {Map<string, Set<string>>}
+   */
+  const varUse = new Map();
+  /** @type {Set<string>} */
+  const varDeclared = new Set();
   /** @type {Map<string, Set<string>>} 前景 token → 用在哪 */
   const fgUse = new Map();
   /** @type {Map<string, Set<string>>} 純色背景 token → 用在哪 */
@@ -709,7 +719,9 @@ async function* walkSurf(dir) {
     for (const m of text.matchAll(/var\(\s*(--[\w-]+)/g)) {
       anyUse.add(m[1]);
       if (!where.endsWith('styles/tokens.css')) outsideUse.add(m[1]);
+      varUse.set(m[1], (varUse.get(m[1]) ?? new Set()).add(where));
     }
+    for (const m of text.matchAll(/(--[A-Za-z][\w-]*)\s*:/g)) varDeclared.add(m[1]);
     // 逐個宣告切開 —— 屬性名決定它是前景還是背景，不是拿整段去猜
     for (const decl of text.split(/[;{}]/)) {
       const colon = decl.indexOf(':');
@@ -785,6 +797,46 @@ async function* walkSurf(dir) {
     const unused = declared.filter((t) => !alive.has(t));
     const direct = unused.filter((t) => !anyUse.has(t));
     const onlyByDead = unused.filter((t) => anyUse.has(t));
+
+  /*
+   * ── 指到不存在的 token ──────────
+   *
+   * 第 8 輪（第三十三圈）是意外撞到的：我為了試 `mutate` 的參數，
+   * 隨手把 `src/styles/tokens.css` 的 `--t-xs` 改成 `--t-ys` 就忘了還原。
+   * 那個 token 有 **10 個元件、14 處**在用。
+   *
+   * `verify:all` 與 `test:tools` **兩套全綠**。
+   *
+   * 因為 `var(--t-xs)` 指不到東西時 CSS 不會報錯，那一條宣告直接失效，
+   * 字級退回繼承值 —— 頁尾、頁首、卡片、詩的出處全部悄悄變大，
+   * 而沒有任何一道關卡覺得有問題。
+   *
+   * 底下「未使用」那一段其實**看到了**（未使用從 7 個變 8 個，還印出 `--t-ys`）——
+   * 但那是綠燈路徑上的一段說明，不擋。這一圈問「這句話是給誰看的」，
+   * 那一行的答案是「給會逐字讀綠燈輸出的人」，而那個人不存在。
+   *
+   * 所以改守**沒有歧義的那一側**：`var()` 指到一個從來沒有被宣告過的名字，
+   * 一定是打錯或刪錯，沒有正當的寫法。宣告收全 `src/`（元件會宣告自己的
+   * 區域變數），所以 `--drift`、`--delay` 那些不會被誤報。
+   */
+  {
+    const undefinedVars = [...varUse.entries()]
+      .filter(([name]) => !varDeclared.has(name))
+      .sort((a, b) => (a[0] < b[0] ? -1 : 1));
+
+    console.log('\n' + '─'.repeat(78));
+    if (undefinedVars.length === 0) {
+      console.log(`指到的 token：${varUse.size} 個名字都有人宣告 ✓`);
+    } else {
+      console.log(`指到的 token：${varUse.size} 個名字裡有 ${undefinedVars.length} 個**從來沒有被宣告過** —`);
+      for (const [name, where] of undefinedVars) {
+        console.log(`  ✗ var(${name})　${[...where].sort().join('、')}`);
+      }
+      console.log('  CSS 不會報錯 —— 那一條宣告直接失效，畫面悄悄退回繼承值。');
+      console.log('  改法：對一次拼字，或在 tokens.css 裡補上這個 token。');
+      failures += undefinedVars.length;
+    }
+  }
 
     console.log('\n' + '─'.repeat(78));
     /* 開頭的「未使用：」是給 test-contrast 的段落狀態機認的，跟上面幾段一致 */

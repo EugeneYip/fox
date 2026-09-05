@@ -92,11 +92,14 @@ function parse(out) {
   /** @type {string[]} */ const coverage = [];
   /** @type {string[]} */ const fallback = [];
   /** @type {string[]} */ const unused = [];
+  /** @type {string[]} */ const undefinedVars = [];
   let theme = '';
   let inPrint = false;
   let inCoverage = false;
   let inFallback = false;
   let inUnused = false;
+  /* 第 8 輪（第三十三圈）加的第五段。不分開的話它的 ✗ 會被算成顏色不合格 */
+  let inUndefined = false;
 
   for (const line of out.split('\n')) {
     const t = line.trim();
@@ -106,11 +109,17 @@ function parse(out) {
      * 第 8 輪（第十圈）加了「涵蓋率」那一段之後，如果不分，
      * 涵蓋率的缺口會被算成顏色不合格 —— 兩件事的意思完全不同。
      */
-    if (t.startsWith('未使用：')) { inUnused = true; inCoverage = false; inFallback = false; inPrint = false; continue; }
-    if (t.startsWith('涵蓋率：')) { inCoverage = true; inUnused = false; inPrint = false; continue; }
-    if (t.startsWith('fallback：')) { inFallback = true; inCoverage = false; inUnused = false; inPrint = false; continue; }
-    if (t.startsWith('列印：')) { inPrint = true; inCoverage = false; inFallback = false; inUnused = false; continue; }
+    if (t.startsWith('指到的 token：')) { inUndefined = true; inUnused = false; inCoverage = false; inFallback = false; inPrint = false; continue; }
+    if (t.startsWith('未使用：')) { inUnused = true; inUndefined = false; inCoverage = false; inFallback = false; inPrint = false; continue; }
+    if (t.startsWith('涵蓋率：')) { inCoverage = true; inUnused = false; inPrint = false; inUndefined = false; continue; }
+    if (t.startsWith('fallback：')) { inFallback = true; inCoverage = false; inUnused = false; inPrint = false; inUndefined = false; continue; }
+    if (t.startsWith('列印：')) { inPrint = true; inCoverage = false; inFallback = false; inUnused = false; inUndefined = false; continue; }
     if (!t) continue;
+    if (inUndefined) {
+      const mm = /^✗\s*var\((--[\w-]+)\)/.exec(t);
+      if (mm) undefinedVars.push(mm[1]);
+      continue;
+    }
     if (inUnused) {
       const mm = /^✗\s*(--[\w-]+)/.exec(t);
       if (mm) unused.push(mm[1]);
@@ -144,7 +153,7 @@ function parse(out) {
   if (!m) throw new Error('統計行讀得到卻剖不開');
   if (!theme) throw new Error('輸出裡連一個主題標題都沒有 —— 解析一定是壞的');
 
-  return { fails, missing, printMissing, coverage, fallback, unused, checked: Number(m[1]), failures: Number(m[2]) };
+  return { fails, missing, printMissing, coverage, fallback, unused, undefinedVars, checked: Number(m[1]), failures: Number(m[2]) };
 }
 
 let failed = 0;
@@ -977,4 +986,56 @@ await check(
 
 console.log('─'.repeat(64));
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
+/*
+ * ── 指到不存在的 token ──────────
+ *
+ * 第 8 輪（第三十三圈）意外撞到的：`tokens.css` 裡的 `--t-xs` 被改成
+ * `--t-ys`（10 個元件、14 處在用），而 `verify:all` 與 `test:tools`
+ * **兩套全綠**。`var()` 指不到東西時 CSS 不報錯，那條宣告直接失效。
+ *
+ * 三個方向：該響的要響、不該響的不能響（元件自己宣告的區域變數），
+ * 而且要**擋**（exit 1）不是印一行就過 —— 原本「未使用」那一段其實看到了，
+ * 但它在綠燈路徑上。
+ */
+{
+  const dir = await mkdtemp(join(tmpdir(), 'contrast-undef-'));
+  await mkdir(join(dir, 'src/styles'), { recursive: true });
+  await mkdir(join(dir, 'src/components'), { recursive: true });
+  await writeFile(join(dir, 'src/styles/tokens.css'), realTokens, 'utf8');
+  await writeFile(join(dir, 'src/styles/global.css'), realGlobal, 'utf8');
+
+  const runWith = async (/** @type {string} */ body) => {
+    await writeFile(join(dir, 'src/components/Probe.astro'), body, 'utf8');
+    try {
+      const { stdout } = await run('node', [resolve(ROOT, 'scripts/check-contrast.mjs'), `--root=${dir}`]);
+      return { out: stdout, code: 0 };
+    } catch (err) {
+      const e = /** @type {{ stdout?: string, code?: number }} */ (err);
+      return { out: String(e?.stdout ?? ''), code: typeof e?.code === 'number' ? e.code : -1 };
+    }
+  };
+
+  /* 1. 指到一個不存在的名字 —— 要響、而且要擋 */
+  const bad = await runWith('<style>.x { font-size: var(--t-does-not-exist); }</style>\n');
+  const okCatch = /從來沒有被宣告過/.test(bad.out) && /--t-does-not-exist/.test(bad.out) && bad.code === 1;
+  if (!okCatch) failed++;
+  console.log(`  ${okCatch ? '✓' : 'X'} 指到不存在的 token：抓得到，而且擋得住（exit 1）`);
+  if (!okCatch) console.log('      ' + bad.out.split('\n').filter((l) => /指到的 token|✗/.test(l)).join(' ｜ '));
+
+  /* 2. 元件自己宣告的區域變數 —— 不能誤報（Foxfire 的 --drift、--delay 就是這種） */
+  const local = await runWith('<style>.x { --my-local: 3px; margin: var(--my-local); }</style>\n');
+  const okLocal = !/從來沒有被宣告過/.test(local.out) && local.code === 0;
+  if (!okLocal) failed++;
+  console.log(`  ${okLocal ? '✓' : 'X'} 元件自己宣告的區域變數不算「沒宣告」`);
+  if (!okLocal) console.log('      ' + local.out.split('\n').filter((l) => /指到的 token|✗/.test(l)).join(' ｜ '));
+
+  /* 3. 全部都宣告過時，那一行要說得出數字 —— 不然它可能根本沒在數 */
+  const okCount = /指到的 token：\d+ 個名字都有人宣告/.test(local.out);
+  if (!okCount) failed++;
+  console.log(`  ${okCount ? '✓' : 'X'} 都對的時候說得出「幾個名字」`);
+  if (!okCount) console.log('      ' + (local.out.split('\n').find((l) => l.includes('指到的 token')) ?? '（那一行沒印）'));
+
+  await rm(dir, { recursive: true, force: true });
+}
+
 process.exit(failed > 0 ? 1 : 0);
