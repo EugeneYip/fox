@@ -848,6 +848,44 @@ for (const [name, { hit, miss, expect, coFires }] of Object.entries(CASES)) {
 }
 
 console.log('─'.repeat(64));
+/*
+ * ── 第一次跑的人看得到什麼 ──────────
+ *
+ * 第 6 輪（第二十九圈）：這一支本來說「掃了 61 個檔案、13647 行」——
+ * 說了掃了多少東西，沒說用幾條規則掃的。
+ * 而 `--verbose` 多印的 8 行（每條規則真的有東西可判斷幾次，帶佔比）
+ * 正是「綠燈代表什麼」的答案，卻沒人看得見。
+ *
+ * 這是第 1 輪點名的六支裡的最後一支。
+ */
+{
+  const dir = await build({ 'dist/index.html': html('<p>乾淨的一頁。</p>') });
+  /* check() 會在 finally 裡刪掉整個目錄，所以 --verbose 那次要先跑 */
+  const { stdout: verbose } = await run('node', [
+    '--experimental-strip-types',
+    '--no-warnings=ExperimentalWarning',
+    resolve(ROOT, 'scripts/check-copy.mjs'),
+    `--root=${dir}`,
+    '--verbose',
+  ]).catch((/** @type {any} */ e) => ({ stdout: String(e?.stdout ?? '') }));
+  const out = await check(dir);
+
+  const okRules = /\d+ 條規則/.test(out);
+  if (!okRules) failed++;
+  console.log(`  ${okRules ? '✓' : 'X'} 範圍那一行說得出用了幾條規則`);
+  if (!okRules) console.log('        ' + out.split('\n').filter(Boolean).slice(0, 6).join(' | '));
+
+  const okVerbose = /--verbose/.test(out);
+  if (!okVerbose) failed++;
+  console.log(`  ${okVerbose ? '✓' : 'X'} 綠燈時說得出怎麼看「判斷過多少東西」（--verbose）`);
+  if (!okVerbose) console.log('        ' + out.split('\n').filter(Boolean).slice(-4).join(' | '));
+
+  const okQuiet = !/要看每條規則真的有東西/.test(verbose);
+  if (!okQuiet) failed++;
+  console.log(`  ${okQuiet ? '✓' : 'X'} --verbose 模式不再提示自己（反向案例）`);
+  if (!okQuiet) console.log('        ' + verbose.split('\n').filter(Boolean).slice(-4).join(' | '));
+}
+
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
 process.exit(failed > 0 ? 1 : 0);
 

@@ -634,10 +634,28 @@ console.log('\n文案慣例檢查\n' + '─'.repeat(56));
  * 區塊插在 findings 被分割之後，主體數印得出來、發現卻印不出來）。
  * 一則「有 N 個字沒有人看過」的筆記，不該因為別的地方有錯就不見。
  */
+/**
+ * 不是逐行掃語料的那幾條 —— 它們各自有自己的主體
+ * （`ui.ts` 的鍵、兩份文件、`<time>` 標籤），所以不在 `RULES` 裡。
+ * 抽出來是為了範圍那一行跟底下的補零共用同一份清單，不會分岔。
+ */
+const EXTRA_RULE_IDS = ['unused-i18n-key', 'rule-not-documented', 'date-wrong-language'];
+
 for (const n of notes) console.log(`\n  · ${n}`);
+/*
+ * ── 範圍那一行要說「幾條規則」，而且要跟上面的筆記分開 ──────────
+ *
+ * 第 6 輪（第二十九圈）問「第一次跑的人跟第一百次跑的人看到的是同一份
+ * 東西嗎」。這一行本來說「掃了 61 個檔案、13647 行」——
+ * 說了掃了多少**東西**，沒說用幾條規則掃的。
+ * 同一圈第 1、3、5 輪對 a11y、內容、隱私做過同樣的事。
+ *
+ * 另外它原本緊貼在上面那則筆記後面（中間沒有空行），
+ * 讀起來像筆記的一部分。範圍是判決的一半，不是註腳。
+ */
 console.log(
-  `掃了 ${scanned.files} 個檔案、${scanned.lines} 行` +
-    `（其中含漢字的 ${scanned.cjkLines} 行）。`,
+  `\n掃了 ${scanned.files} 個檔案、${scanned.lines} 行` +
+    `（其中含漢字的 ${scanned.cjkLines} 行）、${RULES.length + EXTRA_RULE_IDS.length} 條規則。`,
 );
 
 /*
@@ -651,7 +669,7 @@ console.log(
  * 不是「判斷過而且沒問題」。
  */
 for (const rule of RULES) if (!subjects.has(rule.id)) subjects.set(rule.id, 0);
-for (const id of ['unused-i18n-key', 'rule-not-documented', 'date-wrong-language']) {
+for (const id of EXTRA_RULE_IDS) {
   if (!subjects.has(id)) subjects.set(id, 0);
 }
 if (process.argv.includes('--verbose')) {
@@ -797,5 +815,19 @@ if (idle.length > 0) {
 }
 
 console.log('\n沒有發現問題。（掃產出、人會讀的文件、內容檔 frontmatter 的註解、' +
-    '以及還沒被算繪的介面字串；程式碼註解與內容正文不在範圍內 —— 正文發佈後會進 dist）\n');
+    '以及還沒被算繪的介面字串；程式碼註解與內容正文不在範圍內 —— 正文發佈後會進 dist）');
+/*
+ * ── 那個能回答「到底判斷過多少東西」的旗標，要說得出口 ──────────
+ *
+ * `--verbose` 多印 8 行「每條規則真的有東西可判斷的次數」，
+ * 而且帶佔比（cjk-latin-space 598 次、佔含漢字的行 22.9%）——
+ * 那正是「綠燈代表什麼」的答案。
+ *
+ * 第 1 輪（第二十九圈）量到：七支關卡裡六支有 `--verbose` 而輸出從來不提它。
+ * 這是那六支裡的最後一支。
+ */
+if (!process.argv.includes('--verbose')) {
+  console.log('要看每條規則真的有東西可判斷幾次：npm run check:copy -- --verbose');
+}
+console.log('');
 process.exit(0);
