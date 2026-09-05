@@ -826,10 +826,53 @@ if (VERBOSE) {
   }
 }
 
+/*
+ * ── 十一個綠勾裡，哪一個該盯 ──────────
+ *
+ * 第 2 輪（第二十九圈）問「第一次跑的人跟第一百次跑的人看到的是同一份
+ * 東西嗎」。表格本身是自明的（數值／上限／進度條／百分比），
+ * 但**十一個綠勾長得一模一樣** —— 老手知道 CSP 雜湊數那條 88% 是
+ * 一個決策觸發點（到 42 就該把 inlineStylesheets 換成 never），
+ * 第一次跑的人只看到十一個勾。
+ *
+ * 掃一次表比較十一個百分比不難，但那是**讀的人要做的工作**，
+ * 而這支腳本已經算過了。點名一句就好。
+ */
+const closest = budgets.reduce((a, b) => (b.value / b.limit > a.value / a.limit ? b : a));
+const closestPct = Math.round((closest.value / closest.limit) * 100);
+
 console.log('\n' + '='.repeat(76));
-console.log(
-  over === 0 && staleDocs === 0
-    ? '全部在預算內。\n'
-    : `${over} 項超出預算${staleDocs > 0 ? `、${staleDocs} 條說明裡的數字過期` : ''}。\n`,
-);
+if (over === 0 && staleDocs === 0) {
+  /*
+   * 判決那一行要**單獨一行、一字不差**。
+   *
+   * `test-perf-budgets` 的 `verdictOk` 是 `/^全部在預算內。$/m` —— 錨定整行，
+   * 而那是第 2 輪（第二十五圈）刻意收緊的：原本用 `includes`，
+   * 於是「少了一條預算，其餘全部在預算內」也會被判成通過。
+   *
+   * 第 2 輪（第二十九圈）第一版把「最接近上限的是⋯」接在同一行上，
+   * 三格當場紅 —— **測試守住了一個刻意的設計**。附註要另起一行。
+   */
+  console.log('全部在預算內。');
+  console.log(`最接近上限的是「${closest.label}」（${closestPct}%）。`);
+  /*
+   * ── 每條預算的數字從哪來，只有 --verbose 說得出來 ──────────
+   *
+   * 每一條都有 `why`（例如 CSP 雜湊數那條：一個雜湊約 43 B、
+   * 首頁 auto 比 never 只領先 294 B，所以 42 個就該換），
+   * 而那些只在**超標或 --verbose** 時才印。
+   *
+   * 第 1 輪（第二十九圈）量到：七支關卡裡六支有 --verbose 而輸出從來不提它。
+   * 老手知道要打，第一次跑的人不知道那個東西存在。
+   */
+  if (!VERBOSE) {
+    console.log('要看每條預算的數字是怎麼訂的：npm run check:perf -- --verbose\n');
+  } else {
+    console.log('');
+  }
+} else {
+  console.log(
+    `${over} 項超出預算${staleDocs > 0 ? `、${staleDocs} 條說明裡的數字過期` : ''}。\n`,
+  );
+}
 process.exit(over > 0 || staleDocs > 0 ? 1 : 0);

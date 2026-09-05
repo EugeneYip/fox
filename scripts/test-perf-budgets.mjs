@@ -692,6 +692,55 @@ for (const [key, value] of Object.entries(CASES)) {
 }
 
 console.log('─'.repeat(64));
+/*
+ * ── 十一個綠勾裡，哪一個該盯 ──────────
+ *
+ * 第 2 輪（第二十九圈）問「第一次跑的人跟第一百次跑的人看到的是同一份
+ * 東西嗎」。表格本身是自明的，但十一個綠勾長得一模一樣 ——
+ * 老手知道 CSP 雜湊數那條是決策觸發點，第一次跑的人只看到十一個勾。
+ *
+ * 兩件事一起守：點名最接近上限的那一條，以及說得出 `--verbose`
+ * （每條預算的數字是怎麼訂的只在那裡面）。
+ */
+{
+  const dir = await mkdtemp(join(tmpdir(), 'perf-first-'));
+  await writeFile(join(dir, 'index.html'), page({ body: '<p>短</p>' }), 'utf8');
+  const out = await check(dir);
+
+  /*
+   * 判準要驗**它真的是最大的那一個**，不是「有這麼一句話」。
+   *
+   * 第一版只比對格式，而突變掃描把 `reduce` 的比較寫反（挑成最不接近的）
+   * 之後照樣綠 —— 這個 repo 反覆踩到的同一件事：
+   * **判準能被別的東西滿足的時候，它證明的比它看起來的少。**
+   *
+   * 表格每一列結尾都有 `NN%`，拿它們的最大值來對。
+   */
+  const named = /最接近上限的是「.+」（(\d+)%）/.exec(out);
+  const allPct = [...out.matchAll(/ (\d+)%$/gm)].map((m) => Number(m[1]));
+  const okClosest = named !== null && allPct.length > 1 && Number(named[1]) === Math.max(...allPct);
+  if (!okClosest) failed++;
+  console.log(`  ${okClosest ? '✓' : 'X'} 全綠時點名的真的是最接近上限的那一條`);
+  if (!okClosest) {
+    console.log(`        說的是 ${named ? named[1] + '%' : '（沒說）'}，表格裡最大的是 ${allPct.length ? Math.max(...allPct) + '%' : '（抓不到）'}`);
+  }
+
+  const okVerbose = /--verbose/.test(out);
+  if (!okVerbose) failed++;
+  console.log(`  ${okVerbose ? '✓' : 'X'} 全綠時說得出怎麼看「數字是怎麼訂的」（--verbose）`);
+  if (!okVerbose) console.log('        ' + out.split('\n').slice(-4).join(' | '));
+
+  /* --verbose 模式自己不再提示自己 */
+  const verbose = await check(dir, ['--verbose']);
+  const tailV = verbose.split('\n').slice(-4).join('\n');
+  const okQuiet = !/要看每條預算的數字是怎麼訂的/.test(tailV);
+  if (!okQuiet) failed++;
+  console.log(`  ${okQuiet ? '✓' : 'X'} --verbose 模式不再提示自己（反向案例）`);
+  if (!okQuiet) console.log('        ' + tailV.split('\n').join(' | '));
+
+  await rm(dir, { recursive: true, force: true });
+}
+
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
 process.exit(failed > 0 ? 1 : 0);
 
