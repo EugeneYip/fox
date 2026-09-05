@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 44,000 行、2.3 MB、268 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 44,100 行、2.3 MB、269 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -43982,4 +43982,121 @@ npm run mutate -- src/styles/tokens.css --from 'x' --to 'y'
   workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：3 — 內容結構**
+
+### 2026-09-05 — 第 3 輪（第三十四圈）：內容結構
+
+**第三十四圈問：這個答案，系統裡已經有了嗎？如果有，為什麼沒用上？**
+判準：**這個數字、這個判斷，是重新算的，還是從已經有的地方拿的？
+如果是重新算的，兩邊什麼時候會分岔？**
+
+內容結構這一層的「答案」是 `content.config.ts` 的 zod schema ——
+「可以寫哪些欄位」是它說了算。而 `docs/CONTENT.md` 用範例把同一件事**又寫了一次**。
+
+#### 1. 這件事已經有人在守了 —— 但只守一個方向
+
+`check:content` 的 `field-undocumented`（第 3 輪〔第二十四圈〕加的）
+就是為這件事來的：**schema 有的欄位，指南有沒有教過**。33 個欄位逐一比對。
+
+**反過來沒有人看。** 指南教一個 schema 已經沒有的欄位，不會有任何人說話。
+
+而那個後果不是報錯，是更安靜的一種：**zod 物件預設把不認得的鍵直接丟掉**。
+她照著指南寫了 `videoUrl:`，而那個欄位哪天被改名或拿掉 ——
+建置不會紅、畫面不會變、frontmatter 裡那一行就這樣什麼都不做。
+
+答案在哪？`declared` 那個 Set 就在同一個 `if` 區塊的上面幾行，
+指南的文字（`doc`）也已經讀進來了。**兩邊都在手上，只是沒有往回問一次。**
+
+#### 2. 量到的
+
+```
+schema 抽到的欄位：33 個
+指南範例裡出現的 frontmatter 鍵：23 個
+其中 schema 沒有的：0 個
+```
+
+今天是乾淨的。加一條 `guide-field-unknown`（主體 23），對不上就擋。
+
+#### 3. 突變
+
+| 突變 | 結果 |
+|---|---|
+| 把 schema 的 `videoUrl` 改名成 `videoURL`（指南照舊） | 紅 ✓ |
+| 讓那條規則永遠不報 | 案例紅 ✓ |
+
+案例用**真的**指南再補一個教錯的範例區塊 —— 第一版我用小 stub，
+結果 `field-undocumented` 也一起響（stub 沒教到其他欄位），
+那就分不出是哪一條讓它綠的。
+
+而原本 `field-undocumented` 的兩格 fixture 現在**也會觸發新規則** ——
+它們把真指南裡的 `videoUrl` 改名成 `videoLink`，那正是同一個錯位的兩半。
+照 harness 自己的機制在 `also` 裡寫出來，不是誤報。
+
+#### 4. 這一輪我又量錯兩次
+
+- 第一次抽指南的程式碼區塊，我拿 `m[1]`（那是**語言標籤**，不是內容），
+  結果「0 個 frontmatter 範例」。數字太離譜才發現。
+- 修好之後得到「`term`、`gloss` 在指南裡但 schema 沒有」——
+  差點寫成「兩個真的欄位在檢查範圍外」。實際上關卡的抽取有**兩條**樣式，
+  第二條 `name: z.` 抓得到巢狀寫法（`z.object({ term: z.string(), … })`），
+  是我只抄了第一條。用關卡真正的兩條重跑，declared 是 33，一個都沒漏。
+
+**兩次都是我重寫了一份系統裡已經有的東西，然後兩份分岔** ——
+跟這一輪在找的毛病一模一樣。上一輪也是（我自己切 `budgets` 只切出 9 條）。
+這一組圈第十一、十二次。
+
+#### 5. 這一圈的問題，在這一層得到的答案
+
+這一層對「同一件事寫在兩個地方」的意識很高 —— `locale-list-drift` 比四份
+語言清單、`field-undocumented` 比 schema 與指南、`check:generated` 守
+`PLATFORMS.md`。三道都在。
+
+漏的不是「沒想到要比」，是**比對只做了單向**。
+而單向的那一半，剛好是「文件會不會教錯」——也就是她照著做的那一份。
+
+| | 之前 | 現在 |
+|---|---|---|
+| schema → 指南 | `field-undocumented` 在守 | 不變 |
+| 指南 → schema | 沒有人看 | `guide-field-unknown`（主體 23） |
+| 教錯欄位的後果 | zod 安靜丟掉，什麼都不會發生 | 建置直接紅 |
+
+### 待辦（不屬於這一輪）
+
+- **`field-undocumented` 判斷「教過」的方式是「欄位名以程式碼的樣子出現」**，
+  而新規則判斷「教了什麼」的方式是「frontmatter 範例區塊裡的鍵」。
+  兩邊的語料不完全一樣（反引號提到但不在範例裡的欄位，前者算教過、
+  後者看不到）。今天沒有差異，但那是兩個判準（→ 3 內容結構）
+- 上一輪與更早的都還在（`check:perf` 的過期檢查只看 `why:`、
+  `docs/A11Y.md` 那三個瀏覽器量的數字沒人對、頁尾 `aria-current` 沒有顏色對應、
+  `.foxfire` 的動畫在非合成分頁裡量不到、`audit:privacy` 沒有 needles 時本機 exit 0、
+  搜尋頁的 client script 沒有自動測試、我連續六次把東西放在消費者後面、
+  `check-handle.mjs` 沒辦法不打網路跑、`test-ci-sim` 那一格在有負載時會紅、
+  `verifiedAt` 11 筆同一天、要不要讓列表顯示詩詞的 `title`、
+  `REVIEW-LOG.md` 開頭三個數字手寫、「涵蓋率：前景 N 種」那兩個數字沒人驗、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  另外幾支的 `--verbose` 數字沒人驗、乾淨基底上 10 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `check:perf` 那句「全是 favicon」是寫死的描述、7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  27 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、`related` 單向、schema 的必填／選填沒被選過、
+  11 條預算裡 5 條的上限是挑的、另外四支檢查的嚴重度、
+  `CoverImage` 的 `sizes` 用 40rem、
+  `check.yml` 跑過 0 次、`ci:sim` 只有手動跑、`ui.ts` 的 `en` 要不要必填、
+  `reveal('email')` 沒有人呼叫、4 條閒置豁免、本機 `ahead 48, behind 1`、
+  `npm run sync` 來源全失敗仍離開碼 0、排程遲了四小時只有一筆、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `VideoFacade` 一次都沒算繪過、`aria-live`／`role="status"` 沒有規則、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、`probe:served` 沒有自己的測試、
+  `--real-install` 成功路徑沒測試、視覺層 24 處實測沒重驗、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  真的開一次螢幕閱讀器聽、`CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：4 — 平臺 feed 實測**

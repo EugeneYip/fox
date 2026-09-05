@@ -1020,6 +1020,7 @@ const RULES = [
   'vertical-lost',
   'locale-list-drift',
   'search-crosslang-mute',
+  'guide-field-unknown',
 ];
 /*
  * ── 某個語言一篇都沒有的時候，那個語言的搜尋頁要說得出來 ──────────
@@ -1438,6 +1439,47 @@ let fieldReport = '';
             '      改法：在 docs/CONTENT.md 相對應的章節補一段，' +
             '把欄位名放進 ``` 範例或用反引號包起來；\n' +
             '      如果它其實不是她要寫的欄位，加進這支腳本的 SCHEMA_STRUCTURAL。',
+        });
+      }
+
+      /*
+       * ── 反過來那一半：指南教的欄位，schema 還有嗎 ──────────
+       *
+       * 上面那個迴圈從 `declared` 走到指南 —— 只證明「schema 有的都教過」。
+       * 反過來沒有人看：**指南教一個 schema 已經沒有的欄位，不會有任何人說話。**
+       *
+       * 後果不是報錯，是更安靜的一種：zod 物件預設會把不認得的鍵**直接丟掉**。
+       * 她照著指南寫了 `videoUrl:`，而那個欄位哪天被拿掉了 ——
+       * 建置不會紅、畫面不會變、frontmatter 裡那一行就這樣什麼都不做。
+       *
+       * 第 3 輪（第三十四圈）：這一圈問「這個答案系統裡已經有了嗎」——
+       * 有，`declared` 就在上面那一行，只是沒有人往回問一次。
+       * 量到的是 23 個範例欄位、0 個對不上（`term`／`gloss` 這種巢狀的也算得到，
+       * 因為抽取有第二條樣式 `name: z.`）。
+       */
+      const fmBlocks = [...doc.matchAll(/```[a-z]*\n([\s\S]*?)```/g)]
+        .map((m) => m[1])
+        .filter((b) => b.trimStart().startsWith('---'));
+      /** @type {Map<string, number>} 指南範例裡出現過的 frontmatter 鍵 */
+      const guideKeys = new Map();
+      for (const b of fmBlocks) {
+        const parts = b.split('---');
+        for (const line of (parts.length >= 3 ? parts[1] : b).split('\n')) {
+          const m = /^\s*(?:-\s*)?([a-zA-Z][\w]*)\s*:/.exec(line);
+          if (m) guideKeys.set(m[1], (guideKeys.get(m[1]) ?? 0) + 1);
+        }
+      }
+      saw('guide-field-unknown', guideKeys.size);
+      const unknownKeys = [...guideKeys.keys()].filter((k) => !declared.has(k)).sort();
+      for (const k of unknownKeys) {
+        problems.push({
+          file: 'docs/CONTENT.md',
+          id: 'guide-field-unknown',
+          msg:
+            `寫作指南的範例教了 \`${k}\`，但 content.config.ts 裡沒有這個欄位。\n` +
+            '      照著寫的話那一行會被 zod 安靜丟掉 —— 建置不紅、畫面不變、什麼都不會發生。\n' +
+            '      改法：欄位改名或刪掉的話，指南的範例要跟著改；' +
+            '如果它是新加的欄位，先把 content.config.ts 補上。',
         });
       }
     }

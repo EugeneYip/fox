@@ -227,6 +227,27 @@ const CASES = {
    * 索引裡兩筆都是 zh-TW，所以 /en/search 的讀者無論打什麼都是「沒有結果」。
    * 那一頁的 data-strings 裡少了指路用的鍵 —— 畫面上不會說為什麼。
    */
+  /*
+   * ── 指南教了一個 schema 沒有的欄位 ──
+   *
+   * 上面 `field-undocumented` 走的是「schema → 指南」，這一格是反過來。
+   * zod 物件預設把不認得的鍵**安靜丟掉**，所以照著指南寫的那一行
+   * 會什麼都不做，而建置不會紅。
+   *
+   * 這一格帶自己的 `guide`（假指南），跟 `field-undocumented` 那一格一樣。
+   */
+  'guide-field-unknown': {
+    content: { 'poems/wu-yi-xiang.md': poem() },
+    dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花') },
+    /*
+     * 用**真的**指南再補一個範例區塊 —— 用小 stub 的話 `field-undocumented`
+     * 會一起響（stub 沒教到其他欄位），那就分不出是哪一條讓它綠的。
+     */
+    guide:
+      REAL_GUIDE +
+      '\n\n## 一個教錯的範例\n\n```markdown\n---\ntitle: 靜夜思\nlang: zh-TW\n' +
+      'thisFieldDoesNotExist: 隨便\n---\n```\n',
+  },
   'search-crosslang-mute': {
     content: { 'poems/wu-yi-xiang.md': poem() },
     dist: {
@@ -403,6 +424,12 @@ const CASES = {
     content: { 'poems/wu-yi-xiang.md': poem() },
     dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花') },
     mustMention: ['videoUrl'],
+    /*
+     * 改了名字之後指南教的是 `videoLink`，而 schema 裡沒有那個欄位 ——
+     * 所以第 3 輪（第三十四圈）加的反方向那條**本來就該一起響**。
+     * 兩條是同一個錯位的兩半，不是誤報。
+     */
+    also: ['guide-field-unknown'],
   },
 
   /*
@@ -419,6 +446,8 @@ const CASES = {
       '\n\n影片網址那個欄位現在叫 videoLink，以前叫 videoUrl。\n',
     content: { 'poems/wu-yi-xiang.md': poem() },
     dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花') },
+    /* 同上：指南教的 `videoLink` 不在 schema 裡，反方向那條也該響 */
+    also: ['guide-field-unknown'],
   },
 
   /*
