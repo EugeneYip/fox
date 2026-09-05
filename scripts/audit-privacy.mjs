@@ -523,7 +523,21 @@ if (existsSync(resolve(ROOT, 'dist'))) {
         line: scriptSrc.trim().slice(0, 110),
         matched: 'unsafe',
         rule: {
-          id: 'csp-weakened',
+          id: 'csp-unsafe-inline',
+          /*
+           * ── 為什麼這一條擋，底下那一條不擋 ──────────────
+           *
+           * 這兩件事本來是同一個 id（`csp-weakened`），**而且是兩個不同的
+           * 嚴重度** —— 第 5 輪（第三十一圈）量到的：同一個規則 id 在
+           * 一個地方是 error、另一個地方是 warn，而輸出上兩者都寫
+           * `[csp-weakened]`，讀的人分不出是哪一種。
+           *
+           * 兩個等級各自都說得通，但**沒有一個字說它們為什麼不一樣**。
+           * 拆成兩個 id 之後，等級跟著 id 走，主體數也各自算。
+           *
+           * 這一條是 error：`'unsafe-inline'`／`'unsafe-eval'` 等於把 CSP
+           * 對 XSS 的防護關掉 —— 那是**洞**，不是姿態問題。
+           */
           level: 'error',
           why:
             "script-src 出現 'unsafe-inline' 或 'unsafe-eval'，那等於把 CSP 對 XSS 的防護關掉。" +
@@ -538,7 +552,12 @@ if (existsSync(resolve(ROOT, 'dist'))) {
         line: policy.slice(0, 110),
         matched: 'default-src',
         rule: {
-          id: 'csp-weakened',
+          id: 'csp-no-default-src',
+          /*
+           * 這一條是 warn：少了 `default-src 'none'` 之後，**已經列出來的
+           * 那幾種資源仍然受限**，開的是沒列到的類型。那是姿態變鬆，
+           * 不是防護被關掉 —— 而且有時是為了讓某種資源載得進來刻意拿掉的。
+           */
           level: 'warn',
           why:
             "CSP 裡沒有 default-src 'none'。沒有這一條的話，沒列出來的資源類型會是全開的。" +
@@ -548,7 +567,9 @@ if (existsSync(resolve(ROOT, 'dist'))) {
       });
     }
   }
-  saw('csp-weakened', withCsp);
+  /* 兩條的主體都是「有 CSP 的那幾頁」—— 分開算，不然拆了 id 卻共用一個數字 */
+  saw('csp-unsafe-inline', withCsp);
+  saw('csp-no-default-src', withCsp);
 }
 
 /*
@@ -1462,7 +1483,8 @@ const STRUCTURAL_IDS = [
   'deploy-without-cname-check',
   'possible-secret',
   'csp-missing',
-  'csp-weakened',
+  'csp-unsafe-inline',
+  'csp-no-default-src',
   'storage-not-documented',
   'storage-documented-not-used',
   'private-file-tracked',

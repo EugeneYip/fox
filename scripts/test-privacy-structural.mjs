@@ -107,7 +107,7 @@ const CASES = {
   'csp-missing': {
     files: { 'dist/index.html': '<!DOCTYPE html><html lang="zh"><head><title>沒有 CSP</title></head><body>x</body></html>' },
   },
-  'csp-weakened': {
+  'csp-unsafe-inline': {
     files: {
       'dist/index.html':
         '<!DOCTYPE html><html lang="zh"><head><meta http-equiv="content-security-policy" ' +
@@ -182,11 +182,13 @@ const CASES = {
     files: { 'README.md': '# 專案\n\n金鑰：AKIAIOSFODNN7EXAMPLE\n' },
   },
   /*
-   * csp-weakened 有兩個觸發條件，原本只測了 script-src 那個。
+   * 原本這兩個條件共用 `csp-weakened` 這一個 id，而且**兩個等級不一樣**
+   * （script-src 那個是 error、這個是 warn）。第 5 輪（第三十一圈）拆成兩個 id ——
+   * 等級跟著 id 走，輸出也分得出是哪一種。
    * 這個是 default-src 不是 'none' 的情況。
    */
-  "csp-weakened（default-src 不是 'none'）": {
-    check: 'csp-weakened',
+  "csp-no-default-src（default-src 不是 'none'）": {
+    check: 'csp-no-default-src',
     files: {
       'dist/index.html':
         '<!DOCTYPE html><html lang="zh"><head><meta http-equiv="content-security-policy" ' +
@@ -717,7 +719,7 @@ const crawlerRow = (/** @type {string} */ text) => `| \`allowAiCrawlers\` | \`fa
  * ── 結構性檢查也要說得出「改法：」──────────────────────
  *
  * 第 5 輪（第十七圈）量到：樣式規則那七條補完之後，結構性這一側還有四條
- * 只講事實 —— `csp-missing`、兩處 `csp-weakened`、`deploy-without-cname-check`。
+ * 只講事實 —— `csp-missing`、`csp-unsafe-inline`、`csp-no-default-src`、`deploy-without-cname-check`。
  * 判準跟 `test:privacy-rules`、`test:a11y-rules`、`test:content-rules` 一樣，
  * 用「改法：」當標記；那是慣例不是規範。
  *
@@ -1166,6 +1168,97 @@ console.log('─'.repeat(64));
   console.log(`  ${ok ? '✓' : 'X'} 有發現的時候那份名單照樣印（exit ${code}）`);
   if (!ok) console.log('        ' + out.split('\n').filter(Boolean).slice(-4).join(' | '));
   await rm(dir, { recursive: true, force: true });
+}
+
+/*
+ * ── 一個規則 id 只能有一個嚴重度 ────────────────────
+ *
+ * 第 5 輪（第三十一圈）量到的：`csp-weakened` 寫在兩個地方，
+ * **一個 error、一個 warn**。兩個等級各自都說得通，但輸出上兩者都是
+ * `[csp-weakened]` —— 讀的人分不出這一次是擋下來的那種還是不擋的那種。
+ * 而 `warn` 不會讓關卡紅燈，所以那個差別是有後果的。
+ *
+ * 已經拆成 `csp-unsafe-inline`（error）與 `csp-no-default-src`（warn）。
+ * 這一格守的是**那一類問題**，不是那一次：id 相同就代表同一件事，
+ * 同一件事不能有兩種嚴重度。
+ */
+{
+  const files = [
+    'scripts/audit-privacy.mjs',
+    'scripts/lib/privacy-rules.mjs',
+    'scripts/lib/identity-needles.mjs',
+  ];
+  /** @type {Map<string, Set<string>>} */
+  const levels = new Map();
+  let sites = 0;
+  for (const f of files) {
+    const text = await readFile(resolve(ROOT, f), 'utf8');
+    /* 逐個 `id:` 切段，段內第一個 `level:` 就是它的 —— 整份用正則抓會跨到下一條 */
+    const ids = [...text.matchAll(/\bid:\s*'([a-z0-9-]+)'/g)];
+    for (let i = 0; i < ids.length; i++) {
+      const seg = text.slice(
+        /** @type {number} */ (ids[i].index),
+        i + 1 < ids.length ? /** @type {number} */ (ids[i + 1].index) : text.length,
+      );
+      const lv = /level:\s*'(\w+)'/.exec(seg);
+      if (!lv) continue;
+      sites++;
+      levels.set(ids[i][1], (levels.get(ids[i][1]) ?? new Set()).add(lv[1]));
+    }
+  }
+  /*
+   * 掃到的條數要跟腳本自己報的一致。
+   *
+   * 少了這一句，突變「只掃其中一個檔案」照樣全綠 —— 掃到 1 條、1 個等級、
+   * 沒有分岔。**掃得不夠跟真的沒問題長得一樣。**
+   * 數字問腳本自己要（`掃了 N 個檔案、M 條規則`），不另外寫一份清單。
+   */
+  const dir = await build({});
+  const { out } = await audit(dir, {});
+  await rm(dir, { recursive: true, force: true });
+  const declared = Number(/掃了 \d+ 個檔案、(\d+) 條規則/.exec(out)?.[1] ?? 0);
+
+  const split = [...levels.entries()].filter(([, v]) => v.size > 1);
+  const okOne = sites > 0 && split.length === 0 && declared > 0 && levels.size === declared;
+  if (!okOne) failed++;
+  console.log(
+    `  ${okOne ? '✓' : 'X'} 一個規則 id 只有一個嚴重度（掃了 ${sites} 個定義處、${levels.size} 條規則）`,
+  );
+  if (!okOne) {
+    if (sites === 0) console.log('        一個 level 都沒抓到 —— 抽取方式可能壞了，這一格等於沒驗');
+    if (declared > 0 && levels.size !== declared) {
+      console.log(`        只掃到 ${levels.size} 條，而腳本說有 ${declared} 條 —— 有檔案沒掃到`);
+    }
+    for (const [id, v] of split) console.log(`        ${id}：${[...v].join(' 與 ')} 各寫了一次`);
+  }
+
+  /*
+   * ── 每一條規則都要呼叫 saw() ────────────────────────
+   *
+   * 漏了呼叫的規則會被補成 0，於是出現在「這次沒有東西可看」那份名單上 ——
+   * 而那份名單講的是「站上沒有這種東西」，跟「有人忘了記數」完全不同。
+   * 第 5 輪（第三十一圈）的突變示範過：拆 id 之後只留一個 `saw()`，
+   * 沒有任何東西說話。跟 `test:a11y-rules` 是同一格。
+   */
+  const auditSrc = await readFile(resolve(ROOT, 'scripts/audit-privacy.mjs'), 'utf8');
+  const counted = new Set([...auditSrc.matchAll(/saw\('([a-z0-9-]+)'/g)].map((m) => m[1]));
+  const contentIds = new Set(
+    [...(await readFile(resolve(ROOT, 'scripts/lib/privacy-rules.mjs'), 'utf8')).matchAll(/\bid:\s*'([a-z0-9-]+)'/g)].map((m) => m[1]),
+  );
+  /* 語料規則是在共用迴圈裡記數的（`saw(rule.id, 1)`），不會逐條出現 */
+  const needSaw = [...levels.keys()].filter((id) => !contentIds.has(id) && id !== 'identity-value');
+  const noSaw = needSaw.filter((id) => !counted.has(id));
+  const okSaw = needSaw.length > 0 && noSaw.length === 0;
+  if (!okSaw) failed++;
+  console.log(`  ${okSaw ? '✓' : 'X'} 每一條結構規則都有呼叫 saw()（${needSaw.length} 條）`);
+  if (!okSaw) {
+    console.log(
+      '        ' +
+        (needSaw.length === 0
+          ? '一條都沒抽到 —— 這一格等於沒驗'
+          : `沒有記數的：${noSaw.join('、')}　它們會被當成「站上沒有這種東西」`),
+    );
+  }
 }
 
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
