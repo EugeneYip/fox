@@ -869,7 +869,20 @@ async function* walkSurf(dir) {
   console.log('\n' + '─'.repeat(78));
   if (gaps.length === 0) {
     console.log(
-      `涵蓋率：前景 ${fgUse.size} 種、純色背景 ${bgUse.size} 種，都在 PAIRS 裡 ✓`,
+      /*
+       * ── 那兩個數字的判準要寫出來 ──────────
+       *
+       * 「涵蓋率：前景 N 種、純色背景 M 種」在待辦上躺了好幾圈沒有人驗，
+       * 而第 8 輪（第三十五圈）真的去驗的時候，卡住的正是**不知道它在數什麼**：
+       * 我第一次只看 `color` 與 `background`，得到 8／9，跟這裡的 9／7 對不上。
+       *
+       * 照它真正的判準（`--c-` 開頭、`FG_PROPS`／`BG_PROPS` 那兩份清單、
+       * 背景不含 gradient）重數，兩個都一字不差。
+       * 判準寫在輸出上，下一個人就不用先讀原始碼才驗得動。
+       */
+      `涵蓋率：前景 ${fgUse.size} 種、純色背景 ${bgUse.size} 種，都在 PAIRS 裡 ✓\n` +
+        '　　　　（只數 `--c-` 開頭的：前景＝`color`／`fill`／`stroke`／`border-*-color` 那一類，' +
+        '背景＝`background`／`background-color`／`background-image` 但不含 gradient）',
     );
   } else {
     console.log('涵蓋率：有顏色在用，但沒有任何一組對比在算它 —');
