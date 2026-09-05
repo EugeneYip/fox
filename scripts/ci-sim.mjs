@@ -5,8 +5,16 @@
  *
  * ## 為什麼需要
  *
- * 這個專案的三個 workflow **到現在沒有在 GitHub 上跑過一次**。
- * 而這一整個 session 已經兩次改壞部署路徑，兩次都是本機看不出來的：
+ * CI 拿到的是**版控裡的檔案**，順序也跟本機不一樣 ——
+ * 本機多出來的東西（`identity.local.ts`、`dist/`、未 commit 的改動）
+ * 會讓本機全綠而 CI 停在第一步。這個理由不會過期。
+ *
+ * （原本這裡寫的是「三個 workflow 到現在沒有在 GitHub 上跑過一次」。
+ * 那是**當時的證據**，不是理由 —— 2026-09-05 它不再成立：
+ * deploy 跑過 7 次、sync-feeds 跑過 1 次。第 7 輪〔第三十圈〕改掉。
+ * 一個會過期的理由，總有一天會變成一個看起來已經沒用的理由。）
+ *
+ * 這一整個 session 兩次改壞部署路徑，兩次都是本機看不出來的：
  *
  * - 第 7 輪（第二圈）：`deploy.yml` 同一個 step 有兩個 `env:`（YAML 重複鍵）
  * - 第 7 輪（第四圈）：`check:content` 排在建置之前，而乾淨的 checkout 沒有 dist/
@@ -39,7 +47,7 @@
  * 用 `npm ls` 驗 —— 那才是 `npm ci` 會擋的東西。
  */
 import { execFileSync, execSync } from 'node:child_process';
-import { rmSync, mkdirSync, symlinkSync, existsSync, readFileSync } from 'node:fs';
+import { rmSync, mkdirSync, symlinkSync, existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { formatStepFailure } from './lib/step-failure.mjs';
@@ -187,6 +195,25 @@ if (nodeMismatch) {
  * 正好在模擬不到的那一半**。這支腳本擋得住的是「建置與檢查會不會過」，
  * 擋不住「Pages 的設定對不對」。
  */
+/*
+ * ── 沒有被模擬到的是哪幾份 workflow ──────────────────
+ *
+ * 上面那一行說的是「deploy.yml 的 10 步裡跑了幾步」。它沒說的是
+ * **`.github/workflows/` 底下還有幾份根本不在這支腳本的視野裡**。
+ *
+ * 第 7 輪（第三十圈）量到：`check.yml` 在 GitHub 上**跑過 0 次**
+ * （它只在 `pull_request` 觸發，而這個 repo 一個 PR 都沒開過），
+ * 而這支腳本只讀 deploy.yml —— 也就是它的步驟**沒有在任何地方執行過**。
+ *
+ * 它的內容是有人在守的（`check:workflows` 的 `gate-missing-in-check`
+ * 從 deploy.yml ＋ package.json 推出該跑哪幾道、`needs-dist-before-build`
+ * 掃每一份 workflow），所以這不是漏洞，是**要說出來的範圍**。
+ * 從目錄讀，不寫死 —— 這樣多一份 workflow 就會自己出現在這一行。
+ */
+const otherWorkflows = readdirSync(resolve(ROOT, '.github/workflows'))
+  .filter((f) => /\.ya?ml$/.test(f) && f !== 'deploy.yml')
+  .sort();
+
 const kinds = stepKinds(deployYml);
 /* npm 的那幾步 ＋ CNAME 那段 shell；--real-install 的話 npm ci 也算真的跑 */
 const simulated = DEPLOY_STEPS.length + 1 + (REAL_INSTALL ? 1 : 0);
@@ -197,6 +224,12 @@ console.log(
     `），` +
     (REAL_INSTALL ? '' : 'npm ci 用 npm ls 代打（--real-install 可以真的裝），') +
     `其餘 ${kinds.uses} 步是 GitHub 的 action（含上傳與部署），本機跑不了`,
+);
+console.log(
+  otherWorkflows.length === 0
+    ? '  範圍：.github/workflows/ 底下只有 deploy.yml。'
+    : `  範圍：這支腳本只模擬 deploy.yml。另外 ${otherWorkflows.length} 份沒有模擬到 ——` +
+      ` ${otherWorkflows.join('、')}（它們的內容由 check:workflows 靜態守）`,
 );
 
 rmSync(TMP, { recursive: true, force: true });

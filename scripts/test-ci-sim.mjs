@@ -75,6 +75,16 @@ async function fakeRepo({ steps, scripts, cname = true, engines = '>=22.0.0' }) 
   return dir;
 }
 
+/**
+ * 在假 repo 裡多放幾份 workflow —— 給「沒有模擬到哪幾份」那一格用。
+ * @param {string} dir @param {string[]} names
+ */
+async function addWorkflows(dir, names) {
+  for (const n of names) {
+    await writeFile(join(dir, '.github', 'workflows', n), 'name: x\non:\n  pull_request:\njobs:\n  a:\n    steps:\n      - run: echo x\n', 'utf8');
+  }
+}
+
 /** @param {string} dir @param {string[]} [extra] */
 async function sim(dir, extra = []) {
   try {
@@ -285,6 +295,40 @@ console.log('─'.repeat(56));
     out.split('\n').filter((l) => l.includes('合計') || l.includes('✓')).join(' | '),
   );
 
+  await rm(dir, { recursive: true, force: true });
+}
+
+/*
+ * ── 沒有模擬到的是哪幾份 workflow ────────────────────
+ *
+ * 第 7 輪（第三十圈）：`check.yml` 在 GitHub 上跑過 0 次
+ * （只在 pull_request 觸發，而這個 repo 一個 PR 都沒開過），
+ * 而這支腳本只讀 deploy.yml —— 它的步驟沒有在任何地方執行過。
+ * 不是漏洞（內容有 check:workflows 靜態守），但要說得出範圍。
+ *
+ * 名單從目錄讀，所以這兩格驗的是「真的去看了目錄」，
+ * 不是「印了一句固定的話」。
+ */
+{
+  const dir = await fakeRepo({ steps: ['verify:all'], scripts: { 'verify:all': 'echo ok' } });
+  await addWorkflows(dir, ['check.yml', 'sync-feeds.yml']);
+  const { out } = await sim(dir);
+  const m = /範圍：這支腳本只模擬 deploy\.yml。另外 (\d+) 份沒有模擬到 —— (.+?)（/.exec(out);
+  const ok = m !== null && Number(m[1]) === 2 && m[2].trim() === 'check.yml、sync-feeds.yml';
+  if (!ok) failed++;
+  console.log(`  ${ok ? '✓' : 'X'} 說得出沒有模擬到哪幾份 workflow（名單從目錄讀）`);
+  if (!ok) console.log('        ' + (out.split('\n').find((l) => l.includes('範圍')) ?? '（那一行根本沒印）'));
+  await rm(dir, { recursive: true, force: true });
+}
+
+/* 反向：只有 deploy.yml 的時候不要無中生有 */
+{
+  const dir = await fakeRepo({ steps: ['verify:all'], scripts: { 'verify:all': 'echo ok' } });
+  const { out } = await sim(dir);
+  const ok = /範圍：.github\/workflows\/ 底下只有 deploy\.yml。/.test(out) && !/沒有模擬到/.test(out);
+  if (!ok) failed++;
+  console.log(`  ${ok ? '✓' : 'X'} 只有 deploy.yml 時說「只有它」（反向案例）`);
+  if (!ok) console.log('        ' + (out.split('\n').find((l) => l.includes('範圍')) ?? '（那一行根本沒印）'));
   await rm(dir, { recursive: true, force: true });
 }
 

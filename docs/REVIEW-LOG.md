@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 39,900 行、2.1 MB、240 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 40,000 行、2.1 MB、241 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -39862,3 +39862,128 @@ name: { 'zh-TW': '狐說八道', en: 'Fox Says' } satisfies L10n,
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
 **下一輪：7 — 建置與 CI**
+
+
+---
+
+### 2026-09-05 — 第 7 輪（第三十圈）：建置與 CI
+
+**第三十圈問：這件事，如果現在整個拿掉，會有誰發現？**
+
+#### 1. 三份 workflow，跑過幾次
+
+| workflow | 觸發條件 | 在 GitHub 上跑過 |
+|---|---|---|
+| `deploy.yml` | push 到 main | **7 次** |
+| `sync-feeds.yml` | 排程 `0 0,12` | **1 次**（昨天第一次，見第 4 輪） |
+| **`check.yml`** | `pull_request` | **0 次** |
+
+而這個 repo 的 PR 數是 **0** —— `gh pr list --state all` 是空的。
+
+所以 `check.yml` 的步驟**沒有在任何地方執行過**：GitHub 上沒跑過，
+而 `ci:sim` 只讀 `deploy.yml`。
+
+#### 2. 我以為找到第二個洞，結果第十五圈已經補好了
+
+`check.yml` 把 `verify:all` 的六道**逐一展開**寫在自己的 steps 裡，
+而 `deploy.yml` 是直接呼叫 `verify:all`。同一份清單寫在兩個地方 ——
+這個 repo 最常犯的那一種。加第七道關卡的時候，`check.yml` 會安靜地少跑一道。
+
+去看了，**已經有人在守**：`check:workflows` 的 `gate-missing-in-check`
+把清單從 `deploy.yml` ＋ `package.json` **推出來**，不是抄一份：
+
+```js
+const requiredInCheck = [...new Set(deploySteps.flatMap((g) => (g === 'verify:all' ? gates : [g])))];
+```
+
+註解就寫著「這樣加第七道關卡的時候不必記得回來改這裡」。
+`needs-dist-before-build` 也是掃**每一份** workflow，不是只掃 deploy。
+
+**這一項沒發現問題。** 從沒跑過的那一份，反而是被推導守得最緊的一份。
+
+#### 3. 但有三句話今天變成假的了
+
+同一句話寫在三個活著的地方：
+
+```
+scripts/ci-sim.mjs:8            這個專案的三個 workflow 到現在沒有在 GitHub 上跑過一次。
+scripts/check-workflows.mjs:558 而三個 workflow 到現在沒有在 GitHub 上跑過一次，
+.github/workflows/deploy.yml:54 三個 workflow 從來沒在 GitHub 上跑過，
+```
+
+昨天還是真的，今天不是了（7 次、1 次、0 次）。
+
+而那句話在 `ci-sim.mjs` 裡是**它存在的理由的第一句**。
+下一個讀到它的人會看到一句明顯過時的話，然後可能得出
+「這支腳本沒用了」—— 而 `ci:sim` 是**唯一**抓得到 deploy.yml 那個
+排序 bug 的東西（`test:units` 需要 dist，卻排在 build 之前）。
+
+**一個會過期的理由，總有一天會變成一個看起來已經沒用的理由。**
+
+那句話是**當時的證據**，不是理由。理由是持久的那一句：
+「CI 拿到的是版控裡的檔案，順序也跟本機不一樣」。三個地方都換成後者，
+並在括號裡註明原本寫什麼、哪一天不成立的。
+
+（`REVIEW-LOG.md` 裡那 130 多處**不動** —— 那些是有日期的紀錄，
+寫的是當時為真的事。改掉它們才是竄改。）
+
+#### 4. 改一行，把範圍說出來
+
+`ci:sim` 本來只說「deploy.yml 共 10 步，這裡真的跑 4 步」。
+現在多一行說**它根本沒看的是哪幾份**：
+
+```
+  範圍：這支腳本只模擬 deploy.yml。另外 2 份沒有模擬到 —— check.yml、sync-feeds.yml（它們的內容由 check:workflows 靜態守）
+```
+
+名單**從目錄讀**，不寫死 —— 多一份 workflow 就會自己出現在這一行。
+
+#### 5. 突變掃描：4 個，全紅
+
+| 突變 | 該紅的 | 結果 |
+|---|---|---|
+| 整行不印 | 多格 | 紅 ✓ |
+| 不去讀目錄 | 多格 | 紅 ✓ |
+| 只有 deploy.yml 時也印「另外 0 份」 | 「反向案例」 | 紅 ✓ |
+| 把 `deploy.yml` 自己也算進沒模擬到的 | 兩格 | 紅 ✓ |
+
+後兩個是精準的（各只打紅它自己那一格）；前兩個比較粗
+（改法本身讓那段語法壞掉），紅得對但不精確。
+
+### 這一輪改了什麼
+
+| 項目 | 之前 | 之後 |
+|---|---|---|
+| 三處「從來沒跑過」 | 今天起是假的 | 換成持久的理由，並註明原本寫什麼 |
+| `ci:sim` 的範圍 | 只說 deploy.yml 跑了幾步 | 多說沒模擬到哪幾份（從目錄讀） |
+| `check.yml` 跑過 0 次 | 沒有人量過 | 量了，記在這裡 |
+| 測試 | —— | 2 格（1 正 1 反） |
+
+### 待辦（不屬於這一輪）
+
+- **`check.yml` 到今天跑過 0 次**，因為這個 repo 沒有開過 PR。
+  它的內容有三條規則在守，所以留著不是負擔 ——
+  但「要不要開始用 PR」是站主的工作方式問題（→ 站主）
+- **`ci:sim` 仍然只有人手動跑才會跑**，而它是唯一抓得到部署排序問題的東西
+  （→ 7 建置與 CI 或站主）
+- 上一輪與更早的都還在（`ui.ts` 的 `en` 要不要改成必填、
+  `reveal('email')` 沒有人呼叫、4 條閒置豁免、本機 `ahead 31, behind 1`、
+  `npm run sync` 來源全失敗仍離開碼 0、排程遲了四小時只有一筆、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `VideoFacade` 一次都沒算繪過、頁尾 `aria-current` 沒有視覺對應、
+  `aria-live`／`role="status"` 沒有規則、`inlineStylesheets: always` 只到 98%、
+  9／11 條預算從來沒響過、圈末索引停在第二十六圈、開頭三個數字靠人記得、
+  `check:contrast` 沒有東西在守「每一段都要報主體數」、
+  `probe:served` 沒有自己的測試、`--real-install` 成功路徑沒測試、
+  視覺層 24 處實測沒重驗、導覽列橫捲沒有視覺提示、`.nvmrc` 要不要釘死、
+  本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、`vertical-lost` 仍看不出版面、日常發文誰來推、
+  雜湊資源只有 `max-age=600`、真的開一次螢幕閱讀器聽、`CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、16／28 條 a11y 規則沒有反向案例、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設、
+  `--patterns` 仍自己套樣板、`related` 是單向的、斷點 34rem 寫九次）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：8 — 視覺與排版**

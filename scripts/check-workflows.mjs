@@ -555,9 +555,13 @@ if (minMatch) {
  * test:tools 排在 verify:all（含建置）**之前** —— 乾淨的 checkout 沒有 dist/，
  * 所以部署每次都會失敗。
  *
- * 而三個 workflow 到現在**沒有在 GitHub 上跑過一次**，
- * 所以那個錯要等到第一次 push 才會出現。這種「本機看不出來」的問題
- * 正是這支腳本存在的理由。
+ * 而這種錯本機看不出來（本機永遠有 dist/），要等 CI 上乾淨的 checkout
+ * 才會出現 —— 那正是這支腳本存在的理由。
+ *
+ * （原本這裡寫的是「三個 workflow 到現在沒有在 GitHub 上跑過一次」。
+ * 2026-09-05 起那句話不成立了：deploy 7 次、sync-feeds 1 次。
+ * 只有 check.yml 還是 0 —— 它只在 pull_request 上觸發，而這個 repo
+ * 到目前為止一個 PR 都沒有開過。）
  */
 const NEEDS_DIST = ['check:content', 'check:copy', 'check:a11y', 'check:perf', 'test:built'];
 const BUILDS = ['build', 'verify:all'];
