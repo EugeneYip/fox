@@ -86,9 +86,11 @@ async function addWorkflows(dir, names) {
 }
 
 /** @param {string} dir @param {string[]} [extra] */
-async function sim(dir, extra = []) {
+async function sim(dir, extra = [], /** @type {Record<string, string|undefined>} */ envPatch = {}) {
+  const env = { ...process.env, ...envPatch };
+  for (const [k, v] of Object.entries(envPatch)) if (v === undefined) delete env[k];
   try {
-    const { stdout } = await run('node', [resolve(ROOT, 'scripts/ci-sim.mjs'), `--root=${dir}`, ...extra]);
+    const { stdout } = await run('node', [resolve(ROOT, 'scripts/ci-sim.mjs'), `--root=${dir}`, ...extra], { env });
     return { out: stdout, code: 0 };
   } catch (err) {
     const e = /** @type {{ stdout?: string, code?: number }} */ (err);
@@ -329,6 +331,41 @@ console.log('─'.repeat(56));
   if (!ok) failed++;
   console.log(`  ${ok ? '✓' : 'X'} 只有 deploy.yml 時說「只有它」（反向案例）`);
   if (!ok) console.log('        ' + (out.split('\n').find((l) => l.includes('範圍')) ?? '（那一行根本沒印）'));
+  await rm(dir, { recursive: true, force: true });
+}
+
+/*
+ * ── 「全部通過」不能蓋掉「這次沒有驗到身分規則」 ──────────
+ *
+ * 第 7 輪（第三十三圈）量到：這支腳本跑的是版控那一份，
+ * 而 `identity.local.ts` 是 gitignore 的 —— 暫存工作樹裡不可能有它。
+ * 沒有 `PRIVACY_NEEDLES` 時 `audit:privacy` 印「⚠ 身分規則沒有執行」
+ * 然後照樣 exit 0，而這支腳本把子行程輸出收進 pipe、成功時丟掉。
+ *
+ * 差別是有後果的：真的 CI 上少了那個 secret 會 exit 1、整支 workflow 紅。
+ * 也就是這一步的結論可能跟 CI **相反** —— 而這正是這支腳本存在的理由。
+ *
+ * 兩個方向都要驗：沒有 secret 時要說，有 secret 時不能亂說
+ * （只驗前者的話，一句「永遠都印」也會過）。
+ */
+{
+  /* 這一格要走「全部通過」那一條路，所以 verify:all 得真的產出 dist/CNAME */
+  const dir = await fakeRepo({
+    steps: ['verify:all'],
+    scripts: { 'verify:all': 'mkdir -p dist && cp public/CNAME dist/CNAME' },
+  });
+
+  const without = await sim(dir, [], { PRIVACY_NEEDLES: undefined });
+  ok('沒有 PRIVACY_NEEDLES 時，說得出「這次沒有驗到身分規則」', /身分規則這次沒有驗到/.test(without.out), without.out);
+  ok(
+    '那句話說得出本機怎麼驗、以及真的 CI 上會直接紅',
+    /audit:privacy/.test(without.out) && /exit 1/.test(without.out),
+    without.out,
+  );
+
+  const withNeedles = await sim(dir, [], { PRIVACY_NEEDLES: 'someone@example.com' });
+  ok('有 PRIVACY_NEEDLES 時不會亂說', !/身分規則這次沒有驗到/.test(withNeedles.out), withNeedles.out);
+
   await rm(dir, { recursive: true, force: true });
 }
 

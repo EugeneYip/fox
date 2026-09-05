@@ -298,6 +298,9 @@ try {
    *
    * 腳本本來就是一步一步跑的，記個時間戳就好。
    */
+  /* 有沒有值可以餵給身分規則 —— 沒有的話那幾條在這一輪等於沒跑（見下面的但書） */
+  const hadNeedles = Boolean(process.env.PRIVACY_NEEDLES?.trim());
+
   /** @type {{ step: string, ms: number }[]} */
   const timings = [];
   for (const step of DEPLOY_STEPS) {
@@ -424,6 +427,31 @@ try {
           `  CI 用的是更新的版本，這次沒有驗到那個版本。\n`
         : '照 deploy.yml 的順序跑完，全部通過。\n',
   );
+
+  /*
+   * ── 身分規則在這裡是沒有跑的 ──────────
+   *
+   * 第 7 輪（第三十三圈）量到的：這支腳本跑的是**版控那一份**，
+   * 而 `identity.local.ts` 是 gitignore 的 —— 暫存工作樹裡不可能有它。
+   * 沒有 `PRIVACY_NEEDLES` 的話，`audit:privacy` 會印
+   * 「⚠ 身分規則沒有執行」然後**照樣 exit 0**，而這支腳本把子行程的輸出
+   * 收進 pipe，成功時整段丟掉 —— 那一行讀者一次都看不到。
+   *
+   * 差別是有後果的：真的 CI 上（`process.env.CI`）少了那個 secret 會
+   * **exit 1**，整支 workflow 紅。這裡不會。也就是說這一步的結論
+   * 「全部通過」和 CI 的結論**可能相反**，而這正是這支腳本存在的理由。
+   *
+   * 上面那一行 Node 版本的但書早就把這件事做對了 ——
+   * 「全部通過 —— 在 v22 上，CI 用的是更新的版本，這次沒有驗到」。
+   * 這裡照抄同一個形狀：說出這次**沒有驗到什麼**。
+   */
+  if (failed === 0 && !hadNeedles) {
+    console.log(
+      '  身分規則這次沒有驗到 —— 跑的是版控那一份，identity.local.ts 不在裡面，\n' +
+        '  而 PRIVACY_NEEDLES 也沒設。真的 CI 上少了那個 secret 會直接紅（exit 1），這裡不會。\n' +
+        '  要在本機驗那幾條：npm run audit:privacy（它讀得到 identity.local.ts）。\n',
+    );
+  }
   if (failed > 0) process.exitCode = 1;
 } finally {
   rmSync(TMP, { recursive: true, force: true });

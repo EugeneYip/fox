@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 43,380 行、2.3 MB、264 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 43,570 行、2.3 MB、265 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -43323,4 +43323,172 @@ fox 0　farewell 0　homesick 0　du fu 0　　youtube 1
 （這跟第 1 輪那個「寫下來就會把自己弄錯的數字」是同一類毛病的另一面：
 **憑印象寫一個查得到的東西。** 兩分鐘的 `grep` 就能避免。）
 
-**下一輪：7 — 隱私與安全**
+
+### 2026-09-05 — 第 7 輪（第三十三圈）：隱私與安全
+
+**第三十三圈問：這件事，是給誰用的？那個人真的會走到這裡嗎？**
+判準：**說得出「誰、在什麼情況下、會看到這一句」嗎？**
+
+（順序更正見上一輪第 9 節：這一格本來排在第 5 輪。）
+
+隱私這一層唯一**對著訪客**說話的是 `/privacy` 那一頁。
+那一頁上每一句都是承諾，所以逐條去量。
+
+#### 1. `/privacy` 說的每一句都是真的（沒發現問題）
+
+| 頁面上的話 | 量到的 |
+|---|---|
+| 「站上的外部連結**一律**加上 `rel="noreferrer"`」 | 58 個外部連結（12 個不同網址），**0 個沒有** |
+| 「瀏覽器裡只有兩個項目：`fox-theme`、`fox-poem-orientation`」 | 產出裡用到的 localStorage key **就是這兩個**，沒有第三個 |
+| 「不使用 cookie」 | `document.cookie` 0 處 |
+| 「不使用外部字型、外部 CDN、外部圖片」 | 指向別網域的 `src`／`href` 子資源 **0 個** |
+| 「宣告了它只會載入自己網域的資源⋯⋯唯一的例外是 youtube-nocookie」 | CSP 是 `default-src 'none'`，唯一的外部來源是 `frame-src https://www.youtube-nocookie.com` |
+| 「那個影片框只會讓 YouTube 知道網域，不含是哪一頁」 | `VideoFacade` 明寫 `iframe.referrerPolicy = 'strict-origin-when-cross-origin'` —— 跨來源時只送 origin |
+
+反方向也查了：有沒有**它做了而那一頁沒說**的事？
+`sessionStorage`、`indexedDB`、`serviceWorker`、`sendBeacon`、`XMLHttpRequest`、
+`geolocation` **全部 0 處**。唯一的 `fetch()` 是兩頁搜尋頁抓自己的
+`/search-index.json`（同源）。
+
+**這一頁沒發現問題。** 它也找得到 —— 頁尾每一頁都有。
+
+#### 2. 工具那一側也已經答過這個問題了（也沒發現問題）
+
+- `reveal('email')` 沒有人呼叫 —— **稽核自己會說**，而且訊息把兩條路都寫出來
+  （畫出來，或加進 `UNWIRED_SWITCHES` 並寫明理由）。那是站主的決定，不是 bug。
+- 豁免名單 9 條裡只有 4 條真的擋住東西 —— **稽核自己會說**，還逐條列出
+  各擋了幾條規則，並把 `identity.local.ts`（值本來就住的地方）跟真正閒置的分開。
+- `docs/PRIVACY.md` **一個數字都沒寫**，所以沒有第 1 輪那種「文件跟關卡對不上」。
+
+#### 3. 找到的那一個：`ci:sim` 說「全部通過」，而它其實沒驗身分規則
+
+`audit-privacy.mjs` 的分支很清楚：
+
+```
+const CI = Boolean(process.env.CI);
+if (identity.source === 'none') {
+  console.log('\n⚠ 身分規則沒有執行 —— ' + identity.detail);
+  ⋯
+  if (CI) { ⋯ process.exit(1); }      // 真的 CI：直接紅
+}                                      // 本機：印完照樣往下走
+```
+
+而 `ci:sim` 跑的是**版控那一份**，`identity.local.ts` 是 gitignore 的 ——
+暫存工作樹裡**不可能**有它。本機也沒有 `PRIVACY_NEEDLES`。
+於是 `identity.source === 'none'`，那句 ⚠ 印了出來 ——
+**而 `ci:sim` 把子行程的輸出收進 pipe，成功時整段丟掉。**
+
+結果：讀者看到的是
+
+```
+照 deploy.yml 的順序跑完，全部通過 —— 在 v22.15.1 上。
+  CI 用的是更新的版本，這次沒有驗到那個版本。
+```
+
+**「全部通過」，而全 repo 最要緊的那幾條規則一條都沒跑。**
+更麻煩的是這一步的結論可能跟真的 CI **相反**：那邊少了 secret 會 exit 1。
+
+這一圈的判準在這裡很鋒利：
+說得出「誰、在什麼情況下、會看到這一句」——**要 commit 前跑 `ci:sim` 的人**。
+他看到「全部通過」就去 commit 了。
+
+#### 4. 知識在，只是沒說出口
+
+`ci-sim.mjs` 傳環境變數那一行的註解**早就寫著**：
+
+```
+// CI 上有這個 secret；沒有的話身分規則不會跑，那是另一種情況
+```
+
+寫在原始碼裡，不在輸出上。跟第 3 輪那個
+「`check-content.mjs:169` 早就知道詩詞顯示的是 `poem.title`」是同一種形狀：
+**知識在，行為不在。**
+
+#### 5. 改法：照抄它自己已經做對的那個形狀
+
+`ci:sim` 對 Node 版本已經處理得很好 ——「全部通過 **—— 在 v22.15.1 上**，
+CI 用的是更新的版本，**這次沒有驗到那個版本**」。同一個形狀再寫一次：
+
+```
+身分規則這次沒有驗到 —— 跑的是版控那一份，identity.local.ts 不在裡面，
+而 PRIVACY_NEEDLES 也沒設。真的 CI 上少了那個 secret 會直接紅（exit 1），這裡不會。
+要在本機驗那幾條：npm run audit:privacy（它讀得到 identity.local.ts）。
+```
+
+只在**全部通過**時印 —— 有步驟失敗時讀者的注意力該在失敗上，
+跟上面那句 Node 但書一樣的取捨。
+
+#### 6. 突變
+
+| 突變 | 結果 |
+|---|---|
+| 把條件反過來（有 secret 才印） | 三格全紅 ✓ |
+| `hadNeedles` 一律 false（永遠都印） | 「有 secret 時不亂說」紅 ✓ |
+
+三格裡有一格專門守反方向 —— 只驗「沒有時要說」的話，
+一句「永遠都印」也會過。
+
+#### 7. 寫測試時繞的一段（值得記）
+
+新的那一格第一次跑是紅的，而**不是因為程式錯**：
+fixture 的 `verify:all` 是 `echo ok`，永遠不會產出 `dist/CNAME`，
+所以 CNAME 那一步失敗 → `failed > 0` → 我那個但書照設計不印。
+
+我一開始以為是接線壞了，還手刻了一份 fixture 想重現 ——
+結果那份少了 `.nvmrc`，`ci-sim` 在更前面就丟例外。
+**兩次「以為找到 bug」都是我的語料不對。**（這一組圈第七次。）
+把 fixture 的 `verify:all` 改成真的 `cp public/CNAME dist/CNAME` 就對了。
+
+#### 8. 這一圈的問題，在這一層得到的答案
+
+這一層**大部分早就答過了** —— `/privacy` 每一句都經得起量、
+稽核會主動說出「這條豁免沒擋到東西」「這個開關沒有人呼叫」。
+
+漏掉的那一個有個共同點：**它不是「沒想到讀者」，是「訊息被中間人吃掉了」。**
+`audit:privacy` 好好地印了那句 ⚠，是 `ci:sim` 把它收進 pipe 丟掉的。
+兩支都對，串起來就少了一句話。
+
+| | 之前 | 現在 |
+|---|---|---|
+| `ci:sim` 全綠時 | 「全部通過」 | ＋「身分規則這次沒有驗到」 |
+| 那件事寫在哪 | 原始碼註解裡 | 輸出上 |
+| 測試 | —— | 3 格（兩個方向） |
+
+### 待辦（不屬於這一輪）
+
+- **`audit:privacy` 在沒有 needles 時 exit 0（本機）。** 這是刻意的
+  （本機通常有 `identity.local.ts`），但代表「本機跑一次」不等於「驗過了」。
+  現在 `ci:sim` 會說，`verify:all` 直接跑時仍然只印一行 ⚠ 就過（→ 7 隱私）
+- 上一輪與更早的都還在（搜尋頁的 client script 沒有自動測試、
+  我連續六次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  `test-ci-sim` 那一格在有負載時會紅（這一輪又見到一次）、
+  `verifiedAt` 11 筆同一天、要不要讓列表顯示詩詞的 `title`、
+  `REVIEW-LOG.md` 開頭三個數字手寫、「涵蓋率：前景 N 種」那兩個數字沒人驗、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  另外幾支的 `--verbose` 數字沒人驗、乾淨基底上 10 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `check:perf` 那句「全是 favicon」是寫死的描述、7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  27 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、`related` 單向、schema 的必填／選填沒被選過、
+  11 條預算裡 5 條的上限是挑的、另外四支檢查的嚴重度、
+  `CoverImage` 的 `sizes` 用 40rem、頁尾 `aria-current` 沒有視覺對應、
+  `check.yml` 跑過 0 次、`ci:sim` 只有手動跑、`ui.ts` 的 `en` 要不要必填、
+  `reveal('email')` 沒有人呼叫、4 條閒置豁免、本機 `ahead 48, behind 1`、
+  `npm run sync` 來源全失敗仍離開碼 0、排程遲了四小時只有一筆、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `VideoFacade` 一次都沒算繪過、`aria-live`／`role="status"` 沒有規則、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、`probe:served` 沒有自己的測試、
+  `--real-install` 成功路徑沒測試、視覺層 24 處實測沒重驗、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  真的開一次螢幕閱讀器聽、`CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：8 — 視覺與排版**

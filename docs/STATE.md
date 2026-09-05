@@ -7,7 +7,7 @@
 > 上線步驟在 [DEPLOY.md](DEPLOY.md)，寫作方式在 [CONTENT.md](CONTENT.md)。
 >
 > 最後更新：2026-09-05（**網站已上線：https://bellafoxy.com**，DNS 與 HTTPS 都好了；
-> **第三十三圈第 6 輪走完了**）
+> **第三十三圈第 7 輪走完了**）
 
 ---
 
@@ -191,21 +191,22 @@ git ls-files | grep -c identity.local    # 必須是 0
 
 ## 週期性檢查（loop）現在跑到哪
 
-**下一輪：第三十三圈第 7 輪 —— 隱私與安全。**
+**下一輪：第三十三圈第 8 輪 —— 視覺與排版。**
 
-（順序更正：固定的第 5 格是隱私與安全，第 4 輪結尾我憑印象寫成「建置與 CI」，
-所以第 5 輪做成了建置與 CI。剩下兩輪排成 7 隱私與安全、8 視覺與排版，
-這一圈八個面向仍然全部走到。）
+第 7 輪（隱私與安全）：`/privacy` 頁上每一句都逐條量過，**全部是真的**
+（58 個外部連結 0 個缺 `rel="noreferrer"`、localStorage 就是那兩個 key、
+CSP 是 `default-src 'none'` 只開 youtube-nocookie、影片框真的設了
+`strict-origin-when-cross-origin`）；反方向查 sessionStorage／indexedDB／
+serviceWorker／sendBeacon 也全是 0。稽核工具那一側也早就會主動說出
+「這條豁免沒擋到東西」「這個開關沒有人呼叫」。
 
-第 6 輪（文案與語氣）量到：英文站 12 頁、0 篇內容，而六個空頁面**都已經**
-會說「There are N in Chinese →」（第十八圈做的，數字與單複數都對），
-外語內容也都標了 `lang`。唯一沒接上的是 `/en/search` —— 索引 14 筆全是中文，
-11 個英文查詢裡 10 個回 0 筆，而畫面只說「No matches found.」。
-已沿用既有的 `list.otherLang` 接上，並加一條 `check:content` 規則守接線。
-代價是搜尋頁多 0.3 KB 內嵌 JS。
+找到的那一個是 `ci:sim`：它跑版控那一份，`identity.local.ts` 不在裡面，
+所以身分規則**一條都沒跑**，而 `audit:privacy` 印的那句 ⚠ 被 pipe 吃掉了——
+讀者只看到「全部通過」。真的 CI 上少了那個 secret 會 exit 1，結論可能相反。
+已照它自己處理 Node 版本的那個形狀補上但書，並加 3 格測試（兩個方向）。
 
 做法：一次只深入一個面向（八個面向輪流），每一圈換一個**問題**去問全站。
-輪替順序、每一輪的規則、以及全部 264 筆逐輪紀錄都在
+輪替順序、每一輪的規則、以及全部 265 筆逐輪紀錄都在
 [REVIEW-LOG.md](REVIEW-LOG.md) —— 接手某一輪之前先讀那份的最後一筆。
 
 > **這一節刻意只留索引。** 2026-09-04 之前這裡有 200 筆輪次摘要，
