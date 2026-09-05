@@ -342,6 +342,48 @@ for (const f of ['AGENTS.md', 'CLAUDE.md', 'README.md']) {
     .then((t) => scan(f, t))
     .catch(() => {});
 }
+
+/*
+ * ── 內容檔 frontmatter 裡的註解 ────────────────────
+ *
+ * 那些 `#` 開頭的行是**寫給她看的**，而且就在她打字的地方：
+ * 「如果這篇先發在別的平臺，把正本網址填在這裡」「複製這個檔案、改個檔名」。
+ * 論「人會讀的文字」，它們比 docs/ 底下任何一句都更近。
+ *
+ * 第 3 輪（第二十八圈）量到兩處違規，其中一處在**已發佈**的文章裡，
+ * 另一處在**她被告知要複製的範本**裡 —— 而 `check:copy` 說「沒有發現問題」，
+ * 因為它的範圍是「產出、文件、介面字串」，YAML 註解三者皆非。
+ *
+ * ## 為什麼只掃註解行，不掃整個內容檔
+ *
+ * 量過：整包掃 `src/content/**` 是 14 處，其中 **12 處是誤報** ——
+ * `tags: [唐詩, 李白]` 的半形逗號是 YAML 語法，不是文章裡的標點。
+ * 只掃註解行是 2 處、0 誤報。
+ *
+ * 正文不需要在這裡掃：發佈之後它會進 `dist/`，那本來就在範圍裡。
+ * 沒發佈的草稿正文則還在改，現在擋它沒有意義。
+ *
+ * 做法是把非註解行**清成空字串但保留行數**，再交給同一個 `scan()` ——
+ * 行號仍然對得上真的檔案。
+ */
+{
+  const CONTENT = resolve(ROOT, 'src/content');
+  for await (const full of walk(CONTENT)) {
+    if (!full.endsWith('.md')) continue;
+    const rel = relative(ROOT, full).split('\\').join('/');
+    const lines = (await readFile(full, 'utf8')).split('\n');
+    let fences = 0;
+    const onlyComments = lines.map((line) => {
+      if (line.trim() === '---') {
+        fences++;
+        return '';
+      }
+      /* 只有第一段 `---` 到第二段之間、而且以 # 開頭的才算 */
+      return fences === 1 && line.trimStart().startsWith('#') ? line : '';
+    });
+    if (onlyComments.some((l) => l !== '')) scan(rel, onlyComments.join('\n'));
+  }
+}
 // ── 還沒被算繪出來的介面字串 ────────────────────────
 /*
  * `dist/` 只涵蓋**這一次建置真的畫出來的字**。
@@ -741,5 +783,6 @@ if (idle.length > 0) {
   );
 }
 
-console.log('\n沒有發現問題。（掃產出、人會讀的文件、以及還沒被算繪的介面字串；程式碼註解不在範圍內）\n');
+console.log('\n沒有發現問題。（掃產出、人會讀的文件、內容檔 frontmatter 的註解、' +
+    '以及還沒被算繪的介面字串；程式碼註解與內容正文不在範圍內 —— 正文發佈後會進 dist）\n');
 process.exit(0);

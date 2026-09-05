@@ -8,7 +8,7 @@ tags: [翻譯, 詩詞, 方法]
 series: 讀詩的方法
 seriesOrder: 1
 translationKey: translating-poems
-# 如果這篇先發在別的平台，把正本網址填在這裡：
+# 如果這篇先發在別的平臺，把正本網址填在這裡：
 # canonicalUrl: https://medium.com/@example/xxx
 #
 # 這篇同時也發在哪些地方：
