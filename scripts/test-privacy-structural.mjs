@@ -1071,6 +1071,40 @@ console.log('─'.repeat(64));
   await rm(busyDir, { recursive: true, force: true });
 }
 
+/*
+ * ── 第一次跑的人看得到什麼 ──────────
+ *
+ * 第 5 輪（第二十九圈）問「第一次跑的人跟第一百次跑的人看到的是同一份
+ * 東西嗎」。這一支從頭到尾**沒說掃了幾個檔案、跑了幾條規則** ——
+ * 第一次跑的人看到「必須修正 0」，而 0 個問題在什麼裡面，沒說。
+ *
+ * 而 `--verbose` 多印 18 行「每一項這次實際判斷過的東西」——
+ * 那正是「綠燈代表什麼」的答案，卻沒人看得見。
+ */
+{
+  const dir = await build({});
+  const plain = await audit(dir, {});
+
+  const okScope = /掃了 \d+ 個檔案、\d+ 條規則/.test(plain.out);
+  if (!okScope) failed++;
+  console.log(`  ${okScope ? '✓' : 'X'} 說得出掃了幾個檔案、幾條規則`);
+  if (!okScope) console.log('        ' + plain.out.split('\n').filter(Boolean).slice(-5).join(' | '));
+
+  const okVerbose = /--verbose/.test(plain.out);
+  if (!okVerbose) failed++;
+  console.log(`  ${okVerbose ? '✓' : 'X'} 綠燈時說得出怎麼看「判斷過多少東西」（--verbose）`);
+  if (!okVerbose) console.log('        ' + plain.out.split('\n').filter(Boolean).slice(-5).join(' | '));
+
+  /* 反向：--verbose 模式自己不再提示自己 */
+  const verbose = await audit(dir, {}, ['--verbose']);
+  const okQuiet = !/要看每一項實際判斷過/.test(verbose.out);
+  if (!okQuiet) failed++;
+  console.log(`  ${okQuiet ? '✓' : 'X'} --verbose 模式不再提示自己（反向案例）`);
+  if (!okQuiet) console.log('        ' + verbose.out.split('\n').filter(Boolean).slice(-4).join(' | '));
+
+  await rm(dir, { recursive: true, force: true });
+}
+
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
 process.exit(failed > 0 ? 1 : 0);
 
