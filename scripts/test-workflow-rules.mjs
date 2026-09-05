@@ -500,6 +500,66 @@ try {
   }
 
   /*
+   * ── 這份基底護得到幾條規則 ──────────────────────────
+   *
+   * 第 1 輪（第三十二圈）在無障礙那邊量到：「乾淨的基底」
+   * **只護得到它身上有東西可踩的那幾條**。這裡量同一件事 ——
+   * 而這一輪就是這樣抓到 `test-file-not-run` 的：把它放寬到一律會報，
+   * **全綠**，因為假 repo 裡一個 `scripts/test-*.mjs` 都沒有。
+   */
+  {
+    const dir = await build('coverage-probe', base());
+    const verbose = await check(dir, ['--verbose']);
+    const subjects = new Map(
+      [...verbose.matchAll(/^\s*(\d+)\s+([a-z0-9-]+)\s*$/gm)].map((m) => [m[2], Number(m[1])]),
+    );
+    const bare = [...subjects.entries()].filter(([, n]) => n === 0).map(([id]) => id).sort();
+    if (subjects.size === 0) {
+      failed++;
+      console.log('  X 讀不到基底的主體數 —— 底下那句是假的');
+    } else {
+      console.log(
+        `  · 這份基底上，${subjects.size} 條規則裡 ${bare.length} 條主體是 0：${bare.join('、') || '（沒有）'}\n` +
+          '      那幾條「不該響的不響」在「正常的 workflow 不誤報」那一格證明不了。',
+      );
+    }
+  }
+
+  /*
+   * ── test-file-not-run 的反向案例 ────────────────────
+   *
+   * 上面那份清單指出它在基底上主體是 0。實測：把它放寬成
+   * 「每一個 test-*.mjs 都算沒人跑」—— **全綠**，因為假 repo 裡
+   * 根本沒有 `scripts/` 這個目錄。
+   *
+   * 這一格給它一個真的有人跑的測試檔 —— 有主體，而且不該響。
+   * （照這個 repo 的規矩一次只補一條：另外兩條記進待辦。）
+   */
+  {
+    const dir = await build('test-file-run', {
+      ...base(),
+      'scripts/test-x.mjs': '// 假的測試檔\n',
+      'package.json': JSON.stringify({
+        scripts: {
+          'verify:all': 'npm run build && npm run check:a11y',
+          'test:units': 'node scripts/test-x.mjs', 'test:built': 'x',
+          build: 'x', 'check:a11y': 'x',
+          'test:tools': 'npm run test:units && npm run test:built',
+        },
+        engines: { node: '>=22.19.0' },
+      }),
+    });
+    const out = await check(dir);
+    const verbose = await check(dir, ['--verbose']);
+    const subject = Number(/^\s*(\d+)\s+test-file-not-run\s*$/m.exec(verbose)?.[1] ?? 0);
+    /* 主體要真的大於 0，不然這一格又是「沒有東西可踩」 */
+    const ok = subject > 0 && !out.includes('[test-file-not-run]');
+    if (!ok) failed++;
+    console.log(`  ${ok ? '✓' : 'X'} 有人跑的測試檔不算「沒有人跑」（反向案例，主體 ${subject}）`);
+    if (!ok) console.log('        ' + (out.split('\n').find((l) => l.includes('test-file-not-run')) ?? `主體是 ${subject}`));
+  }
+
+  /*
    * ── 部署路徑那一條的兩個反向案例 ────────────────────
    *
    * `CASES` 只驗「該響的有響」。這兩格驗的是**不該響的不響**，
@@ -840,9 +900,9 @@ async function build(name, files) {
 }
 
 /** @param {string} dir */
-async function check(dir) {
+async function check(dir, /** @type {string[]} */ extra = []) {
   try {
-    const { stdout } = await run('node', [resolve(ROOT, 'scripts/check-workflows.mjs'), `--root=${dir}`]);
+    const { stdout } = await run('node', [resolve(ROOT, 'scripts/check-workflows.mjs'), `--root=${dir}`, ...extra]);
     return stdout;
   } catch (err) {
     return String(/** @type {{ stdout?: string }} */ (err)?.stdout ?? '');
