@@ -37,6 +37,7 @@ import { XMLValidator } from 'fast-xml-parser';
 import { countItems } from './lib/count-items.mjs';
 import { ALL_TEMPLATE_TEXT } from './lib/entry-template.mjs';
 import { dedupedInlineStyles } from './lib/site-css.mjs';
+import { validate, unsupported } from './lib/validate-schema.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const arg = (/** @type {string} */ name) => {
@@ -1022,6 +1023,7 @@ const RULES = [
   'domain-drift',
   'search-crosslang-mute',
   'guide-field-unknown',
+  'syndication-schema',
 ];
 /*
  * ── 某個語言一篇都沒有的時候，那個語言的搜尋頁要說得出來 ──────────
@@ -1578,20 +1580,6 @@ let fieldReport = '';
  * 綠燈涵蓋的是一個範本檔。她真的開始寫草稿之後，它們才第一次做事。
  */
 const VERBOSE = process.argv.includes('--verbose');
-if (VERBOSE) {
-  console.log('\n每條規則實際判斷過的東西：');
-  for (const [id, n] of [...subjects.entries()].sort((a, b) => b[1] - a[1])) {
-    console.log(`  ${String(n).padStart(4)}  ${id}`);
-  }
-}
-
-const idle = [...subjects.entries()].filter(([, n]) => n === 0).map(([id]) => id).sort();
-const idleReport =
-  idle.length === 0
-    ? ''
-    : `\n這次沒有東西可看的規則（${idle.length} 條）：${idle.join('、')}\n` +
-      '  它們是綠的，但那不是「檢查過而且沒問題」，是「沒有這種內容」。\n' +
-      '  站上有了那種內容，這幾條才第一次真的在守。\n';
 
 /*
  * 這一行要印在最前面：下面每一條「產出裡找不到」都可能只是它造成的。
@@ -1634,13 +1622,130 @@ const SYNC_STALE_DAYS = 3;
   if (raw === null) {
     notes.push('同步資料的新舊沒有檢查：讀不到 src/data/syndication.json。');
   } else {
-    /** @type {{ generatedAt?: string, sources?: Record<string, { lastSuccessAt?: string | null, status?: string }> }} */
+    /** @type {{ $schema?: string, generatedAt?: string, sources?: Record<string, { lastSuccessAt?: string | null, status?: string }> }} */
     let data = {};
+    let parsed = false;
     try {
       data = JSON.parse(raw);
+      parsed = true;
     } catch {
       notes.push('同步資料的新舊沒有檢查：src/data/syndication.json 不是合法的 JSON。');
     }
+
+    /*
+     * ── 那份 schema 從第一個 commit 就在，而沒有人執行過它 ────────────
+     *
+     * 第 4 輪（第三十六圈）量的。`npm run verify -- --patterns` 打的是
+     * **網路**（這一輪實測 11 個平臺全部 200）；沒有任何一支看**資料本身**。
+     * 而站上算繪用的是資料，不是網路。
+     *
+     * `src/data/syndication.json` 的第二行寫著
+     * `"$schema": "./syndication.schema.json"`，那個檔案真的存在
+     * （draft-07，宣告了 13 個欄位、其中 5 個必填），
+     * `git grep syndication.schema` 只有兩個結果：寫出那一行的 sync-core，
+     * 跟那一行本身。**編輯器會讀它，關卡不會。**
+     *
+     * 邊界外面有多少東西：9 筆 × 13 欄 + 1 個來源 + itemCount。
+     *
+     * 這不是理論上的漏洞，實測過：把第一筆的 `url` 改名成 `urlx`（少一個必填欄），
+     * `npm run build` **成功**，六道關卡**全綠**，兩套測試也全綠。
+     * 產出裡那一筆變成
+     *     `<a class="synd__link" target="_blank" rel="noopener noreferrer">`
+     * —— **一個沒有 href 的 <a>**，出現在 6 個頁面上。
+     * 它看起來跟正常的卡片一模一樣，但點不動、也 tab 不到。
+     *
+     * check:a11y 看不到它是**設計使然**：那裡每一條跟連結有關的規則
+     * 都以 `<a ... href=` 開頭，或是 `if (href === null) continue;`
+     * —— 沒有 href 的 <a> 依定義不是連結，所以每一條都正確地跳過它。
+     * （站上平常一個都沒有：還原之後重數是 0 個。）
+     *
+     * 消費端也擋不住：`lib/syndication.ts` 對**選填**欄位有 `??` 退路
+     * （media、summary、lang、tags、thumbnail），對那 5 個必填欄位一個都沒有。
+     * 正好就是沒有退路的那幾個沒有人在守。
+     *
+     * 驗證器讀的是那份 schema 檔本身，不是手寫第二份「必填有哪些」——
+     * 手寫第二份就是這個 repo 一再犯的「同一件事寫在兩個地方」。
+     */
+    if (parsed) {
+      /*
+       * 跟著資料自己宣告的 `$schema` 走，而不是把路徑寫死 ——
+       * 寫死的話，哪天那一行改指到別的檔案，這裡還會對著舊的驗得好好的。
+       */
+      const pointer = typeof data.$schema === 'string' ? data.$schema : null;
+      if (pointer === null) {
+        notes.push(
+          '同步資料沒有宣告 $schema，所以沒有拿合約驗過它。\n' +
+            '    src/data/syndication.schema.json 還在，但沒有東西指著它了。',
+        );
+        saw('syndication-schema', 0);
+      } else if (!/^\.{0,2}\//.test(pointer)) {
+        /* 遠端的 meta-schema 要連外才拿得到，這個站零第三方請求，不連 */
+        notes.push(`同步資料的 $schema 指到 ${pointer} —— 不是本地路徑，沒有驗。`);
+        saw('syndication-schema', 0);
+      } else {
+        const schemaPath = resolve(dirname(SYNDICATION), pointer);
+        const schemaRaw = await readFile(schemaPath, 'utf8').catch(() => null);
+        if (schemaRaw === null) {
+          problems.push({
+            file: relative(ROOT, SYNDICATION),
+            id: 'syndication-schema',
+            msg:
+              `$schema 指到 ${pointer}，但那個檔案讀不到（找的是 ${relative(ROOT, schemaPath)}）。\n` +
+              '      資料的形狀從此沒有人在守，而站上算繪用的就是這份資料。\n' +
+              '      改法：把 schema 檔補回來，或把 $schema 那一行改成它現在的位置\n' +
+              '      （寫出那一行的是 scripts/lib/sync-core.mjs）。',
+          });
+          saw('syndication-schema', 0);
+        } else {
+          let schema = null;
+          try {
+            schema = JSON.parse(schemaRaw);
+          } catch {
+            problems.push({
+              file: relative(ROOT, schemaPath),
+              id: 'syndication-schema',
+              msg:
+                'schema 檔本身不是合法的 JSON，所以沒辦法拿它驗任何東西。\n' +
+                '      改法：用 node -e "require(\'./' + relative(ROOT, schemaPath) + '\')" 看它壞在哪一行。',
+            });
+          }
+          if (schema !== null) {
+            /*
+             * 這支只實作了 draft-07 的一小塊。看不懂的關鍵字要**說出來**，
+             * 不能安靜略過 —— 安靜略過的話，「schema 寫了、驗證器看不懂、於是綠燈」
+             * 會被讀成「合約有人在守」。
+             */
+            const blind = unsupported(schema);
+            if (blind.length > 0) {
+              notes.push(
+                `schema 裡有 ${blind.length} 個關鍵字這支看不懂，那幾條沒有驗到：\n` +
+                  '      · ' + blind.join('\n      · ') + '\n' +
+                  '    scripts/lib/validate-schema.mjs 的 SUPPORTED 決定看得懂哪些。',
+              );
+            }
+            const { errors, nodes } = validate(data, schema);
+            saw('syndication-schema', nodes);
+            for (const e of errors.slice(0, 12)) {
+              problems.push({
+                file: relative(ROOT, SYNDICATION),
+                id: 'syndication-schema',
+                msg:
+                  `${e}\n` +
+                  `      比對的合約：${relative(ROOT, schemaPath)}（資料自己的 $schema 指的）。\n` +
+                  '      少一個必填欄不會讓建置失敗 —— 站上會多出一個沒有 href 的 <a>，\n' +
+                  '      看起來跟正常的卡片一樣，但點不動也 tab 不到。\n' +
+                  '      改法：這份是 scripts/sync-feeds.mjs 產生的，不要手改 ——\n' +
+                  '      跑 npm run sync 重生一次；還是一樣的話是 normalize 那一段變了。',
+              });
+            }
+            if (errors.length > 12) {
+              notes.push(`syndication-schema 還有 ${errors.length - 12} 個錯誤沒列出來。`);
+            }
+          }
+        }
+      }
+    }
+
     const at = data.generatedAt ? Date.parse(data.generatedAt) : NaN;
     if (Number.isNaN(at)) {
       if (raw !== null && Object.keys(data).length > 0) {
@@ -1830,6 +1935,35 @@ const SYNC_STALE_DAYS = 3;
     );
   }
 }
+
+/*
+ * ── 這一段一定要在**所有規則都跑完之後** ────────────
+ *
+ * 它把 `subjects` 收成「這次沒有東西可看的規則」那份名單。在它上面
+ * 呼叫的 `saw()` 才數得到；在它下面呼叫的，名單會把那條規則說成 0。
+ *
+ * 第 4 輪（第三十六圈）踩到：新加的 `syndication-schema` 明明判斷了
+ * 155 個節點，輸出卻把它列在「沒有東西可看」裡 —— 因為那個 saw()
+ * 在原本這一段的 143 行之後。**那是這個 repo 一犯再犯的形狀**
+ * （東西插在它的消費者後面），而且錯得很安靜：名單看起來很正常。
+ *
+ * 所以搬到這裡，而不是把新規則往上塞 —— 往上塞的話，下一條新規則
+ * 還是會掉進同一個坑。這裡是最後一條規則跑完的地方。
+ */
+if (VERBOSE) {
+  console.log('\n每條規則實際判斷過的東西：');
+  for (const [id, n] of [...subjects.entries()].sort((a, b) => b[1] - a[1])) {
+    console.log(`  ${String(n).padStart(4)}  ${id}`);
+  }
+}
+
+const idle = [...subjects.entries()].filter(([, n]) => n === 0).map(([id]) => id).sort();
+const idleReport =
+  idle.length === 0
+    ? ''
+    : `\n這次沒有東西可看的規則（${idle.length} 條）：${idle.join('、')}\n` +
+      '  它們是綠的，但那不是「檢查過而且沒問題」，是「沒有這種內容」。\n' +
+      '  站上有了那種內容，這幾條才第一次真的在守。\n';
 
 for (const n of notes) console.log(`\n  · ${n}`);
 

@@ -88,6 +88,12 @@ const SEARCH_PAGE = searchPage(
   '{"otherLangOne":"有 1 篇","otherLangMany":"有 {n} 篇","otherLangHref":"/archive"}',
 );
 
+/*
+ * fixture 用的是**真的那份 schema**，不是另寫一份小的。
+ * 另寫一份就是同一個合約兩個地方，而測試會驗那份假的。
+ */
+const REAL_SYNDICATION_SCHEMA = await readFile(resolve(ROOT, 'src/data/syndication.schema.json'), 'utf8');
+
 /**
  * 每條規則一份假的 { content, dist }。
  * key 是規則 id，用來確認擋下來的是**那一條**。
@@ -344,6 +350,57 @@ const CASES = {
       'public/CNAME': 'somewhere-else.test\n',
     },
     args: (/** @type {string} */ dir) => [`--src=${join(dir, 'src')}`, `--astro=${join(dir, 'astro.config.mjs')}`],
+  },
+  /*
+   * ── 少一個必填欄，站上會多出一個沒有 href 的 <a> ────────────
+   *
+   * 第 4 輪（第三十六圈）實測過那個後果：把第一筆的 `url` 改名，
+   * `npm run build` 成功、六道關卡全綠、兩套測試全綠，
+   * 而 6 個頁面上各多了一個
+   * `<a class="synd__link" target="_blank" rel="noopener noreferrer">`。
+   * 點不動、tab 不到，看起來卻跟正常的卡片一模一樣。
+   *
+   * fixture 帶的 schema 是**真的那一份**（照著複製過來，不是另寫一份小的）——
+   * 另寫一份的話，這一格驗的是那份小的，真的合約改了它不會知道。
+   */
+  'syndication-schema': {
+    content: { 'poems/wu-yi-xiang.md': poem() },
+    dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花') },
+    extra: {
+      'synd/syndication.json': JSON.stringify({
+        $schema: './syndication.schema.json',
+        generatedAt: new Date().toISOString(),
+        itemCount: 1,
+        sources: { 'youtube-x': { status: 'ok', platform: 'youtube', itemCount: 1, lastSuccessAt: new Date().toISOString() } },
+        /* url 少了 —— 這正是實測會漏掉的那種壞法 */
+        items: [{ id: 'a', sourceId: 'youtube-x', platform: 'youtube', title: '一首詩' }],
+      }),
+      'synd/syndication.schema.json': REAL_SYNDICATION_SCHEMA,
+    },
+    args: (/** @type {string} */ dir) => [`--syndication=${join(dir, 'synd', 'syndication.json')}`],
+  },
+  /*
+   * 反向：同樣一份 fixture，欄位補齊就不該響。
+   * 少了這一格，把規則寫成「一律報錯」也會全綠。
+   */
+  'syndication-schema（補齊就不報）': {
+    expect: 'no-title',
+    content: {
+      'poems/wu-yi-xiang.md': poem(),
+      'poems/broken.md': '---\nlang: zh-TW\n---\n沒有 title。\n',
+    },
+    dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花') },
+    extra: {
+      'synd/syndication.json': JSON.stringify({
+        $schema: './syndication.schema.json',
+        generatedAt: new Date().toISOString(),
+        itemCount: 1,
+        sources: { 'youtube-x': { status: 'ok', platform: 'youtube', itemCount: 1, lastSuccessAt: new Date().toISOString() } },
+        items: [{ id: 'a', sourceId: 'youtube-x', platform: 'youtube', title: '一首詩', url: 'https://example.test/a' }],
+      }),
+      'synd/syndication.schema.json': REAL_SYNDICATION_SCHEMA,
+    },
+    args: (/** @type {string} */ dir) => [`--syndication=${join(dir, 'synd', 'syndication.json')}`],
   },
   'vertical-lost': {
     content: { 'poems/wu-yi-xiang.md': poem() },
