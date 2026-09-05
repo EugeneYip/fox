@@ -92,3 +92,34 @@ export const RULES = [
     why: '中文裡的刪節號用 ⋯⋯（或 ……），不用三個半形句點。',
   },
 ];
+
+/**
+ * 哪幾條規則必須寫進那兩份文件，哪幾條不用。
+ *
+ * ── 為什麼抽出來 ──────────────────────────────────
+ *
+ * 第 6 輪（第三十一圈）量到：`check-copy.mjs` 裡的排除清單是拿去過濾
+ * `RULES` 的，而它要排除的 `unused-i18n-key` **從來就不在 `RULES` 裡**
+ * （它在 `EXTRA_RULE_IDS`）—— 那個過濾器一條都沒濾掉。
+ * 結果是對的，但理由跟程式做的事不是同一件事。
+ *
+ * 改成作用在全部 8 條上之後，**新舊兩種寫法在今天的資料上結果一樣**
+ * （`RULES` 的 5 條剛好就是「全部扣掉排除的」那 5 條），
+ * 所以突變掃描分不出來 —— 除非能餵一組「多了一條沒被排除的 extra」的資料。
+ *
+ * 純函式就能餵。這也正是這個檔案存在的理由。
+ *
+ * @param {string[]} allIds 全部的規則 id（語料的 ＋ 其他的）
+ * @param {Map<string, string>} excludedWhy id → 為什麼它不是寫作約定
+ * @returns {{ required: string[], excluded: string[], unknown: string[] }}
+ *   `unknown` 是**排除清單裡有、但根本不是規則**的 id ——
+ *   那種項目會讓「5 ＋ 3 ＝ 8」看起來成立而實際上在數不存在的東西。
+ */
+export function documentationDuty(allIds, excludedWhy) {
+  const ids = new Set(allIds);
+  return {
+    required: allIds.filter((id) => !excludedWhy.has(id)),
+    excluded: allIds.filter((id) => excludedWhy.has(id)),
+    unknown: [...excludedWhy.keys()].filter((id) => !ids.has(id)),
+  };
+}

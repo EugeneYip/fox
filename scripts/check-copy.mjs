@@ -49,7 +49,20 @@ const ROOT = rootArg
 const stripCode = (t) =>
   t.replace(/```[\s\S]*?```/g, ' ').replace(/`[^`\n]*`/g, ' ');
 
-import { RULES } from './lib/copy-rules.mjs';
+import { RULES, documentationDuty } from './lib/copy-rules.mjs';
+
+/**
+ * 不是逐行掃語料的那幾條 —— 它們各自有自己的主體
+ * （`ui.ts` 的鍵、兩份文件、`<time>` 標籤），所以不在 `RULES` 裡。
+ * 抽出來是為了範圍那一行、底下的補零、以及「哪幾條要寫進文件」
+ * 共用同一份清單，不會分岔。
+ *
+ * 宣告在這裡而不是檔案底部：第 6 輪（第三十一圈）之前它在第 707 行，
+ * 而用它的那一段在第 580 行 —— 那時候還用不到它，於是那一段只看得到
+ * `RULES`。同一個 repo 第 3 輪（第三十一圈）才在 `check-content.mjs`
+ * 踩過「區塊排在它的消費者後面」。
+ */
+const EXTRA_RULE_IDS = ['unused-i18n-key', 'rule-not-documented', 'date-wrong-language'];
 
 /**
  * 這些檔案會**引用問題本身**（歷史紀錄、以及訂下這條規則的地方），
@@ -578,7 +591,27 @@ for (const rel of ['src/i18n/ui.ts', 'src/config/site.ts']) {
  * 寫進那兩節反而讓人困惑。
  */
 {
-  const NOT_A_WRITING_RULE = new Set(['unused-i18n-key']);
+  /*
+   * ── 哪幾條**不是**寫作約定，以及為什麼 ──────────────
+   *
+   * 第 6 輪（第三十一圈）量到的：這個集合原本只有 `unused-i18n-key`，
+   * 而它是拿去過濾 `RULES` 的 —— **`unused-i18n-key` 從來就不在 `RULES` 裡**
+   * （它在 `EXTRA_RULE_IDS`）。也就是說那個過濾器**一條都沒濾掉**。
+   *
+   * 結果是對的（它確實不該被要求寫進那兩節），但**理由跟程式做的事不是同一件**：
+   * 註解說「因為它是 ui.ts 的衛生」，程式其實是「因為它不在那份清單裡」。
+   * 兩邊得到同一個輸出，所以沒有人會發現這件事。
+   *
+   * 改成作用在**全部 8 條**上，一條一句為什麼不算寫作約定 ——
+   * 這樣排除就是一個決定，而不是一個副作用。
+   */
+  const NOT_A_WRITING_RULE = new Map([
+    ['unused-i18n-key', '管的是 ui.ts 的衛生，不是寫作約定'],
+    ['rule-not-documented', '它自己就是這條檢查，寫進文件會變成自我指涉'],
+    ['date-wrong-language', '守的是 <time> 標籤算繪出來的語言，那是程式的事不是寫法'],
+  ]);
+  /** 全部 8 條，不是只有逐行掃語料的那 5 條 */
+  const ALL_RULE_IDS = [...RULES.map((r) => r.id), ...EXTRA_RULE_IDS];
   /** 一份給在這裡寫程式的人（含 AI），一份給真的在寫文案的人 */
   const DOCS = ['CLAUDE.md', 'docs/CONTENT.md'];
   /** @type {Map<string, string>} */
@@ -588,18 +621,35 @@ for (const rel of ['src/i18n/ui.ts', 'src/config/site.ts']) {
     if (body) docTexts.set(d, body);
   }
   if (docTexts.size > 0) {
-    const writingRules = RULES.filter((r) => !NOT_A_WRITING_RULE.has(r.id));
+    const { required: writingRules, excluded, unknown } = documentationDuty(ALL_RULE_IDS, NOT_A_WRITING_RULE);
     /* 主體是「規則 × 讀得到的文件」—— 一份都讀不到的話是 0，那也是實話 */
     saw('rule-not-documented', writingRules.length * docTexts.size);
-    for (const rule of RULES) {
-      if (NOT_A_WRITING_RULE.has(rule.id)) continue;
-      const missing = [...docTexts.entries()].filter(([, body]) => !body.includes(rule.id)).map(([d]) => d);
+    /*
+     * ── 排除是一個決定，要說得出口 ────────────────────
+     *
+     * 「哪幾條規則必須寫進那兩份文件」是加規則的人第一個會撞到的問題，
+     * 而在這之前它只存在於程式裡。兩個數字要**加得起來** ——
+     * 5 ＋ 3 ＝ 8，不然就是有一條既沒被要求也沒被排除。
+     */
+    if (unknown.length > 0) {
+      notes.push(
+        `排除清單裡有不存在的規則：${unknown.join('、')} —— ` +
+          '那會讓「要寫的 ＋ 不用寫的 ＝ 總數」看起來成立，而其實在數不存在的東西。',
+      );
+    }
+    notes.push(
+      `文件要求：${ALL_RULE_IDS.length} 條規則裡 **${writingRules.length} 條**` +
+        `要同時寫進 ${[...docTexts.keys()].join(' 與 ')}；${excluded.length} 條不用 ——\n` +
+        excluded.map((id) => `      · ${id}：${NOT_A_WRITING_RULE.get(id)}`).join('\n'),
+    );
+    for (const id of writingRules) {
+      const missing = [...docTexts.entries()].filter(([, body]) => !body.includes(id)).map(([d]) => d);
       if (missing.length === 0) continue;
       problems.push({
         file: missing[0],
         line: 0,
         id: 'rule-not-documented',
-        text: rule.id,
+        text: id,
         why:
           `\`check:copy\` 會擋這條，但 ${missing.join(' 與 ')} 沒有寫到它 —— ` +
           '照文件寫的人會被 CI 擋下來卻不知道為什麼。\n' +
@@ -699,13 +749,6 @@ console.log('\n文案慣例檢查\n' + '─'.repeat(56));
  * 區塊插在 findings 被分割之後，主體數印得出來、發現卻印不出來）。
  * 一則「有 N 個字沒有人看過」的筆記，不該因為別的地方有錯就不見。
  */
-/**
- * 不是逐行掃語料的那幾條 —— 它們各自有自己的主體
- * （`ui.ts` 的鍵、兩份文件、`<time>` 標籤），所以不在 `RULES` 裡。
- * 抽出來是為了範圍那一行跟底下的補零共用同一份清單，不會分岔。
- */
-const EXTRA_RULE_IDS = ['unused-i18n-key', 'rule-not-documented', 'date-wrong-language'];
-
 for (const n of notes) console.log(`\n  · ${n}`);
 /*
  * ── 範圍那一行要說「幾條規則」，而且要跟上面的筆記分開 ──────────

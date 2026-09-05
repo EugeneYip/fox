@@ -15,6 +15,7 @@
  * **一條會誤報的規則比沒有規則糟**：它會讓人學會忽略這個檢查。
  * 所以每條規則都要有「不該抓的」案例，而不只是「該抓的」。
  */
+import { documentationDuty } from './lib/copy-rules.mjs';
 import { mkdtemp, mkdir, writeFile, rm, readFile, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, dirname, join } from 'node:path';
@@ -635,6 +636,81 @@ for (const [name, { hit, miss, expect, coFires }] of Object.entries(CASES)) {
    * 那個 `Partial` 是刻意的，所以不擋，只把覆蓋率說出來。
    * 這幾格守的是「說出來的數字是真的」。
    */
+  /*
+   * ── 哪幾條要寫進文件，是一個決定 ────────────────────
+   *
+   * 第 6 輪（第三十一圈）量到：排除清單原本是拿去過濾 `RULES` 的，
+   * 而它要排除的 `unused-i18n-key` **從來就不在 `RULES` 裡** ——
+   * 那個過濾器一條都沒濾掉。結果是對的，但理由跟程式做的事不是同一件：
+   * 註解說「因為它是 ui.ts 的衛生」，程式其實是「因為它不在那份清單裡」。
+   *
+   * 現在排除作用在全部 8 條上，而且會把決定印出來。這一格守的是
+   * **兩個數字加得起來** —— 少了它，「只算 5 條」跟「8 條扣掉 3 條」
+   * 在輸出上是同一個數字。
+   */
+  {
+    const dir = await mkdtemp(join(tmpdir(), 'copy-doc-'));
+    await mkdir(join(dir, 'dist'), { recursive: true });
+    await writeFile(join(dir, 'CLAUDE.md'), realClaude, 'utf8');
+    await mkdir(join(dir, 'docs'), { recursive: true });
+    await writeFile(join(dir, 'docs/CONTENT.md'), realContent, 'utf8');
+    await writeFile(
+      join(dir, 'dist/index.html'),
+      '<!DOCTYPE html><html lang="zh-Hant-TW"><head><title>x</title></head><body><p>一段字。</p></body></html>',
+      'utf8',
+    );
+    const out = await check(dir);
+    const m = /文件要求：(\d+) 條規則裡 \*\*(\d+) 條\*\*要同時寫進 .+？；(\d+) 條不用/.exec(out)
+      ?? /文件要求：(\d+) 條規則裡 \*\*(\d+) 條\*\*要同時寫進 [^；]+；(\d+) 條不用/.exec(out);
+    const ok = m !== null && Number(m[2]) + Number(m[3]) === Number(m[1]);
+    if (!ok) failed++;
+    console.log(`  ${ok ? '✓' : 'X'} 「要寫進文件的」加「不用的」等於規則總數`);
+    if (!ok) {
+      console.log('        ' + (m ? `${m[2]} ＋ ${m[3]} ≠ ${m[1]}` : (out.split('\n').find((l) => l.includes('文件要求')) ?? '那一行根本沒印')));
+    }
+    /*
+     * ── 純函式的那三格 ────────────────────────────────
+     *
+     * 上面兩格驗的是輸出，而輸出在**今天的資料上分不出新舊兩種寫法**：
+     * 舊的只過濾 `RULES`（5 條），新的過濾全部 8 條扣掉排除的 3 條 ——
+     * 剛好也是同一批 5 條。突變「改回只過濾 RULES」照樣全綠。
+     *
+     * 要分得出來，得餵一組「多了一條沒被排除的 extra」的資料，
+     * 而那只有純函式餵得進去。
+     */
+    {
+      const why = new Map([['x-hygiene', '不是寫作約定']]);
+      const d = documentationDuty(['taiwan-tai', 'x-hygiene', 'x-new-extra'], why);
+      const okPure =
+        d.required.join('｜') === 'taiwan-tai｜x-new-extra' &&
+        d.excluded.join('｜') === 'x-hygiene' &&
+        d.unknown.length === 0;
+      if (!okPure) failed++;
+      console.log(`  ${okPure ? '✓' : 'X'} 沒被排除的 extra 一樣要寫進文件（只過濾語料規則的話會漏掉它）`);
+      if (!okPure) console.log(`        required=[${d.required}] excluded=[${d.excluded}]`);
+
+      /* 反向：排除清單裡有不存在的規則時要說出來，不然「加起來剛好」是假的 */
+      const ghost = documentationDuty(['taiwan-tai'], new Map([['no-such-rule', '？']]));
+      const okGhost = ghost.unknown.join('｜') === 'no-such-rule' && ghost.excluded.length === 0;
+      if (!okGhost) failed++;
+      console.log(`  ${okGhost ? '✓' : 'X'} 排除清單裡有不存在的規則時會被指出來`);
+
+      /* 反向：排除清單是空的時候，全部都要寫進文件 */
+      const none = documentationDuty(['a', 'b'], new Map());
+      const okNone = none.required.length === 2 && none.excluded.length === 0;
+      if (!okNone) failed++;
+      console.log(`  ${okNone ? '✓' : 'X'} 排除清單是空的時候全部都要寫（反向案例）`);
+    }
+
+    /* 三條被排除的都要說出理由 —— 只列 id 的話，排除仍然是一個沒有說明的動作 */
+    const reasons = [...out.matchAll(/· ([a-z0-9-]+)：(.+)/g)].filter(([, , why]) => why.trim().length > 4);
+    const ok2 = m !== null && reasons.length === Number(m[3]);
+    if (!ok2) failed++;
+    console.log(`  ${ok2 ? '✓' : 'X'} 每一條被排除的都寫了為什麼`);
+    if (!ok2) console.log(`        列了 ${reasons.length} 條理由，而說有 ${m?.[3] ?? '?'} 條被排除`);
+    await rm(dir, { recursive: true, force: true });
+  }
+
   {
     /**
      * @param {string} label
