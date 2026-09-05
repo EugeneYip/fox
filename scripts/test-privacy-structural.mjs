@@ -1102,6 +1102,69 @@ console.log('─'.repeat(64));
   console.log(`  ${okQuiet ? '✓' : 'X'} --verbose 模式不再提示自己（反向案例）`);
   if (!okQuiet) console.log('        ' + verbose.out.split('\n').filter(Boolean).slice(-4).join(' | '));
 
+  /*
+   * ── 哪幾條這次一個東西都沒判斷過，預設就要說 ────────
+   *
+   * 第 5 輪（第三十圈）實測：拿一份只有一頁的假 root 跑，離開碼 0、
+   * 輸出寫「必須修正 0」，而 26 條規則裡 **16 條主體是 0** ——
+   * 預設輸出一個字都沒提，只有 `--verbose` 看得見。
+   * 那 16 條當下可以整條刪掉，預設輸出一模一樣。
+   *
+   * 判準要**自己算一次答案**：從 `--verbose` 把主體為 0 的抓出來，
+   * 再比對預設那條路上點名的是不是同一批。
+   * 只驗「有印一行」的話，「一律印同一串名字」也會過。
+   */
+  const zeros = [...verbose.out.matchAll(/^\s*0\s+([a-z0-9-]+)\s*$/gm)].map((m) => m[1]).sort();
+  const listed = /這次沒有東西可看的規則：(\d+) 條（(.+)）/.exec(plain.out);
+  const named = listed ? listed[2].trim().split('、').sort() : [];
+  const okIdle =
+    zeros.length > 0 &&
+    listed !== null &&
+    Number(listed[1]) === zeros.length &&
+    named.join('｜') === zeros.join('｜');
+  if (!okIdle) failed++;
+  console.log(`  ${okIdle ? '✓' : 'X'} 預設就點名「這次沒有東西可看」的規則，而且點名的真的是那幾條`);
+  if (!okIdle) {
+    console.log(
+      '        ' +
+        (listed
+          ? `點名 ${listed[1]} 條，--verbose 說有 ${zeros.length} 條是 0`
+          : `那一行根本沒印（--verbose 說有 ${zeros.length} 條是 0）`),
+    );
+  }
+
+  /*
+   * 反向：一條都沒閒置的時候也要**明講**。
+   *
+   * 不印的話，「這次沒有規則閒置」跟「這支腳本沒有這種報告」
+   * 在輸出上長得一模一樣 —— 第 8 輪（第二十九圈）在 `check:contrast`
+   * 的 fallback 那一段踩過同一個形狀。所以這一格驗的是：
+   * **兩句話一定有一句在**，不管閒置的有幾條。
+   */
+  const always = /這次沒有東西可看的規則：(\d+) 條/.exec(plain.out);
+  const okAlways = always !== null && Number(always[1]) === zeros.length;
+  if (!okAlways) failed++;
+  console.log(`  ${okAlways ? '✓' : 'X'} 條數永遠印得出來（「0 條」跟「沒有這種報告」要分得開）`);
+  if (!okAlways) console.log('        ' + (always ? `印 ${always[1]} 條，實際 ${zeros.length} 條` : '那一行根本沒印'));
+
+  await rm(dir, { recursive: true, force: true });
+}
+
+/*
+ * ── 紅燈的時候那份名單不能跟著消失 ──────────────────
+ *
+ * 這個 repo 記過同一個位置的錯（第 5 輪〔第二十三圈〕）：
+ * 區塊插在 findings 被分割之後，主體數印得出來、發現卻印不出來。
+ * 反過來也一樣 —— 一則「這幾條什麼都沒守到」的名單，
+ * 不該因為別的地方有錯就不見。
+ */
+{
+  const dir = await build({ 'dist/index.html': '<!DOCTYPE html><html lang="zh"><head><title>x</title></head><body><script src="https://cdn.example.com/a.js"></script></body></html>' });
+  const { out, code } = await audit(dir, {});
+  const ok = code === 1 && /這次沒有東西可看的規則：\d+ 條/.test(out);
+  if (!ok) failed++;
+  console.log(`  ${ok ? '✓' : 'X'} 有發現的時候那份名單照樣印（exit ${code}）`);
+  if (!ok) console.log('        ' + out.split('\n').filter(Boolean).slice(-4).join(' | '));
   await rm(dir, { recursive: true, force: true });
 }
 
