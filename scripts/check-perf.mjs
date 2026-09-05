@@ -855,6 +855,7 @@ if (over === 0 && staleDocs === 0) {
    */
   console.log('全部在預算內。');
   console.log(`最接近上限的是「${closest.label}」（${closestPct}%）。`);
+  /* 這一行在紅燈那條路上也會印 —— 見底下 else 那一段的說明 */
   /*
    * ── 每條預算的數字從哪來，只有 --verbose 說得出來 ──────────
    *
@@ -872,7 +873,40 @@ if (over === 0 && staleDocs === 0) {
   }
 } else {
   console.log(
-    `${over} 項超出預算${staleDocs > 0 ? `、${staleDocs} 條說明裡的數字過期` : ''}。\n`,
+    `${over} 項超出預算${staleDocs > 0 ? `、${staleDocs} 條說明裡的數字過期` : ''}。`,
   );
+  /*
+   * ── 「最接近上限的是哪一條」在紅燈時也要說 ──────────────
+   *
+   * 第 2 輪（第二十九圈）加了這一句，但只印在**全綠那條路**上。
+   * `closest` 是無條件算出來的，然後在另一條路上**算完丟掉**。
+   *
+   * 第 2 輪（第三十圈）量到它的代價：把 `inlineStylesheets` 從 `auto`
+   * 改成 `always`（CSS 全部內嵌），連讀 5 頁的下載量從 43.6 KB 變成
+   * 54.9 KB（**多 26%**），而**一條預算都沒有超標** ——
+   * 「最大單頁 HTML」從 75% 跳到 98%，離上限只剩 2%。
+   *
+   * 那個數字就在表上，但**沒有任何一句話指著它**：那一輪唯一紅的是
+   * 一條不相干的「說明裡的數字過期」，而它把整段判決推到了 else 這一邊。
+   *
+   * **最需要知道「誰快要爆了」的時候，正好是已經有東西壞了的時候。**
+   *
+   * 它自己就是超標的那一條時不印 —— 上面的 ✗ 已經指名過了，
+   * 再說一次只是重複。
+   */
+  /*
+   * 這裡要的是「**還沒超標的**裡面最接近的那條」，不是上面那個 `closest`
+   * —— 有東西超標時 `closest` 就是它自己（比值 > 1），照著印會變成
+   * 把 ✗ 已經指名過的那條再說一遍，而「下一個要爆的是誰」仍然沒人說。
+   * 判準要跟訊息說的一樣（第 1 輪〔第二十四圈〕的教訓）。
+   */
+  const under = budgets.filter((b) => b.value <= b.limit);
+  if (under.length > 0) {
+    const next = under.reduce((a, b) => (b.value / b.limit > a.value / a.limit ? b : a));
+    console.log(
+      `還沒超標的裡面最接近上限的是「${next.label}」（${Math.round((next.value / next.limit) * 100)}%）。`,
+    );
+  }
+  console.log('');
 }
 process.exit(over > 0 || staleDocs > 0 ? 1 : 0);

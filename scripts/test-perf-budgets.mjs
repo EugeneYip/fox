@@ -423,6 +423,64 @@ console.log('─'.repeat(64));
   await rm(dir, { recursive: true, force: true });
 }
 
+/*
+ * ── 紅燈的時候也要說「下一個要爆的是誰」──────────────
+ *
+ * 第 2 輪（第二十九圈）加了「最接近上限的是⋯」，但只印在全綠那條路上；
+ * `closest` 在另一條路上是**算完丟掉**的。
+ *
+ * 第 2 輪（第三十圈）量到代價：`inlineStylesheets` 改成 `always` 之後
+ * 連讀 5 頁多 26%，而**一條預算都沒超標** —— 最大單頁 HTML 從 75% 跳到 98%。
+ * 唯一紅的是不相干的一條，判決卻因此整段走到 else，那個 98% 沒人指。
+ */
+{
+  const dir = await mkdtemp(join(tmpdir(), 'perf-nextup-'));
+  /*
+   * 這份 fixture 要有**高低差**，不能只有「一條爆掉、其餘全 0%」。
+   *
+   * 第一版就是那樣：11 條裡 2 條超標、9 條並列 0%。
+   * 於是突變「改成點名最不接近上限的那條」照樣全綠 ——
+   * `reduce` 在全部相等時，取最大與取最小回的是**同一個**。
+   * 判準沒問題，是**語料分不出來**（跟第 7 輪〔第二十九圈〕那次一樣）。
+   *
+   * 所以除了爆掉的那一頁，再放一份不好壓的 CSS，讓「全站 CSS 合計」
+   * 停在中間 —— 這樣最大與最小才是兩條不同的預算。
+   */
+  await writeFile(join(dir, 'index.html'), page({ body: `<p>${noise(200_000)}</p>` }), 'utf8');
+  await mkdir(join(dir, '_astro'), { recursive: true });
+  await writeFile(join(dir, '_astro', 'spread.css'), `.a{content:"${noise(7_000)}"}`, 'utf8');
+  const out = await check(dir);
+  const m = /還沒超標的裡面最接近上限的是「(.+?)」（(\d+)%）。/.exec(out);
+  /*
+   * 判準要**自己算一次**，不能只驗「有印一行、而且不是超標的那條」。
+   *
+   * 第一版就是那樣寫的，於是突變「改成點名最**不**接近上限的那條」
+   * 照樣全綠 —— 0% 那條同樣不是超標的、同樣 ≤ 100%。
+   * 這是這一組圈裡第九次踩到「判準能被別的東西滿足」。
+   *
+   * 所以從表格把每一條的百分比讀回來，自己算出「沒超標的裡面最大的」，
+   * 再比對點名的是不是它。
+   */
+  const rows = [...out.matchAll(/^\s*([✓X])\s+(.+?)\s{2,}.*?(\d+)%\s*$/gm)]
+    .map((r) => ({ over: r[1] === 'X', label: r[2].trim(), pct: Number(r[3]) }));
+  const under = rows.filter((r) => !r.over);
+  const want = under.length > 0 ? under.reduce((a, b) => (b.pct > a.pct ? b : a)) : null;
+  const ok =
+    m !== null && want !== null && rows.some((r) => r.over) && m[1] === want.label && Number(m[2]) === want.pct;
+  if (!ok) failed++;
+  console.log(`  ${ok ? '✓' : 'X'} 紅燈時也點名「還沒超標的裡面最接近上限的」，而且點名的真的是它`);
+  if (!ok) {
+    console.log(
+      '        ' +
+        (m
+          ? `點名了「${m[1]}」（${m[2]}%），表上沒超標的裡面最大的是「${want?.label ?? '（讀不到）'}」（${want?.pct ?? '?'}%）`
+          : '那一行根本沒印') +
+        `　讀到 ${rows.length} 條、超標 ${rows.filter((r) => r.over).length} 條`,
+    );
+  }
+  await rm(dir, { recursive: true, force: true });
+}
+
 // 乾淨的一份：一頁小 HTML，什麼都不該超標
 {
   const dir = await mkdtemp(join(tmpdir(), 'perf-clean-'));
