@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 42,830 行、2.3 MB、261 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 43,000 行、2.3 MB、262 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -42827,4 +42827,156 @@ title: 靜夜思                      # 這頁的標題
   workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：4 — 平臺 feed 實測**
+
+### 2026-09-05 — 第 4 輪（第三十三圈）：平臺 feed 實測
+
+**第三十三圈問：這件事，是給誰用的？那個人真的會走到這裡嗎？**
+判準：**說得出「誰、在什麼情況下、會看到這一句」嗎？**
+
+這一層有三支工具，而其中一支的答案特別乾脆 ——
+`npm run handle` **只在一個時刻有用**：站主剛問到一個帳號名。
+CLAUDE.md 就是這樣教的：「拿到帳號名之後可以用 `npm run handle <帳號名>`
+一次確認它在哪些平臺存在，輸出會直接給可貼進 `sources.mjs` 的片段。」
+
+所以這一輪就走一次那個時刻。
+
+#### 1. 先把 feed 實測跑完（沒發現問題）
+
+```
+npm run verify              ✓ youtube-foxpoetry  200 Atom 9 筆  346ms
+npm run verify -- --patterns  11 個平臺真的打，全部通過
+```
+
+`note` 那一格仍然是「200 但 0 筆」，而報告自己會說
+「樣板不見得壞了 —— 更可能是 probeHandle 那個帳號本身沒在發文」；
+`pixnet` 仍然標「查不準」並附上原因。兩件都跟上一次一樣，**沒有退化**。
+
+順帶查了 `verifiedAt`：11 個 verified 全部寫著 `2026-09-05`，
+是第 4 輪（第二十八圈）那一筆 commit 一次設定的。今天是同一天，
+所以「最舊的宣稱：0 天前」現在是對的 —— 這一輪不動它。
+
+#### 2. `npm run handle foxpoetry` —— 它遞出來的東西裡有一段不該貼
+
+三個平臺「有東西」，於是它產生三段可以貼進 `sources.mjs` 的設定。
+**其中一段是 YouTube。**
+
+而 `src/config/sources.mjs` 裡早就有那一筆：
+
+```
+id: 'youtube-foxpoetry',
+platform: 'youtube',
+channelId: 'UCiCJBnqbS3ECSPEM7vSmrPw',
+```
+
+同一個平臺、同一個帳號名、同一個頻道。貼下去就是第二筆重複的來源。
+
+原因很直接：**`check-handle.mjs` 從頭到尾沒有讀過 `sources.mjs`。**
+`grep` 過，那個字串在整支腳本裡只出現一次 —— 在「確認之後貼進
+src/config/sources.mjs」這句**提示文字**裡。它叫人去貼那個檔案，
+但不知道那個檔案裡有什麼。
+
+這一圈的判準在這裡答得很清楚：說得出「誰、在什麼情況下」——
+**站主、剛問到帳號名、正要照著貼**。而那一刻他拿到的三段裡有一段是錯的，
+偏偏那一刻沒有人會回頭核對。
+
+（順帶一提，另外兩段是對的而且有用：Blogger 那個標題是「Walt & Emily」，
+一眼就看得出不是她 —— 那正是這支工具的註解說「最有用的輸出不是有／沒有，
+是**頁面標題**」的意思。這部分運作良好。）
+
+#### 3. 改法
+
+抽一支 `scripts/lib/existing-sources.mjs`（`existingSource()`），
+`check-handle.mjs` 引進來：
+
+- **同平臺同帳號** → 不給片段，改印一行「已經在 sources.mjs 裡了（id: …）
+  —— 不用再貼一次。」
+- **同平臺不同帳號** → 仍然給片段（那是第二個帳號，不是重複），
+  只在上面提一句已經有哪一筆。
+- 標題那一行也跟著說：「3 個有東西，**其中 1 個已經在 sources.mjs 裡**」。
+
+抽成獨立檔案是為了測得到 —— `check-handle.mjs` 一載入就開始打網路。
+
+#### 4. 突變
+
+| 突變 | 結果 |
+|---|---|
+| `sameHandle` 一律 true（什麼都算重複） | 2 格紅 ✓ |
+| 平臺比對寫反（`!==`） | 5 格紅 ✓ |
+| **`check-handle.mjs` 那一行改成「全部都給片段」** | **全綠 ✗** |
+
+#### 5. 第三個突變沒有被抓到，而我沒有假裝抓到
+
+`existingSource()` 本身守得很好（6 格，含一格拿**真的** `sources.mjs`
+比對，防的是「判斷寫對但接錯檔案」）。但**把它接上去的那一行沒有人守** ——
+`check-handle.mjs` 一載入就打網路，單元測試跑不了它。
+
+可以寫一格「檢查 `check-handle.mjs` 裡有沒有 `existingSource` 這個字」——
+**但那正是第 2 輪（第三十三圈）剛剛診斷出來的毛病**：那一輪發現
+`check:perf` 對讀者說的那一行有三個斷言在守，守的全是措辭，
+數字錯了三圈沒有人紅。這裡再加一格守措辭的，等於明知故犯。
+
+所以記成待辦：要真的守住，得讓 `check-handle.mjs` 能不打網路跑一次
+（`--no-probe` 之類），那是另一輪的事。
+
+#### 6. 型別關卡又擋了我一次
+
+新測試裡的 `ok()` 我寫成 `(name, pass, detail)`，JSDoc 卻寫 `@param {boolean} ok`
+—— `ts(8024)` 加 `ts(7006)`。**而我先跑的 `npm run check` 我只看了 `tail -3`**，
+看到「0 warnings、14 hints」就以為過了，錯誤那一行在更上面。
+是 `verify:all` 攔下來的。**看輸出要看判決那一行，不是看最後三行。**
+
+#### 7. 這一圈的問題，在這一層得到的答案
+
+前三輪的形狀分別是「文件說錯了」「數字挑錯了」「兩個欄位只有一個被看到」。
+這一輪是第四種：**工具知道要叫人去哪個檔案，但沒有讀過那個檔案。**
+
+它甚至把那個檔名寫在輸出裡 —— 整支腳本裡 `sources.mjs` 這五個字
+只出現在那一句提示文字上。**指得出路，但沒走過。**
+
+| | 之前 | 現在 |
+|---|---|---|
+| 已經設定過的平臺 | 照樣產生一段可貼的設定 | 說「已經有了」，不給片段 |
+| 同平臺的第二個帳號 | 分不出來 | 給片段，並提現有那筆 |
+| 測試 | —— | 6 格（含一格接真的設定） |
+| 接線那一行 | 沒人守 | **仍然沒人守**（見待辦） |
+
+### 待辦（不屬於這一輪）
+
+- **`check-handle.mjs` 沒辦法不打網路跑**，所以「有沒有真的用上
+  `existingSource()`」測不到。加一個 `--no-probe`（或把探測抽成可注入的）
+  才守得住（→ 4 平臺 feed）
+- **`verifiedAt` 11 筆全是同一天、同一筆 commit 設的。** 今天看不出問題，
+  但它們會一起變舊、也只會被一起更新 —— 那個「最舊的宣稱」永遠只有一個值
+  （→ 4 平臺 feed）
+- 上一輪與更早的都還在（`test-ci-sim` 那一格在機器有負載時會紅、
+  要不要讓列表顯示詩詞的 `title`、`mutate` 的 `--from` 含反斜線過不了 npm、
+  同一個檔案連續 `mutate` 兩次 `--restore` 只還原第二次、
+  `REVIEW-LOG.md` 開頭三個數字手寫、「涵蓋率：前景 N 種」那兩個數字沒人驗、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  另外幾支的 `--verbose` 數字沒人驗、乾淨基底上 10 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `check:perf` 那句「全是 favicon」是寫死的描述、7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  我一直在腳本中間插東西、`check:copy` 沒有 level 的概念、
+  27 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、`related` 單向、schema 的必填／選填沒被選過、
+  11 條預算裡 5 條的上限是挑的、另外四支檢查的嚴重度、
+  `CoverImage` 的 `sizes` 用 40rem、頁尾 `aria-current` 沒有視覺對應、
+  `check.yml` 跑過 0 次、`ci:sim` 只有手動跑、`ui.ts` 的 `en` 要不要必填、
+  `reveal('email')` 沒有人呼叫、4 條閒置豁免、本機 `ahead 48, behind 1`、
+  `npm run sync` 來源全失敗仍離開碼 0、排程遲了四小時只有一筆、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `VideoFacade` 一次都沒算繪過、`aria-live`／`role="status"` 沒有規則、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、`probe:served` 沒有自己的測試、
+  `--real-install` 成功路徑沒測試、視覺層 24 處實測沒重驗、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  真的開一次螢幕閱讀器聽、`CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：5 — 建置與 CI**

@@ -24,6 +24,8 @@ import { sourceFeedUrl } from './lib/source-feed-url.mjs';
 import { handleTargets } from './lib/handle-targets.mjs';
 import { pageParts, decodeEntities } from './lib/page-title.mjs';
 import { UA_BROWSER } from './lib/http.mjs';
+import { existingSource } from './lib/existing-sources.mjs';
+import { sources as configuredSources } from '../src/config/sources.mjs';
 
 const argv = process.argv.slice(2);
 const handles = argv.filter((a) => !a.startsWith('--'));
@@ -247,9 +249,39 @@ for (const handle of handles) {
     continue;
   }
 
-  console.log(`\n  ${hits.length} 個有東西。看標題判斷是不是她，確認之後貼進 src/config/sources.mjs：\n`);
-  for (const { platform, url, title } of hits) {
+  /*
+   * 已經在 `sources.mjs` 裡的平臺不再給片段 —— 貼下去會多一個重複的來源。
+   * 這支工具是為「剛問到一個帳號名」那一刻寫的，而那一刻它遞出去的東西
+   * 必須是**可以直接照做的**；混一段不該貼的進去，等於把判斷丟回去給人。
+   *
+   * 同平臺但**不同帳號名**仍然給片段（那是第二個帳號，不是重複），
+   * 只在上面提一句已經有哪一筆。
+   */
+  const fresh = hits.filter(
+    (h) => !existingSource(configuredSources, h.platform.id, handle)?.sameHandle,
+  );
+  const already = hits.length - fresh.length;
+
+  console.log(
+    `\n  ${hits.length} 個有東西` +
+      (already > 0 ? `，其中 ${already} 個已經在 sources.mjs 裡` : '') +
+      '。看標題判斷是不是她，確認之後貼進 src/config/sources.mjs：\n',
+  );
+
+  for (const { platform, title } of hits) {
+    const have = existingSource(configuredSources, platform.id, handle);
+    if (have?.sameHandle) {
+      console.log(`    // ${platform.name['zh-TW']}：${title}`);
+      console.log(`    // 已經在 sources.mjs 裡了（id: ${have.id}）—— 不用再貼一次。\n`);
+    }
+  }
+
+  for (const { platform, url, title } of fresh) {
+    const have = existingSource(configuredSources, platform.id, handle);
     console.log(`    // ${platform.name['zh-TW']}：${title}`);
+    if (have) {
+      console.log(`    // 這個平臺已經有一筆了（id: ${have.id}，帳號 ${have.handle}）—— 這是另一個帳號才要加。`);
+    }
     console.log(`    {`);
     console.log(`      id: '${platform.id}-main',`);
     console.log(`      platform: '${platform.id}',`);
