@@ -261,6 +261,24 @@ let renderedHtml = '';
 /** ui.ts／site.ts 裡的固定字串（不含帶佔位符的與單字元的） */
 /** @type {{ rel: string, value: string }[]} */
 const uiStrings = [];
+/**
+ * 每一組「帶 'zh-TW' 的文案物件」，以及它有沒有 `en`。
+ *
+ * 第 6 輪（第三十圈）量到的不對稱：
+ *   `site.ts`  `satisfies L10n`（`Record<Locale, string>`）—— **兩種語言都是必填**
+ *   `ui.ts`    `Partial<Record<Locale, string>>` —— **en 是選填**
+ *
+ * 兩個檔案裝的是同一種東西（畫在畫面上的字），而少掉英文的後果不一樣：
+ * `site.ts` 少一個 `npm run check` 就紅；`ui.ts` 少一個**什麼都不會發生** ——
+ * `pick()` 會安靜地退回中文，英文讀者看到的是中文，沒有任何一道關卡出聲。
+ *
+ * 那個 `Partial` 是刻意的（`CLAUDE.md`：「缺的會自動退回 zh-TW，所以不會壞，
+ * 但盡量補齊英文」）。所以這裡**不擋**，只把覆蓋率說出來 ——
+ * 今天是 100%，而 100% 掉下來的時候要有人看得見。
+ *
+ * @type {{ rel: string, path: string, hasEn: boolean }[]}
+ */
+const l10nPairs = [];
 
 /*
  * ── 產出比原始檔舊的話，先說 ────────────────────────
@@ -432,6 +450,24 @@ for (const rel of ['src/i18n/ui.ts', 'src/config/site.ts']) {
     else if (node && typeof node === 'object') for (const v of Object.values(node)) collect(v);
   };
   collect(mod);
+
+  /*
+   * 順便記下語言對。判準是「這個物件有 'zh-TW' 這個鍵」——
+   * 不挑特定的 export 名字，所以 ui.ts 與 site.ts 用同一套。
+   * `LOCALE_PATH` 之類的對照表也會被算進來，它們型別上就兩種都必填，
+   * 所以只會讓分母大一點，不會蓋掉問題。
+   */
+  /** @param {unknown} node @param {string} path */
+  const pairs = (node, path) => {
+    if (!node || typeof node !== 'object') return;
+    const obj = /** @type {Record<string, unknown>} */ (node);
+    if (typeof obj['zh-TW'] === 'string') {
+      l10nPairs.push({ rel, path, hasEn: typeof obj.en === 'string' && obj.en !== '' });
+      return;
+    }
+    for (const [k, v] of Object.entries(obj)) pairs(v, path ? `${path}.${k}` : k);
+  };
+  pairs(mod, '');
 
   /*
    * 把每個字串放回它在原始檔裡的那一行，行號才對得上。
@@ -616,11 +652,40 @@ for (const f of await readdir(resolve(ROOT, '.github/workflows')).catch(() => []
       notes.push(
         `${uiStrings.length} 個介面字串裡，**${never.length} 個（${pct}%）從來沒有被算繪出來**。\n` +
           `    例如：${sample}${never.length > 6 ? '⋯' : ''}\n` +
-          '    它們是為了還沒發生的狀態寫的（空狀態、分頁、影片預覽卡⋯）。\n' +
+          '    多數是為了還沒發生的狀態寫的（空狀態、分頁、影片預覽卡⋯），\n' +
           '    慣例檢查掃得到它們，但**沒有人看過它們長在頁面上的樣子** ——\n' +
-          '    第一個看到的人，會是第一個寫出那種內容的人。',
+          '    第一個看到的人，會是第一個寫出那種內容的人。\n' +
+          '    但這個數字裡混著另一種：**掛在沒有人 import 的元件上的字，永遠不會出現**。\n' +
+          '    這一支分不出那兩種（它只看字有沒有進 dist）——\n' +
+          '    分得出來的是 `npm run check:content` 的「走不到的元件」那一段。',
       );
     }
+  }
+}
+
+/*
+ * ── 英文少一句，誰會發現 ────────────────────────────
+ *
+ * 見 l10nPairs 的說明：ui.ts 的 `en` 型別上是選填，少掉不會有任何東西響。
+ * 這裡不擋，只說覆蓋率 —— 100% 掉下來的時候要看得見。
+ */
+if (l10nPairs.length > 0) {
+  const missing = l10nPairs.filter((p) => !p.hasEn);
+  const pct = Math.round(((l10nPairs.length - missing.length) / l10nPairs.length) * 100);
+  if (missing.length === 0) {
+    notes.push(
+      `英文覆蓋：${l10nPairs.length} 組文案全部都有 en（100%）。\n` +
+        '    這一項不擋 —— `ui.ts` 的 `en` 型別上是選填（`Partial`），少一句只會安靜地退回中文。\n' +
+        '    所以數字寫在這裡：它從 100% 掉下來的時候，要有人看得見。',
+    );
+  } else {
+    notes.push(
+      `英文覆蓋：${l10nPairs.length} 組文案裡 **${missing.length} 組沒有 en**（${pct}%）：\n` +
+        missing.slice(0, 6).map((p) => `      · ${p.rel}　${p.path}`).join('\n') +
+        (missing.length > 6 ? `\n      …另外 ${missing.length - 6} 組` : '') +
+        '\n    英文讀者看到的會是中文（`pick()` 會安靜地退回），而沒有任何一道關卡會響 ——\n' +
+        '    `ui.ts` 的 `en` 型別上是選填，`site.ts` 的則是必填（`satisfies L10n`）。',
+    );
   }
 }
 

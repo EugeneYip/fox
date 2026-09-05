@@ -624,6 +624,63 @@ for (const [name, { hit, miss, expect, coFires }] of Object.entries(CASES)) {
     await rm(dir, { recursive: true, force: true });
   }
 
+  /*
+   * ── 英文覆蓋 ────────────────────────────────────────
+   *
+   * 第 6 輪（第三十圈）：`site.ts` 的文案型別上兩種語言都必填
+   * （`satisfies L10n`），`ui.ts` 的 `en` 是 `Partial` —— 選填。
+   * 兩邊裝的是同一種東西，而 `ui.ts` 少一句 `en` **什麼都不會發生**：
+   * `pick()` 安靜地退回中文，英文讀者看到中文，沒有關卡會響。
+   *
+   * 那個 `Partial` 是刻意的，所以不擋，只把覆蓋率說出來。
+   * 這幾格守的是「說出來的數字是真的」。
+   */
+  {
+    /**
+     * @param {string} label
+     * @param {string} ui
+     * @param {(out: string) => boolean} want
+     */
+    const withUi = async (label, ui, want) => {
+      const dir = await mkdtemp(join(tmpdir(), 'copy-en-'));
+      await mkdir(join(dir, 'dist'), { recursive: true });
+      await mkdir(join(dir, 'src/i18n'), { recursive: true });
+      await writeFile(join(dir, 'src/i18n/ui.ts'), ui, 'utf8');
+      await writeFile(
+        join(dir, 'dist/index.html'),
+        '<!DOCTYPE html><html lang="zh-Hant-TW"><head><title>x</title></head><body><p>x</p></body></html>',
+        'utf8',
+      );
+      const out = await check(dir);
+      const ok = want(out);
+      if (!ok) failed++;
+      console.log(`  ${ok ? '✓' : 'X'} ${label}`);
+      if (!ok) {
+        const said = out.split('\n').filter((l) => l.includes('英文覆蓋')).join(' ｜ ');
+        console.log('        ' + (said || '（完全沒提到英文覆蓋）'));
+      }
+      await rm(dir, { recursive: true, force: true });
+    };
+
+    await withUi(
+      '三組裡一組沒有 en：數得出來，而且點名的是那一組',
+      "export const ui = { 'a': { 'zh-TW': '甲', en: 'A' }, 'b': { 'zh-TW': '乙', en: 'B' }, 'c': { 'zh-TW': '丙' } };\n",
+      (out) => /3 組文案裡 \*\*1 組沒有 en\*\*（67%）/.test(out) && /\bui\.ts\b/.test(out) && /ui\.c\b/.test(out),
+    );
+    /* 反向：全部都有 en 的時候要說「100%」，不是安靜跳過 —— 不然「有沒有這項檢查」看不出來 */
+    await withUi(
+      '全部都有 en：明講 100%（不是安靜跳過）',
+      "export const ui = { 'a': { 'zh-TW': '甲', en: 'A' }, 'b': { 'zh-TW': '乙', en: 'B' } };\n",
+      (out) => /2 組文案全部都有 en（100%）/.test(out),
+    );
+    /* 反向：空字串的 en 不算數 —— 有那個鍵但沒有內容，畫面上一樣是中文 */
+    await withUi(
+      'en 是空字串不算有（反向案例）',
+      "export const ui = { 'a': { 'zh-TW': '甲', en: '' } };\n",
+      (out) => /1 組文案裡 \*\*1 組沒有 en\*\*（0%）/.test(out),
+    );
+  }
+
   {
     /* 全部都畫出來了就不說那句話 */
     const dir = await mkdtemp(join(tmpdir(), 'copy-allrendered-'));
