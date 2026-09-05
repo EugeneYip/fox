@@ -291,9 +291,48 @@ console.log('─'.repeat(64));
 {
   const dir = await build({});
   const { out } = await audit(dir);
+  /*
+   * ── 這一格護得到幾條規則 ────────────────────────────
+   *
+   * 第 1 輪（第三十二圈）在無障礙那邊量到：這種「乾淨基底」
+   * **只護得到它身上有東西可踩的那幾條**。這裡量同一件事。
+   *
+   * 主體是 0 的那幾條，靠的是它們**自己的**反向案例（底下有好幾格），
+   * 不是靠這一格。兩種保護要分開看，因為只有前者是這一格提供的。
+   */
+  const verbose = await audit(dir, {}, ['--verbose']);
+  const subjects = new Map(
+    [...verbose.out.matchAll(/^\s*(\d+)\s+([a-z0-9-]+)\s*$/gm)].map((m) => [m[2], Number(m[1])]),
+  );
+  const bare = [...subjects.entries()].filter(([, n]) => n === 0).map(([id]) => id).sort();
+  if (subjects.size === 0) {
+    failed++;
+    console.log('  X 讀不到乾淨基底的主體數 —— 底下那句是假的');
+  } else {
+    console.log(
+      `  · 乾淨基底上，${subjects.size} 條規則裡 ${bare.length} 條主體是 0：${bare.join('、') || '（沒有）'}\n` +
+        '      那幾條「不該響的不響」在這一格證明不了 —— 得靠它們自己的反向案例。',
+    );
+  }
+
+  /*
+   * ── 為什麼這一格只看 error ──────────────────────────
+   *
+   * 第 5 輪（第三十二圈）試著把它收緊成「連 `請確認` 也不能有」——
+   * 理由聽起來很好：27 條規則裡 11 條是 `warn`，而 warn 不會讓關卡紅燈。
+   *
+   * 但**證明不了那一半會擋住任何東西**：這份假 repo 跑出來的 `請確認`
+   * 本來就是 0 條，把 warn 規則放寬之後它仍然是 0（那幾條的主體不在
+   * 這份語料上）。一個不會失敗的斷言看起來像保護，其實不是 ——
+   * 這個 repo 在 `check:contrast` 的 fallback 那一段記過同一件事。
+   *
+   * 所以收回去，改成把**這一格護得到幾條**量出來（見上面那一段）。
+   * 哪天這份語料長到 warn 規則也踩得到，再加那一半才有意義。
+   */
   const ok = !out.includes('必須修正（');
   if (!ok) failed++;
-  console.log(`  ${ok ? '✓' : 'X'} 乾淨的假 repo 不誤報`);
+  console.log(`  ${ok ? '✓' : 'X'} 乾淨的假 repo 不誤報（error）`);
+
   if (!ok) console.log(out.split('\n').filter((l) => l.includes('✗')).slice(0, 4).map((l) => '      ' + l).join('\n'));
   await rm(dir, { recursive: true, force: true });
 }
