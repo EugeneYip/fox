@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 47,700 行、2.5 MB、292 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 48,000 行、2.5 MB、293 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -47432,4 +47432,162 @@ const saved = localStorage.getItem('fox-theme');
   `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：3 — 內容結構**
+
+### 2026-09-06 — 第 3 輪（第三十七圈）：內容結構
+
+**第三十七圈問：這一條規則，是誰要求的？寫在哪份文件裡？**
+判準：**這條規則寫在哪份文件裡？那份文件是給誰看的？兩邊還一致嗎？**
+
+#### 1. 20 條規則，文件提到 0 條
+
+`check:content` 的 20 條規則，在 `docs/CONTENT.md`、`CLAUDE.md`、
+`docs/ARCHITECTURE.md` 裡加起來出現 **0 次**。
+
+但「全部都要寫進文件」會是**我自己發明的規矩**。多數規則報的是 `dist/`、
+設定檔、或 `sync-feeds` 產生的資料 —— 那是維護者的事，她不需要知道。
+
+#### 2. 判準從程式碼機械地讀出來
+
+每一條規則 `problems.push({ file: … })` 指的是誰？
+
+| 報的檔案 | 幾條 | 是誰的事 |
+|---|---|---|
+| `src/content/` 底下那一份 | **11 條** | **她寫的** |
+| `dist/`、設定檔、產生的資料、文件本身 | 9 條 | 維護者 |
+
+那 11 條會擋住建置，**螢幕上是她的檔名**，訊息開頭是一個
+她從來沒看過的名字（`poem-title-bracketed`、`template-text-left`⋯⋯）。
+
+#### 3. 而她的文件裡有一節就叫「寫錯的時候會看到什麼」
+
+那一節在 `docs/CONTENT.md` 第 326 行，寫得很好 ——
+七種**欄位寫錯**的訊息各給一列，還特別講了「欄位名打錯」那個陷阱。
+
+它涵蓋的是 `dev`／`build` 當場會說的那種（zod 的 schema 錯誤）。
+`check:content` 那 11 條**一條都不在**。
+
+也就是說：她照文件寫，文件說「不用怕，它會指名是哪個檔案的哪個欄位」，
+然後她在 CI 上被一個沒看過的名字擋下來 ——
+而那正是 `check:copy` 的 `rule-not-documented` 當初存在的理由。
+
+#### 4. 補上，而且分成兩半
+
+那 11 條寫進同一節，逐條照規則自己的 `msg` 寫（沒有編造），
+但**分成兩半**：
+
+- **你改得動的（6 條）**：`no-title`、`poem-title-bracketed`、
+  `template-text-left`、`bad-reference`、`draft-unscannable`、`external-missing`
+- **不是你寫錯了（5 條）**：`missing-page`、`draft-page`、`draft-leaked`、
+  `lang-leaked`、`search-index-missing` ——
+  這幾條指到她的檔案，但原因在路由或建置。
+  **先跑一次 `npm run build`**；還在的話把那行訊息整句貼給站主。
+
+那一半很重要：11 條全都指到她的檔案，但只有 6 條是她做錯了。
+把「這不是你的錯」寫出來，跟寫出改法一樣有用。
+
+#### 5. 新增 `rule-not-in-guide`（第 21 條）
+
+用的是**既有的** `documentationDuty()` —— `check:copy` 那支純函式，
+不另寫一份。排除的 10 條每一條都要寫出理由，而它回傳的 `unknown`
+會抓出「排除清單裡有、但根本不是規則」的 id
+（不然「要寫的 ＋ 不用寫的 ＝ 總數」會假成立）。
+
+只要求 `docs/CONTENT.md` 一份，不像文案那五條要求兩份：
+那五條同時是寫作約定與寫程式的約定，這幾條只有她會踩到。
+
+#### 6. 第一版兩個毛病，都是既有的守門抓到的
+
+**一、迷你 fixture 沒有那份指南**，於是每一格都多噴 11 條「文件沒寫」。
+改成只在對真的 repo 跑時比，或測試明講 `--guide=`
+（跟 `check-a11y` 的 `--doc=` 同一個作法）。
+
+**二、`saw()` 又放在閒置名單後面 —— 第九次。**
+搬到所有規則之前。順帶把 CLEAN 那兩次跑都帶上**真的** `CONTENT.md` ——
+不然那一格只是在跳過它，而不是在驗它。
+
+| | 之前 | 現在 |
+|---|---|---|
+| 會指到她檔案的規則 | 11 條，文件 0 條 | 11 條全寫進她的文件 |
+| 那一節涵蓋 | 7 種 schema 錯誤 | ＋ 11 條檢查規則，分「你改得動」與「不是你的錯」 |
+| 少寫一條 | 沒有人知道 | `rule-not-in-guide` 擋下來 |
+| 排除是誰決定的 | —— | 10 條各寫出理由，`unknown` 防假成立 |
+
+`verify:all` 六道全綠、`test:tools` 833 格全綠、`ci:sim` 在 HEAD 上全綠。
+
+**（那個不可重現的紅燈，這一輪又中一次。）** 更新 `STATE.md` 之後跑
+`test:tools` 又拿到 **exit 1**；同一份程式碼立刻重跑 **exit 0**，
+整份輸出一個 `X` 都沒有。**兩輪連續兩次**，所以不是一次意外。
+
+這一輪花了一次實驗去釘它：待辦上的假設是「`test:ci-sim` 那一格在有負載時
+會紅」，於是跑 `verify:all` 之後**緊接著**跑 `test:ci-sim` ——
+**沒有重現**（exit 0，兩格都綠，合計 1 秒）。
+所以那個假設**這一次沒有被證實**，而我也還沒有第二個假設。
+沒有再花時間追（不是這一輪的面向），但把「試過什麼、沒重現」寫下來，
+下一個人才不用從頭猜。
+
+### 待辦（不屬於這一輪）
+
+- **那個偶發紅燈：兩輪兩次，而且「負載下的 `test:ci-sim`」這個假設
+  直接測不重現。** 現在連「是哪一格紅的」都不知道 ——
+  `test:tools` 失敗時沒有留下任何 `X`，這件事本身就值得先修：
+  一個沒有留下證據的紅燈，第二個人只能重跑碰運氣（→ 7 建置與 CI）
+- **`draft-unscannable` 與 `external-missing` 放在「你改得動」那一半，
+  是我的判斷。** 前者的改法（把標題寫長一點）是她的，
+  後者一半在她的 frontmatter、一半在 `lib/syndication.ts`（→ 站主）
+- **那 9 條「維護者的事」的規則仍然沒有任何文件寫過**，
+  而維護者讀的是 `CLAUDE.md`（→ 3 內容結構）
+- 上一輪與更早的都還在（那條會偶發變紅的耗時測試、
+  11 條預算的上限沒有文件、`ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  `check:workflows` 的 9 條規則文件提到 0 條、
+  七支關卡只有兩支有 `--list-rules`、`SEVERITY` 的 WCAG 推理住在測試檔註解裡、
+  29 條裡只有 2 條提到 WCAG、
+  瀏覽器掃描沒有變成工具、只走了 4 頁、
+  `check.yml` 永遠不會自己觸發（→ 站主）、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  `reveal('email')` 沒有人呼叫、沒有 href 的 `<a>` 沒有規則在看、
+  `note` 那種「合法但 0 筆」沒有對應警告、`validate-schema` 只實作 8 個關鍵字、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  `<details>`／`<summary>` 各 44 個沒有規則在看、`<time>` 82 個沒人看 `datetime`、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `--patterns` 那 11 個平臺的「N 筆」沒驗、
+  `SCHEMA_STRUCTURAL` 與「走不到的是哪一個」還沒驗、
+  node 與 python 的 gzip 差 0.9% 沒人查過為什麼、
+  另外 22 個 a11y `--verbose` 數字還沒驗、搜尋結果的連結沒有任何無障礙檢查看過、
+  `tokens.css` 註解裡的對比值沒有東西在守、`domain-drift` 只看三份、
+  `rule-not-documented` 只守 id、`strictReferrerPolicy: false` 那條路沒有測試、
+  `verifiedAt` 仍然手寫、`field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、`docs/A11Y.md` 那三個瀏覽器量的數字沒人對、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `audit:privacy` 沒有 needles 時本機 exit 0、
+  我連續**九**次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 10 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `check:perf` 那句「全是 favicon」是寫死的描述、7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  28 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、`related` 單向、schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、`CoverImage` 的 `sizes` 用 40rem、
+  `ui.ts` 的 `en` 要不要必填、
+  4 條閒置豁免、本機 `ahead 92, behind 2`、
+  `npm run sync` 來源全失敗仍離開碼 0、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `VideoFacade` 一次都沒算繪過、`aria-live`／`role="status"` 沒有規則、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、`probe:served` 沒有自己的測試、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  真的開一次螢幕閱讀器聽、`CONTENT.md` 開始偏長（這一輪又長了 40 行）、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：4 — 平臺 feed 實測**
