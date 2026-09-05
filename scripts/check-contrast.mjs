@@ -217,6 +217,14 @@ function parseTokens(rawCss, selector, from = 0) {
   const fallbackDrift = [];
   /** @type {string[]} */
   const noFallback = [];
+  /**
+   * 這一段**實際判斷過幾個** light-dark() 宣告。
+   *
+   * 沒有這個數字的話，底下那個綠勾有兩種讀法：「17 個都對」與
+   * 「一個都沒有，所以沒有一個是錯的」—— 而它們印出來一模一樣。
+   * 見第 8 輪（第二十九圈）。
+   */
+  let lightDarkSeen = 0;
   for (const raw of noComments.split('\n')) {
     const m = /^\s*(--[\w-]+)\s*:\s*(.+);\s*$/.exec(raw);
     if (!m) continue;
@@ -237,13 +245,14 @@ function parseTokens(rawCss, selector, from = 0) {
     }
     if (comma < 0) continue;
     const lightValue = inner.slice(0, comma).trim();
+    lightDarkSeen++;
     if (!(name in single)) noFallback.push(name);
     else if (single[name] !== lightValue) {
       fallbackDrift.push({ name, fallback: single[name], light: lightValue });
     }
   }
 
-  return { light, dark, unusable, fallbackDrift, noFallback, end: close };
+  return { light, dark, unusable, fallbackDrift, noFallback, lightDarkSeen, end: close };
 }
 
 // ── 要檢查的組合 ─────────────────────────────────────────
@@ -776,9 +785,26 @@ async function* walkSurf(dir) {
  */
 {
   console.log('\n' + '─'.repeat(78));
-  const { fallbackDrift, noFallback } = tokens;
-  if (fallbackDrift.length === 0 && noFallback.length === 0) {
-    console.log('fallback：每個 light-dark() 都有一行單值 fallback，而且值一樣 ✓');
+  const { fallbackDrift, noFallback, lightDarkSeen } = tokens;
+  /*
+   * ── 綠勾要說出它數過幾個 ────────────────────────────
+   *
+   * 第 8 輪（第二十九圈）量到：這支腳本每一段都會報自己判斷過多少
+   * （未使用「65 個 token 裡有 5 個」、涵蓋率「前景 9 種、純色背景 7 種」、
+   * 列印「3 個設 color-scheme 的選擇器」、結尾「檢查 42 組」）——
+   * **只有 fallback 這一段寫「每個⋯⋯都有 ✓」，沒有數字。**
+   *
+   * 而「每個都有」在一個都沒有的時候也成立。tokens.css 要是哪天
+   * 改成不用 light-dark()（或這支的正則跟不上新寫法），這一行仍然打勾，
+   * 讀起來跟「17 個都檢查過了」完全一樣。
+   *
+   * 所以 0 不印勾 —— 照 `check:a11y` 那邊的說法，講明白它這次沒判斷過東西。
+   * 0 不算失敗（真的不用 light-dark() 是合法的決定），但不能算通過。
+   */
+  if (lightDarkSeen === 0) {
+    console.log('fallback：:root 裡一個 light-dark() 宣告都沒有 —— 這一段這次沒有判斷過任何東西');
+  } else if (fallbackDrift.length === 0 && noFallback.length === 0) {
+    console.log(`fallback：${lightDarkSeen} 個 light-dark() 都有一行單值 fallback，而且值一樣 ✓`);
   } else {
     /* 這一行是段落標題 —— test-contrast 的剖析器靠它切段（跟涵蓋率、列印一致） */
     console.log('fallback：兩行寫的淺色對不起來 —');
@@ -809,6 +835,8 @@ async function* walkSurf(dir) {
    * 不管它的值是什麼（那是配色決定），只要求「有東西接得住」。
    */
   const mixMissing = [];
+  /** 同一個理由：這一段實際看過幾處 `color-mix()`（見上面那段說明） */
+  let mixSeen = 0;
   for await (const file of walkSurf(resolve(ROOT, 'src'))) {
     const text = (await readFile(file, 'utf8')).replace(/\/\*[\s\S]*?\*\//g, ' ');
     /*
@@ -821,6 +849,7 @@ async function* walkSurf(dir) {
      */
     for (const m of text.matchAll(/([a-z-]+)\s*:\s*[^;{}]*color-mix\([^;{}]*/g)) {
       const prop = m[1];
+      mixSeen++;
       const before = text.slice(0, m.index);
       /** 前一個宣告：從上一個 `;` 或 `{` 往回再找一個 */
       const cut = Math.max(before.lastIndexOf(';'), before.lastIndexOf('{'));
@@ -837,8 +866,10 @@ async function* walkSurf(dir) {
       });
     }
   }
-  if (mixMissing.length === 0) {
-    console.log('　　　　每個 color-mix() 前面也都有一行接得住的宣告 ✓');
+  if (mixSeen === 0) {
+    console.log('　　　　src/ 裡一處 color-mix() 都沒有 —— 這一段這次沒有判斷過任何東西');
+  } else if (mixMissing.length === 0) {
+    console.log(`　　　　${mixSeen} 處 color-mix() 前面也都有一行接得住的宣告 ✓`);
   } else {
     console.log('fallback：color-mix() 沒有接得住的前一行 —');
     for (const m of mixMissing) {

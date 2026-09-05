@@ -656,7 +656,7 @@ await check(
       '         background: color-mix(in srgb, var(--c-bg) 88%, transparent); }\n' +
       '</style>\n',
   );
-  const ok5 = /每個 color-mix\(\) 前面也都有一行接得住的宣告/.test(withFallback);
+  const ok5 = !/color-mix\(\) 沒有接得住的前一行/.test(withFallback) && withFallbackCode === 0;
   if (!ok5) failed++;
   console.log(`  ${ok5 ? '✓' : 'X'} 前面有一行同屬性的宣告：放行（反向案例）`);
 
@@ -679,7 +679,89 @@ await check(
   if (!ok6) failed++;
   console.log(`  ${ok6 ? '✓' : 'X'} 前一行也是 color-mix 不算接得住`);
 
+  /*
+   * ── 7／8：那個綠勾要數得出來，而且數不到東西的時候不准打勾 ──
+   *
+   * 第 8 輪（第二十九圈）：這一行本來寫「每個 color-mix() 前面也都有
+   * 一行接得住的宣告 ✓」——「每個」在**一處都沒有**的時候也成立。
+   *
+   * 而那不是假想的：這個檔案上面 17 格 `check()` 只寫 `src/styles/`，
+   * 兩份 CSS 裡一個 color-mix() 都沒有，所以**那 17 格全都在印那個空勾**。
+   *
+   * 第 7 格釘住數字（不是「有提到數字」，是「數字剛好是這份 fixture 的 1」——
+   * 否則「一律印 99 處」也會過）。第 8 格是反向：沒東西可看時不准打勾。
+   */
+  const seen = /(\d+) 處 color-mix\(\) 前面也都有一行接得住的宣告 ✓/.exec(withFallback);
+  const ok7 = seen !== null && Number(seen[1]) === 1 && withFallbackCode === 0;
+  if (!ok7) failed++;
+  console.log(`  ${ok7 ? '✓' : 'X'} 放行時說得出看過幾處（這份 fixture 是 1 處）`);
+  if (!ok7) console.log('        ' + (seen ? `數到 ${seen[1]} 處，應該是 1` : '那一行根本沒有數字'));
+
+  const { out: noMix, code: noMixCode } = await runIn('<div class="bar">x</div>\n<style>\n  .bar { background: var(--c-bg); }\n</style>\n');
+  const ok8 = /一處 color-mix\(\) 都沒有 —— 這一段這次沒有判斷過任何東西/.test(noMix)
+    && !/color-mix\(\) 前面也都有一行接得住的宣告 ✓/.test(noMix)
+    && noMixCode === 0;
+  if (!ok8) failed++;
+  console.log(`  ${ok8 ? '✓' : 'X'} 一處 color-mix() 都沒有時：講明白，不打勾`);
+  if (!ok8) console.log('        ' + noMix.split('\n').filter((l) => /color-mix/.test(l)).join(' ｜ '));
+
   await rm(dir, { recursive: true, force: true });
+}
+
+/*
+ * ── light-dark() 那一半，同一件事 ──────────────────────
+ *
+ * 「每個 light-dark() 都有一行單值 fallback ✓」在 `:root` 裡一個
+ * light-dark() 都沒有的時候也成立 —— 而那正是這支腳本的正則跟不上
+ * 新寫法時會發生的事：顏色照樣算得出來（單值那行還在），
+ * fallback 這一段卻安靜地變成空的，還打一個勾。
+ */
+{
+  /** 把每一行 light-dark() 宣告拿掉，單值的 fallback 留著 —— 顏色仍然解得出來 */
+  const noLightDark = realTokens.replace(/^\s*--[\w-]+\s*:\s*light-dark\([^;]*;\s*$/gm, '');
+  /*
+   * 要用**跟腳本同一種數法**：先去掉註解，再只算宣告行。
+   * 直接數 `light-dark(` 會得到 28 —— 這個檔案的註解裡提了 7 次
+   * （其中一段講的就是 fallback 這件事）。第一版就是這樣寫的，
+   * 於是這一格說「應該是 28」而腳本說 21，看起來像腳本數錯了。
+   */
+  const declCount = (/** @type {string} */ css) =>
+    (css.replace(/\/\*[\s\S]*?\*\//g, '').match(/^\s*--[\w-]+\s*:\s*light-dark\(/gm) ?? []).length;
+  const before = declCount(realTokens);
+  const after = declCount(noLightDark);
+  if (before === 0) throw new Error('fixture 的來源就沒有 light-dark() 宣告 —— 這一格證明不了東西');
+  if (after !== 0) throw new Error(`fixture 沒清乾淨 —— 還剩 ${after} 行 light-dark() 宣告`);
+
+  const dir = await mkdtemp(join(tmpdir(), 'contrast-nold-'));
+  await mkdir(join(dir, 'src/styles'), { recursive: true });
+  await writeFile(join(dir, 'src/styles/tokens.css'), noLightDark, 'utf8');
+  await writeFile(join(dir, 'src/styles/global.css'), realGlobal, 'utf8');
+  let out = '';
+  try {
+    ({ stdout: out } = await run('node', [resolve(ROOT, 'scripts/check-contrast.mjs'), `--root=${dir}`]));
+  } catch (err) {
+    out = String(/** @type {{ stdout?: string }} */ (err)?.stdout ?? '');
+  }
+  await rm(dir, { recursive: true, force: true });
+
+  const okA = /一個 light-dark\(\) 宣告都沒有 —— 這一段這次沒有判斷過任何東西/.test(out)
+    && !/light-dark\(\) 都有一行單值 fallback/.test(out);
+  if (!okA) failed++;
+  console.log(`  ${okA ? '✓' : 'X'} 一個 light-dark() 都沒有時：講明白，不打勾`);
+  if (!okA) console.log('        ' + out.split('\n').filter((l) => /fallback/.test(l)).join(' ｜ '));
+
+  /* 反向：真的 tokens.css 要數得出 21 個（17 個 --c- ＋ 4 個陰影） */
+  let real = '';
+  try {
+    ({ stdout: real } = await run('node', [resolve(ROOT, 'scripts/check-contrast.mjs')]));
+  } catch (err) {
+    real = String(/** @type {{ stdout?: string }} */ (err)?.stdout ?? '');
+  }
+  const n = /(\d+) 個 light-dark\(\) 都有一行單值 fallback/.exec(real);
+  const okB = n !== null && Number(n[1]) === before;
+  if (!okB) failed++;
+  console.log(`  ${okB ? '✓' : 'X'} 綠燈時說得出數過幾個（tokens.css 是 ${before} 個）`);
+  if (!okB) console.log('        ' + (n ? `說 ${n[1]} 個，實際 ${before} 個` : '那一行根本沒有數字'));
 }
 
 /*
