@@ -46430,7 +46430,7 @@ fixture 帶的是**真的那份 schema**（照著讀進來，不是另寫一份�
   11 條預算裡 5 條的上限是挑的、另外四支檢查的嚴重度、
   `CoverImage` 的 `sizes` 用 40rem、
   `check.yml` 跑過 0 次、`ci:sim` 只有手動跑、`ui.ts` 的 `en` 要不要必填、
-  `reveal('email')` 沒有人呼叫、4 條閒置豁免、本機 `ahead 49, behind 1`、
+  `reveal('email')` 沒有人呼叫、4 條閒置豁免、本機 `ahead 77, behind 2`（這一輪重數過 —— 前幾輪那個 48／49 是抄來的，沒有人重量）、
   `npm run sync` 來源全失敗仍離開碼 0、排程遲了四小時只有一筆、
   `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
   `VideoFacade` 一次都沒算繪過、`aria-live`／`role="status"` 沒有規則、
