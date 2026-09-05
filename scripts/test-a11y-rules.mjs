@@ -21,7 +21,7 @@
  * 這支測試會列出「沒有測試案例」的規則並直接失敗 ——
  * 跟 test-privacy-rules.mjs 一樣的作法。
  */
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1077,6 +1077,41 @@ console.log('─'.repeat(64));
   if (!okVerbose) console.log('        ' + out.split('\n').filter(Boolean).slice(0, 6).join(' | '));
 
   await rm(dir, { recursive: true, force: true });
+}
+
+/*
+ * ── 文件說的規則數，跟關卡真的有幾條 ──────────
+ *
+ * 第 1 輪（第三十三圈）量到：`docs/A11Y.md` 開頭寫「有 26 條規則」，
+ * 而關卡印的是 28 —— 第 1 輪（第三十圈）加了兩條規則，文件沒跟著動。
+ *
+ * 那份文件不是旁註。`check-a11y.mjs` 綠燈時會說「怎麼做寫在 docs/A11Y.md」，
+ * **讀者是被關卡送過去的** —— 而他上一秒才在標題上看過 28 這個數字。
+ * 一打開就是 26。這一圈問「這是給誰用的、那個人真的會走到這裡嗎」，
+ * 這裡的答案是會，而且他走到的第一句就是錯的。
+ *
+ * 這一格不強迫文件寫數字，只要求**寫了就得是真的**。
+ * 「44 頁」沒有一起守：頁數要有真的 dist 才算得出來，這支測試跑的是暫存語料。
+ */
+{
+  const { stdout: listed } = await run('node', [resolve(ROOT, 'scripts/check-a11y.mjs'), '--list-rules']);
+  const actual = listed.trim().split('\n').filter(Boolean).length;
+  const doc = await readFile(resolve(ROOT, 'docs/A11Y.md'), 'utf8');
+  const claims = [...doc.matchAll(/(\d+) 條規則/g), ...doc.matchAll(/全部 (\d+) 條/g)].map((m) =>
+    Number(m[1]),
+  );
+
+  /* 一處都沒抓到的話，下面那格會「零個都對」地綠掉 —— 那正是要防的東西 */
+  const okFound = claims.length > 0;
+  if (!okFound) failed++;
+  console.log(`  ${okFound ? '\u2713' : 'X'} docs/A11Y.md 裡找得到規則數的說法（${claims.length} 處）`);
+  if (!okFound) console.log('        抓不到就等於沒在守 —— 文件換了寫法，這裡的樣式要跟著改。');
+
+  const wrong = [...new Set(claims.filter((n) => n !== actual))];
+  const okMatch = wrong.length === 0;
+  if (!okMatch) failed++;
+  console.log(`  ${okMatch ? '\u2713' : 'X'} 文件說的規則數就是 --list-rules 的條數（${actual} 條）`);
+  if (!okMatch) console.log(`        文件寫的是 ${wrong.join('、')}，實際 ${actual} 條。`);
 }
 
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
