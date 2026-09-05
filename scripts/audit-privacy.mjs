@@ -329,6 +329,119 @@ if (existsSync(resolve(ROOT, 'dist'))) {
   }
 
   /*
+   * ── 那一頁還承諾了別的事，也拿產出去對 ────────────────
+   *
+   * 第 5 輪（第三十七圈）加的。這一圈問「這一條規則，是誰要求的？
+   * 寫在哪份文件裡？」——隱私這一支的答案特別清楚：**要求它的是那一頁**，
+   * 而那一頁是給**讀者**看的，不是給維護者看的。
+   *
+   * 把 `/privacy` 的承諾逐條列出來，對照現在有沒有東西在守：
+   *
+   *   不用分析服務              analytics ✓
+   *   不用外部字型／CDN／圖片    google-fonts、third-party-cdn、built-third-party-request ✓
+   *   不嵌入自動載入的第三方     raw-youtube-embed ✓
+   *   localStorage 只有兩項      storage-not-documented、storage-documented-not-used ✓
+   *   宣告 CSP 只載自己的網域    csp-missing、csp-no-default-src、csp-unsafe-inline ✓
+   *   外部連結一律 noreferrer    external-link-rel-broken-promise ✓（第三十四圈加的）
+   *   **不使用 cookie**          —— 沒有人在守
+   *   **影片框用 youtube-nocookie.com**  —— 沒有人在守
+   *
+   * 兩條都是真的（今天 `document.cookie` 在產出裡 0 次、
+   * CSP 的 `frame-src` 就是 `https://www.youtube-nocookie.com`），
+   * 但**沒有東西讓它們保持為真**。
+   *
+   * 影片那一條特別值得守：`VideoFacade` 到今天**一次都沒有算繪過**
+   * （站上還沒有影片），所以那段組網址的程式沒有人跑過。
+   * 真正擋著的是 CSP 的 `frame-src` —— 而 CSP 現在沒有任何一條規則
+   * 拿它跟那一頁的承諾對。
+   */
+  /** 產出裡的 HTML —— 跟底下那個迴圈走同一份語料 */
+  const htmlFiles = [];
+  for await (const f of walk(resolve(ROOT, 'dist'))) if (f.endsWith('.html')) htmlFiles.push(f);
+  const promisePage = existsSync(promiseFile) ? await readFile(promiseFile, 'utf8') : '';
+  /** 那一頁的**可見文字**（承諾寫在文字裡，不在標籤裡） */
+  const promiseText = promisePage
+    .replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, '')
+    .replace(/<[^>]+>/g, ' ');
+  saw('cookie-promised-none', 0);
+  saw('csp-frame-host-unpromised', 0);
+  if (promisePage === '') {
+    notices.push('讀不到 dist/privacy/index.html —— cookie 與影片框那兩條承諾沒有對過。');
+  } else {
+    /*
+     * 一、那一頁說「不使用 cookie」。產出裡任何一處寫 cookie 都是打臉。
+     * 讀的是**設值**那一種（`document.cookie = …`）—— 只是讀取不會建立 cookie。
+     */
+    const saysNoCookie = /不使用\s*cookie/i.test(promiseText);
+    if (saysNoCookie) {
+      for (const file of htmlFiles) {
+        saw('cookie-promised-none', 1);
+        const text = await readFile(file, 'utf8');
+        for (const m of text.matchAll(/document\s*\.\s*cookie\s*=/g)) {
+          findings.push({
+            rel: relative(ROOT, file),
+            lineNo: text.slice(0, m.index).split('\n').length,
+            line: m[0],
+            matched: 'document.cookie',
+            rule: {
+              id: 'cookie-promised-none',
+              level: 'error',
+              why:
+                '/privacy 對讀者說「不使用 cookie」，而這裡在設一個。' +
+                '　改法：那一頁是承諾，不是描述 —— 要嘛不要設，要嘛先改那一頁。',
+            },
+          });
+        }
+      }
+    }
+
+    /*
+     * 二、那一頁點名影片框用哪個網域。CSP 的 `frame-src` 允許的
+     * **每一個**主機都要是那一頁提過的，不然讀者被承諾的跟瀏覽器允許的不一樣。
+     */
+    /*
+     * 兩段就算一個網域（`youtube-nocookie.com`）。第一版寫成「至少三段」，
+     * 於是那一頁點名的網域一個都沒抽到，44 頁全部誤報。
+     */
+    const named = new Set(
+      [...promiseText.matchAll(/[a-z0-9-]+(?:\.[a-z0-9-]+)+/gi)]
+        .map((m) => m[0].toLowerCase())
+        .filter((h) => /\.[a-z]{2,}$/.test(h)),
+    );
+    for (const file of htmlFiles) {
+      const text = await readFile(file, 'utf8');
+      const csp = /frame-src([^;"']*)/i.exec(text);
+      if (!csp) continue;
+      saw('csp-frame-host-unpromised', 1);
+      for (const token of csp[1].split(/\s+/).filter(Boolean)) {
+        if (token === "'self'" || token === "'none'" || token.startsWith("'")) continue;
+        let host;
+        try {
+          host = new URL(token.includes('//') ? token : `https://${token}`).host.toLowerCase();
+        } catch {
+          continue;
+        }
+        const bare = host.replace(/^www\./, '');
+        if ([...named].some((n) => n === host || n === bare || host.endsWith(`.${n}`))) continue;
+        findings.push({
+          rel: relative(ROOT, file),
+          lineNo: text.slice(0, csp.index).split('\n').length,
+          line: `frame-src ⋯ ${token}`,
+          matched: host,
+          rule: {
+            id: 'csp-frame-host-unpromised',
+            level: 'error',
+            why:
+              `CSP 允許把 ${host} 放進 iframe，而 /privacy 沒有跟讀者提過這個網域。` +
+              '　改法：那一頁點名了影片框用哪個網域 —— 兩邊要一樣。' +
+              '真的要多開一個的話，先去那一頁把它寫出來。',
+          },
+        });
+      }
+    }
+  }
+
+  /*
    * `url(https://…)` 與 `@import` —— CSS 裡「會自己發出請求」的兩種寫法。
    * 放在這裡而不是 privacy-rules.mjs，是因為它只對**產出**成立：
    * 原始碼那一端已經有 google-fonts／third-party-cdn 在守。

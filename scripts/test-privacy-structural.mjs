@@ -198,6 +198,40 @@ const CASES = {
     },
   },
   /*
+   * ── 那一頁對讀者承諾的事，要拿產出去對 ────────────────
+   *
+   * 第 5 輪（第三十七圈）：把 `/privacy` 的承諾逐條列出來之後，
+   * 有兩條**沒有人在守** —— 「不使用 cookie」與「影片框用 youtube-nocookie.com」。
+   * 兩條當時都是真的，但沒有東西讓它們保持為真。
+   *
+   * 影片那一條特別值得守：`VideoFacade` 到今天一次都沒有算繪過，
+   * 真正擋著的是 CSP 的 `frame-src`，而那時沒有規則拿它跟承諾對。
+   */
+  'cookie-promised-none': {
+    files: {
+      'dist/privacy/index.html':
+        '<!DOCTYPE html><html lang="zh"><head>'
+        + '<meta http-equiv="content-security-policy" content="default-src \'none\'; frame-src https://www.youtube-nocookie.com">'
+        + '<title>隱私</title></head><body><p>不使用 cookie。影片框用的是 youtube-nocookie.com。</p></body></html>',
+      'dist/index.html':
+        '<!DOCTYPE html><html lang="zh"><head>'
+        + '<meta http-equiv="content-security-policy" content="default-src \'none\'; frame-src https://www.youtube-nocookie.com">'
+        + '<title>x</title></head><body><script>document.cookie = "a=1";</script></body></html>',
+    },
+  },
+  'csp-frame-host-unpromised': {
+    files: {
+      'dist/privacy/index.html':
+        '<!DOCTYPE html><html lang="zh"><head>'
+        + '<meta http-equiv="content-security-policy" content="default-src \'none\'; frame-src https://www.youtube-nocookie.com">'
+        + '<title>隱私</title></head><body><p>不使用 cookie。影片框用的是 youtube-nocookie.com。</p></body></html>',
+      'dist/index.html':
+        '<!DOCTYPE html><html lang="zh"><head>'
+        + '<meta http-equiv="content-security-policy" content="default-src \'none\'; frame-src https://player.vimeo.com">'
+        + '<title>x</title></head><body>x</body></html>',
+    },
+  },
+  /*
    * 掃描目錄裡出現一個沒人認得的副檔名。
    *
    * 第 5 輪（第十圈）的實測：同一組探針放進 `public/site.webmanifest`
