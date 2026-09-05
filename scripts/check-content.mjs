@@ -890,6 +890,73 @@ const RULES = [
           '      全站的詩會變成橫排，而其他檢查看不出來。\n' +
           '      改法：看 src/components/content/PoemBlock.astro —— 直排那一段是不是被改掉或刪掉了。',
       });
+    } else {
+      /*
+       * ── 那條規則「在」，可是有沒有被無條件蓋掉 ──────────
+       *
+       * 上面那一條問的是「宣告還在不在」。第 8 輪（第二十七圈）量到
+       * 它的補集：**規則可以在，而且同時被蓋掉**。
+       *
+       * 實測：把窄螢幕那個 `@media (max-width: 48rem)` 的方向寫反
+       * （改成 `min-width: 0rem`，一個看起來像在放寬的改動），
+       * 產出的 CSS 裡 `vertical-rl` **仍然在**，`npm run build` 成功，
+       * `check:content` **exit 0** —— 而每一台裝置上的詩都變成橫排。
+       *
+       * 判準：任何打在 `.poem__original` 上的
+       * `writing-mode: horizontal-tb !important`，都必須關在一個
+       * **從上方設限**的媒體查詢裡（`max-width` / 壓縮後的 `width<=`），
+       * 或者是 `print`。
+       *
+       * 「有 width 就算數」不夠 —— 那是我第一版的判準，而它放行了
+       * `min-width: 0`（壓縮成 `(width>=0)`）。**一個永遠成立的條件不是條件。**
+       * 判準跟它要抓的東西犯了同一個錯，這件事本身值得留在這裡。
+       */
+      /** 這個位置外面包著哪幾層 @media（由內往外） */
+      const enclosingMedia = (/** @type {string} */ text, /** @type {number} */ at) => {
+        const out = [];
+        let depth = 0;
+        for (let i = at; i >= 0; i--) {
+          const c = text[i];
+          if (c === '}') depth++;
+          else if (c === '{') {
+            if (depth === 0) {
+              const head = text.slice(Math.max(0, i - 300), i);
+              const m = /@media([^{}]*)$/.exec(head);
+              if (m) out.push(m[1].trim());
+            } else depth--;
+          }
+        }
+        return out;
+      };
+
+      for (const m of css.matchAll(/writing-mode\s*:\s*horizontal-tb\s*!important/g)) {
+        const at = m.index ?? 0;
+        const blockStart = css.lastIndexOf('{', at);
+        /*
+         * 只看打在詩的原文上的那些 —— 別的元素本來就可以是橫排。
+         *
+         * 選擇器要取**這個區塊自己的那一段**：前一個 `}` 或 `{` 之後到這裡。
+         * 第一版寫「往回看 400 個字元」，結果撈到了前一個區塊的選擇器 ——
+         * 於是 `.poem__original{…vertical-rl}.some-note{…horizontal-tb!important}`
+         * 會被判成「打在詩上」。壓縮過的 CSS 沒有換行，400 個字元裡有好幾條規則。
+         */
+        const selStart = Math.max(css.lastIndexOf('}', blockStart), css.lastIndexOf('{', blockStart - 1));
+        if (!/poem__original/.test(css.slice(selStart + 1, blockStart))) continue;
+        const medias = enclosingMedia(css, at);
+        const guarded = medias.some((q) => /max-width|width\s*<=|width\s*<[^=]|print/.test(q));
+        if (guarded) continue;
+        problems.push({
+          file: 'dist/（全站 CSS）',
+          id: 'vertical-lost',
+          msg:
+            '`writing-mode: vertical-rl` 還在，但有一條 `horizontal-tb !important` ' +
+            `打在 .poem__original 上，而它**沒有關在從上方設限的媒體查詢裡**` +
+            `${medias.length ? `（外層是 ${medias.map((q) => `\`${q}\``).join('、')}）` : '（完全不在任何 @media 裡）'}。\n` +
+            '      也就是說每一台裝置上的詩都是橫排 —— 而 vertical-rl 還在，前一條看不出來。\n' +
+            '      改法：窄螢幕改橫排要用 `max-width`（壓縮後是 `width<=`）。' +
+            '`min-width: 0` 這種永遠成立的條件不是條件。',
+        });
+      }
     }
   }
 }

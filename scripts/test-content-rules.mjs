@@ -272,6 +272,68 @@ const CASES = {
       '_astro/x.css': '.poem__original{writing-mode:vertical-rl}\n',
     },
   },
+  /*
+   * ── 宣告還在，但被無條件蓋掉 ──────────
+   *
+   * 第 8 輪（第二十七圈）量到的：把窄螢幕那個 `max-width: 48rem`
+   * 寫成 `min-width: 0rem`（一個看起來像在放寬的改動），
+   * `vertical-rl` **仍然在**、`build` 成功、`check:content` **exit 0** ——
+   * 而每一台裝置上的詩都變成橫排。
+   *
+   * 上面那一格守的是「宣告在不在」，這一格守的是它的補集。
+   */
+  'vertical-lost（宣告還在但被無條件蓋掉）': {
+    expect: 'vertical-lost',
+    content: { 'poems/wu-yi-xiang.md': poem() },
+    dist: {
+      'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
+      '_astro/x.css':
+        '.poem__original{writing-mode:vertical-rl}' +
+        '@media (width>=0){.poem__original{writing-mode:horizontal-tb!important}}\n',
+    },
+  },
+
+  /*
+   * 反向：關在**從上方設限**的媒體查詢裡就不該報 —— 那是真的站在做的事。
+   * 少了這一格，把判準改成「只要有 horizontal-tb!important 就報」會靜靜通過，
+   * 而真正的站會被誤報成壞的。
+   */
+  'vertical-lost（窄螢幕改橫排是正常的）': {
+    expect: 'no-title',
+    content: {
+      'poems/wu-yi-xiang.md': poem(),
+      'poems/broken.md': '---\nlang: zh-TW\n---\n沒有 title。\n',
+    },
+    dist: {
+      'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
+      '_astro/x.css':
+        '.poem__original{writing-mode:vertical-rl}' +
+        '@media (width<=48rem){.poem__original{writing-mode:horizontal-tb!important}}\n',
+    },
+  },
+
+  /*
+   * 反向：打在**別的元素**上的 horizontal-tb!important 不關這條的事。
+   *
+   * 突變掃描抓到的語料缺口：把選擇器那道濾網拿掉，測試照樣全綠 ——
+   * 因為沒有一格是「別的元素上有無條件的 horizontal-tb!important」。
+   * 而真的站上一定會有那種東西（英文頁、註解區⋯⋯），
+   * 少了濾網會把正常的站報成壞的。
+   */
+  'vertical-lost（別的元素橫排不關這條的事）': {
+    expect: 'no-title',
+    content: {
+      'poems/wu-yi-xiang.md': poem(),
+      'poems/broken.md': '---\nlang: zh-TW\n---\n沒有 title。\n',
+    },
+    dist: {
+      'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
+      '_astro/x.css':
+        '.poem__original{writing-mode:vertical-rl}' +
+        '.some-note{writing-mode:horizontal-tb!important}\n',
+    },
+  },
+
   /* 反向：每一首都寫了 vertical: false 的話，這條沒有主體 */
   'vertical-lost（全部橫排就沒東西可守）': {
     expect: 'no-title',
