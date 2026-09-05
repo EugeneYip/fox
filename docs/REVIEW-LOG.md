@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 46,400 行、2.5 MB、286 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 46,600 行、2.5 MB、287 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -46446,4 +46446,162 @@ fixture 帶的是**真的那份 schema**（照著讀進來，不是另寫一份�
   workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：5 — 隱私與安全**
+
+### 2026-09-06 — 第 5 輪（第三十六圈）：隱私與安全
+
+**第三十六圈問：這道檢查的邊界外面是什麼？那裡現在有幾個？**
+判準：**這一支說得出「它看不到什麼」嗎？而那些東西現在有幾個？**
+
+#### 1. 先數這一支自己的邊界
+
+`audit:privacy` 這一輪的自述：**掃了 178 個檔案（9 個豁免）、28 條規則、
+0 條閒置**。副檔名那一格早就有人守（`unscanned-file-type`，第十圈補的），
+目錄那一格也對得上 —— 版控 193 個檔案，`SCAN_DIRS` 之外只有
+`.claude/launch.json` 一個。
+
+`--verbose` 裡有一個 16 的差：`possible-secret`／`email` 判斷 178 個，
+而**四條管第三方資源的規則只判斷 162 個**。查了原因：那四條標了
+`aboutLoading`，會跳過非 `public/` 的 `.md`。這是對的 ——
+一份文件**提到** `fonts.googleapis.com` 並不會發出請求
+（`CLAUDE.md` 與 `docs/PRIVACY.md` 就是在叫人別加它）。
+版控裡非 public 的 md/mdx 有 17 個，其中 1 個（`docs/PRIVACY.md`）本來就豁免，
+**16 —— 一個不差**。這一格沒有問題。
+
+#### 2. 真正的邊界在另一邊：讀者拿到的不是原始碼
+
+前面每一條都在看 `src/`。而讀者下載的是 `dist/`。
+那一端只有一條規則：`built-third-party-request`。
+
+量它：
+
+| | |
+|---|---|
+| dist 的檔案 | **61 個** |
+| 它讀的 | **44 個**（只有 `.html`） |
+| 一個字都沒讀的 | **17 個**（png 5、xml 4、css 2、ico、json、webmanifest、txt、svg） |
+| 它認得的寫法 | 只有標籤屬性（`src`／`data`／`<link href>`） |
+
+而那 44 個 HTML 裡有 **82 個內嵌 `<style>` 區塊** ——
+這個站的樣式是內嵌的（`inlineStylesheets: 'auto'`），
+所以「看得到標籤、看不到樣式」等於**漏掉讀者真的會下載的那一半**。
+
+#### 3. 實測，不是推論
+
+在 `dist/_astro/*.css` 最前面加一行 ——
+也就是**每一個讀者都會下載到的那份 CSS**：
+
+```css
+@import url("https://fonts.googleapis.com/css2?family=Noto+Serif+TC");
+```
+
+然後跑全部七支檢查：
+
+| 檢查 | 說了什麼 |
+|---|---|
+| `audit:privacy` | 必須修正 **0** |
+| `check:perf` | 全部在預算內 |
+| `check:a11y` | 沒有發現問題 |
+| `check:content` | 離開碼 0 |
+| `check:copy` | 離開碼 0 |
+| `check:links` | 離開碼 0 |
+
+**這個專案的第一條硬性限制，在產出那一端一個字都沒有人說。**
+
+#### 4. 補上四條路
+
+- 讀 dist 裡**會出貨的純文字**（css／webmanifest／json／txt／svg），不只 html
+- 認 `url()` 與 `@import` —— 不管在 `.css` 裡還是內嵌的 `<style>` 裡
+  （整份一起掃，不先切 `<style>`：那樣會漏掉 `style="background:url(⋯)"`）
+- 認 webmanifest 的 `icons[].src` —— 瀏覽器自己會去抓，而它是 JSON，
+  上面每一個樣式都認不出來
+- 認 `//host` 這種通訊協定相對網址 —— 照樣會發請求，而 `new URL()` 收不下它，
+  原本會**安靜地跳過**
+
+二進位（png／ico）與 feed（xml）刻意不讀：RSS 與 sitemap 裡的外部網址是
+**內容**（她的影片連結），不是請求。
+
+`test-privacy-structural` 補 4 格，各釘住一條當時漏掉的路。
+反向也測了：把 `BUILT_TEXT` 改回只剩 `.html`（也就是原本的樣子）→ 紅 3 格；
+把 `CSS_URL` 拿掉 → 紅 2 格。
+
+#### 5. 我自己寫了一個假的 0
+
+第一版的邊界說明印的是「跳過 0 個」。
+原因是 `walk()` **早就用 `SCAN_EXT` 篩過了** ——
+在那個迴圈裡數「跳過幾個」永遠是 0。
+
+那個 0 讀起來像「全部都讀了」，比不說更糟。改成真的另外走一次 `dist`
+（不經過篩子）才數得到，現在說的是「讀了 **51／61**，
+沒讀的 10 個：`.png` 5、`.xml` 4、`.ico` 1」。
+
+（順帶：中途我用 `grep errors` 檢查型別關卡，而它印的是
+「1 **error**」—— 單數配不到，於是那次紅燈在我眼裡是綠的。
+`verify:all` 下一次就擋下來了。）
+
+| | 之前 | 現在 |
+|---|---|---|
+| 產出讀幾個檔案 | 44／61 | **51／61**，而且說得出沒讀的是哪 10 個 |
+| 內嵌 `<style>` 的 `url()` | 看不到（82 個區塊） | 看得到 |
+| dist 的 `.css` | 完全沒讀 | 讀 |
+| webmanifest 的圖示 | 認不出來 | 認 |
+| `//host` | 安靜跳過 | 認 |
+| 結構測試 | 1 格 | 5 格 |
+
+`verify:all` 六道全綠、`test:tools` 815 格全綠、`ci:sim` 在 HEAD 上全綠
+（動到 `test:units` 那條鏈所以照規矩跑了）。
+
+### 待辦（不屬於這一輪）
+
+- **feed（`.xml`）現在是刻意不掃的，而那是判斷不是事實。**
+  哪天 RSS 裡出現 `<img src="外部">`（摘要帶 HTML 的話會），
+  那就真的是請求了（→ 5 隱私與安全）
+- **`dist` 的 `.js` 沒有出現在這次的語料裡**（這個站現在 0 個 script src），
+  真的有了之後，執行期組出來的網址仍然是看不到的（→ 5 隱私與安全）
+- **`reveal('email')` 仍然沒有人呼叫**（這一輪它照樣是唯一的「請確認」）
+- 上一輪與更早的都還在（沒有 href 的 `<a>` 沒有規則在看、
+  `note` 那種「合法但 0 筆」沒有對應警告、`validate-schema` 只實作 8 個關鍵字、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  `<details>`／`<summary>` 各 44 個沒有規則在看、`<time>` 82 個沒人看 `datetime`、
+  涵蓋範圍算不出來要讓規則自己宣告、`check:workflows` 的數字沒驗、
+  「掃了 61 個檔案、13713 行」沒驗、「身分規則：8 個值」不能印內容、
+  `--patterns` 那 11 個平臺的「N 筆」沒驗、
+  `SCHEMA_STRUCTURAL` 與「走不到的是哪一個」還沒驗、
+  node 與 python 的 gzip 差 0.9% 沒人查過為什麼、
+  另外 22 個 a11y `--verbose` 數字還沒驗、搜尋結果的連結沒有任何無障礙檢查看過、
+  `tokens.css` 註解裡的對比值沒有東西在守、`domain-drift` 只看三份、
+  `rule-not-documented` 只守 id、`strictReferrerPolicy: false` 那條路沒有測試、
+  `verifiedAt` 仍然手寫、`field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、`docs/A11Y.md` 那三個瀏覽器量的數字沒人對、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `audit:privacy` 沒有 needles 時本機 exit 0、
+  我連續七次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  `test-ci-sim` 那一格在有負載時會紅、要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 10 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `check:perf` 那句「全是 favicon」是寫死的描述、7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  28 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、`related` 單向、schema 的必填／選填沒被選過、
+  11 條預算裡 5 條的上限是挑的、另外四支檢查的嚴重度、
+  `CoverImage` 的 `sizes` 用 40rem、
+  `check.yml` 跑過 0 次、`ci:sim` 只有手動跑、`ui.ts` 的 `en` 要不要必填、
+  4 條閒置豁免、本機 `ahead 79, behind 2`、
+  `npm run sync` 來源全失敗仍離開碼 0、排程遲了四小時只有一筆、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `VideoFacade` 一次都沒算繪過、`aria-live`／`role="status"` 沒有規則、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、`probe:served` 沒有自己的測試、
+  `--real-install` 成功路徑沒測試、視覺層 24 處實測沒重驗、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  真的開一次螢幕閱讀器聽、`CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：6 — 文案與語氣**
