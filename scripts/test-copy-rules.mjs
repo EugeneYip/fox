@@ -637,6 +637,63 @@ for (const [name, { hit, miss, expect, coFires }] of Object.entries(CASES)) {
    * 這幾格守的是「說出來的數字是真的」。
    */
   /*
+   * ── 那個分母，跟靠它算出來的每一個百分比 ────────────
+   *
+   * 第 6 輪（第三十二圈）實測：把「含漢字的 N 行」一律印成 0 —— **全綠**；
+   * 把 `--verbose` 的百分比一律印成 99% —— **也全綠**。
+   *
+   * 那兩個數字不是裝飾。第二十一圈加 `subject`、第二十九圈加百分比，
+   * 為的都是同一件事：**一條判斷過 599 行的規則，跟判斷過 6 行的，
+   * 綠燈的意思完全不一樣。** 分母錯了，那整套說法就一起錯，
+   * 而在這之前沒有任何東西會說話。
+   *
+   * 語料是可以手算的：3 行含漢字（其中一行同時有漢字與拉丁字母，
+   * 所以 `cjk-latin-space` 的主體剛好是 1）。
+   */
+  {
+    const dir = await mkdtemp(join(tmpdir(), 'copy-pct-'));
+    await mkdir(join(dir, 'dist'), { recursive: true });
+    await writeFile(
+      join(dir, 'dist/index.html'),
+      '<!DOCTYPE html><html lang="zh-Hant-TW"><head><title>x</title></head>\n' +
+        '<body>\n<p>第一行有漢字</p>\n<p>second line ascii only</p>\n' +
+        '<p>這是用 Astro 建的站</p>\n<p>第四行也有漢字</p>\n</body></html>\n',
+      'utf8',
+    );
+    const out = await check(dir, ['--verbose']);
+
+    const scope = /掃了 \d+ 個檔案、\d+ 行（其中含漢字的 (\d+) 行）/.exec(out);
+    const okCjk = scope !== null && Number(scope[1]) === 3;
+    if (!okCjk) failed++;
+    console.log(`  ${okCjk ? '✓' : 'X'} 含漢字的行數是真的數出來的（這份語料剛好 3 行）`);
+    if (!okCjk) console.log('        ' + (out.split('\n').find((l) => l.includes('掃了')) ?? '（範圍那一行沒印）'));
+
+    /*
+     * 百分比要跟**印出來的**主體數與分母對得起來 —— 自己算一次再比。
+     * 只驗「有印百分比」的話，「一律印 99%」會過。
+     */
+    const rows = [...out.matchAll(/^\s*(\d+)\s+([a-z-]+)　佔含漢字的行 ([\d.]+)%$/gm)];
+    const base = scope ? Number(scope[1]) : 0;
+    const wrong = rows.filter(([, n, , pct]) => {
+      const want = Math.round((Number(n) / (base || 1)) * 1000) / 10;
+      return Math.abs(want - Number(pct)) > 0.05;
+    });
+    const okPct = rows.length > 0 && base > 0 && wrong.length === 0;
+    if (!okPct) failed++;
+    console.log(`  ${okPct ? '✓' : 'X'} 每一條的百分比都等於「主體數 ÷ 含漢字的行數」`);
+    if (!okPct) {
+      console.log(
+        '        ' +
+          (rows.length === 0
+            ? '一列百分比都沒抓到 —— 這一格等於沒驗'
+            : wrong.map(([, n, id, pct]) => `${id}：印 ${pct}%，${n}／${base} 應該是 ${Math.round((Number(n) / base) * 1000) / 10}%`).join(' ｜ ')),
+      );
+    }
+
+    await rm(dir, { recursive: true, force: true });
+  }
+
+  /*
    * ── 哪幾條要寫進文件，是一個決定 ────────────────────
    *
    * 第 6 輪（第三十一圈）量到：排除清單原本是拿去過濾 `RULES` 的，
@@ -1038,7 +1095,7 @@ async function build(files) {
  * 輸出仍然在 err.stdout 裡。
  * @param {string} dir
  */
-async function check(dir) {
+async function check(dir, /** @type {string[]} */ extra = []) {
   try {
     /*
      * 旗標要跟 package.json 的 check:copy 一致。
@@ -1050,6 +1107,7 @@ async function check(dir) {
       '--no-warnings=ExperimentalWarning',
       resolve(ROOT, 'scripts/check-copy.mjs'),
       `--root=${dir}`,
+      ...extra,
     ]);
     return stdout;
   } catch (err) {
