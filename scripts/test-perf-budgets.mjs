@@ -540,6 +540,64 @@ console.log('─'.repeat(64));
   await rm(dir, { recursive: true, force: true });
 }
 
+/*
+ * ── 「這條預算量的是空的東西」那句話要跟著數字走 ──────
+ *
+ * 第 2 輪（第三十二圈）量到的：那一段整段**沒有任何測試**，
+ * 而它的條件是 `scripts === 0 || imgs === 0`，配一句斷定兩項的話。
+ * 實測一份有兩張圖、沒有樣式表的假站，印出來是
+ *
+ *     stylesheet 0 個、script src 0 個、img src 2 個。
+ *     三項裡只有 stylesheet 數得到東西，另外兩項從來沒有過主體。
+ *
+ * 兩個半句都跟它上一行的數字相反 —— 那句話是照著今天這個站寫死的。
+ *
+ * 這四格用四種不同的組合，因為**只放一種的話，寫死的那句話照樣會過**。
+ */
+{
+  const CSS_LINK = '<link rel="stylesheet" href="/a.css">';
+  /**
+   * @param {string} label
+   * @param {{ head?: string, body?: string }} parts
+   * @param {(out: string) => boolean} want
+   */
+  const withBody = async (label, parts, want) => {
+    const dir = await mkdtemp(join(tmpdir(), 'perf-bare-'));
+    await writeFile(join(dir, 'index.html'), page(parts), 'utf8');
+    const out = await check(dir);
+    const ok = want(out);
+    if (!ok) failed++;
+    console.log(`  ${ok ? '✓' : 'X'} ${label}`);
+    if (!ok) {
+      const said = out.split('\n').filter((l) => /單頁請求數 ——|一個主體都沒有|數得到東西的只有|什麼都沒量到/.test(l));
+      console.log('        ' + (said.join(' ｜ ') || '（那一段完全沒印）'));
+    }
+    await rm(dir, { recursive: true, force: true });
+  };
+
+  await withBody(
+    '有圖沒樣式表：點名 stylesheet 與 script src，不是照抄「只有 stylesheet」',
+    { body: '<p>小</p><img src="/a.png" alt="a">' },
+    (out) => /2 項這次一個主體都沒有：stylesheet、script src/.test(out) && /數得到東西的只有 img src/.test(out),
+  );
+  await withBody(
+    '有樣式表沒圖沒 script：點名 script src 與 img src（真站的形狀）',
+    { head: CSS_LINK, body: '<p>小</p>' },
+    (out) => /2 項這次一個主體都沒有：script src、img src/.test(out) && /數得到東西的只有 stylesheet/.test(out),
+  );
+  await withBody(
+    '三項都沒有：明講「什麼都沒量到」',
+    { body: '<p>小</p>' },
+    (out) => /3 項這次一個主體都沒有：stylesheet、script src、img src/.test(out) && /什麼都沒量到/.test(out),
+  );
+  /* 反向：三項都有東西的時候，整段不該出現 */
+  await withBody(
+    '三項都有東西：整段不印（反向案例）',
+    { head: CSS_LINK, body: '<p>小</p><img src="/a.png" alt="a"><script src="/a.js"></script>' },
+    (out) => !/一個主體都沒有/.test(out),
+  );
+}
+
 // 乾淨的一份：一頁小 HTML，什麼都不該超標
 {
   const dir = await mkdtemp(join(tmpdir(), 'perf-clean-'));

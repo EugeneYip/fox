@@ -821,12 +821,41 @@ if (images.length > 0 && rendered.length === 0) {
       '      不隨內容成長。綠是因為還沒有內容圖，不是因為內容圖有節制。',
   );
 }
-if (reqTotals.scripts === 0 || reqTotals.imgs === 0) {
-  empty.push(
-    `單頁請求數 —— ${html.length} 頁合計：stylesheet ${reqTotals.links} 個、` +
-      `script src ${reqTotals.scripts} 個、img src ${reqTotals.imgs} 個。\n` +
-      '      三項裡只有 stylesheet 數得到東西，另外兩項從來沒有過主體。',
-  );
+/*
+ * ── 這句話要跟著它上一行的數字走 ────────────────────
+ *
+ * 原本寫死一句「三項裡只有 stylesheet 數得到東西，另外兩項從來沒有過主體」，
+ * 而條件是 `scripts === 0 || imgs === 0` —— **一個 OR，配一句斷定兩個的話**。
+ *
+ * 第 2 輪（第三十二圈）實測：一份有兩張圖、沒有樣式表的假站，印出來是
+ *
+ *     stylesheet 0 個、script src 0 個、img src 2 個。
+ *     三項裡只有 stylesheet 數得到東西，另外兩項從來沒有過主體。
+ *
+ * **兩個半句都跟它上一行的數字相反。** 那句話是照著「今天的這個站」
+ * 寫死的，而寫死的描述遇到別的狀態就會說謊。
+ *
+ * 改成從數字推：哪幾項是 0 就點名哪幾項。
+ */
+{
+  const parts = [
+    { name: 'stylesheet', n: reqTotals.links },
+    { name: 'script src', n: reqTotals.scripts },
+    { name: 'img src', n: reqTotals.imgs },
+  ];
+  const bare = parts.filter((p) => p.n === 0);
+  if (bare.length > 0) {
+    const live = parts.filter((p) => p.n > 0);
+    empty.push(
+      `單頁請求數 —— ${html.length} 頁合計：` +
+        parts.map((p) => `${p.name} ${p.n} 個`).join('、') +
+        '。\n' +
+        `      三項裡 ${bare.length} 項這次一個主體都沒有：${bare.map((p) => p.name).join('、')}。\n` +
+        (live.length > 0
+          ? `      數得到東西的只有 ${live.map((p) => p.name).join('、')} —— 這條預算的綠燈只涵蓋那些。`
+          : '      也就是說這條預算這次**什麼都沒量到**，綠燈不代表請求數有節制。'),
+    );
+  }
 }
 if (skipped.length > 0) {
   console.log(`\n  這次少了 ${skipped.length} 條預算（東西不在，所以沒得量）：`);
