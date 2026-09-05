@@ -19,11 +19,11 @@
  */
 
 /**
- * @param {readonly {id: string, confidence?: string, feedTemplate?: string, probeHandle?: string}[]} platforms
- * @param {{ probed: readonly string[], failed: readonly string[], flaky: ReadonlySet<string> }} run
+ * @param {readonly {id: string, confidence?: string, feedTemplate?: string, probeHandle?: string, verifiedAt?: string}[]} platforms
+ * @param {{ probed: readonly string[], failed: readonly string[], flaky: ReadonlySet<string>, today?: string }} run
  * @returns {{ lines: string[], mismatches: string[] }}
  */
-export function confidenceReport(platforms, { probed, failed, flaky }) {
+export function confidenceReport(platforms, { probed, failed, flaky, today }) {
   const probedSet = new Set(probed);
   const failedSet = new Set(failed);
 
@@ -51,6 +51,36 @@ export function confidenceReport(platforms, { probed, failed, flaky }) {
       line += `　這一輪真的打過 ${hit.length} 個，全部通過`;
     } else {
       line += `　這一輪真的打過 ${hit.length} 個，其中 ${bad.length} 個失敗`;
+    }
+    /*
+     * ── 這個宣稱是什麼時候成立的 ──────────
+     *
+     * 第 4 輪（第二十八圈）問「這件事是誰決定的，那個人還在嗎」。
+     * `confidence: 'verified'` 的意思是「某一次有人跑了 --patterns 看到綠燈」——
+     * 而目錄裡**沒有任何欄位記那是哪一天**。
+     *
+     * git 也答不出來：2026-09-04 為了隱私把 213 個 commit 壓成 1 個，
+     * 每一行都 blame 到那一天。壓縮是對的決定，但它有一個沒人記下來的代價 ——
+     * 「這一行是什麼時候寫的」對整個 repo 都不再答得出來。
+     *
+     * 所以日期改成寫在資料裡（`verifiedAt`）。
+     * 沒寫的話這裡會點名 —— 一個沒有日期的「已驗證」，跟沒驗證的差別只在語氣。
+     */
+    if (conf === 'verified') {
+      const undated = list.filter((p) => !p.verifiedAt).map((p) => p.id);
+      const dates = list.map((p) => p.verifiedAt).filter(Boolean).sort();
+      if (dates.length > 0) {
+        const oldest = /** @type {string} */ (dates[0]);
+        const days = today ? Math.round((Date.parse(today) - Date.parse(oldest)) / 86400000) : null;
+        line += `\n  ${' '.repeat(18)}最舊的宣稱：${oldest}${days === null ? '' : `（${days} 天前）`}`;
+      }
+      for (const id of undated) {
+        mismatches.push(
+          `${id}：目錄上寫 confidence: 'verified'，但**沒有 verifiedAt** —— ` +
+            '沒有日期的「已驗證」說不出它是什麼時候成立的。' +
+            '　改法：跑一次 npm run verify -- --patterns，過了就把當天日期寫進 verifiedAt。',
+        );
+      }
     }
     lines.push(line);
 

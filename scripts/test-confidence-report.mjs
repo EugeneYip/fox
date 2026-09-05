@@ -20,10 +20,11 @@ const check = (/** @type {string} */ label, /** @type {boolean} */ ok, /** @type
   }
 };
 
-/** @type {{id: string, confidence?: string, feedTemplate?: string, probeHandle?: string}[]} */
+/** @type {{id: string, confidence?: string, feedTemplate?: string, probeHandle?: string, verifiedAt?: string}[]} */
 const PLATFORMS = [
-  { id: 'a', confidence: 'verified', feedTemplate: 'https://{handle}/rss', probeHandle: 'x' },
-  { id: 'b', confidence: 'verified', feedTemplate: 'https://{handle}/rss', probeHandle: 'y' },
+  /* verified 要有 verifiedAt，不然新加的那條會（正確地）點名它們 */
+  { id: 'a', confidence: 'verified', feedTemplate: 'https://{handle}/rss', probeHandle: 'x', verifiedAt: '2026-09-05' },
+  { id: 'b', confidence: 'verified', feedTemplate: 'https://{handle}/rss', probeHandle: 'y', verifiedAt: '2026-09-05' },
   { id: 'c', confidence: 'lookup-required' },
   { id: 'd', confidence: 'documented' },
 ];
@@ -78,6 +79,72 @@ console.log('\nconfidence 與實測的對照\n' + '─'.repeat(56));
     { probed: ['c'], failed: [], flaky: none },
   );
   check('宣稱保守但打通了：不算不一致（反向案例）', mismatches.length === 0, JSON.stringify(mismatches));
+}
+
+/*
+ * ── 這個宣稱是什麼時候成立的 ──────────
+ *
+ * 第 4 輪（第二十八圈）：`confidence: 'verified'` 的意思是「某一次有人
+ * 跑了 --patterns 看到綠燈」，而目錄裡沒有欄位記那是哪一天。
+ * git 也答不出來 —— 2026-09-04 為了隱私把 213 個 commit 壓成 1 個，
+ * 每一行都 blame 到那一天。
+ */
+{
+  /** @type {{id: string, confidence?: string, feedTemplate?: string, probeHandle?: string, verifiedAt?: string}[]} */
+  const dated = [
+    { id: 'a', confidence: 'verified', feedTemplate: 'x', probeHandle: 'x', verifiedAt: '2026-01-01' },
+    { id: 'b', confidence: 'verified', feedTemplate: 'x', probeHandle: 'y', verifiedAt: '2026-03-01' },
+  ];
+  const { lines, mismatches } = confidenceReport(dated, {
+    probed: ['a', 'b'], failed: [], flaky: none, today: '2026-09-05',
+  });
+  const v = lines.find((l) => l.includes('verified')) ?? '';
+  /*
+   * 「最舊的」這三個字是判準的一部分，不是修辭。
+   *
+   * 突變掃描抓到：把「最舊的宣稱：」改成「宣稱：」，這一格照樣綠 ——
+   * 而兩者的意思差很多。兩個平臺各有日期時，「宣稱：2026-01-01」讀起來
+   * 像那是唯一的日期；「最舊的宣稱」才說得出這是**最壞的情況**。
+   */
+  check('說出最舊的那個宣稱是哪一天（而且講明那是最舊的）', v.includes('2026-01-01') && v.includes('最舊'), v);
+  check('而且說出那是幾天前', /247 天前/.test(v), v);
+  check('都有日期就不點名', mismatches.length === 0, JSON.stringify(mismatches));
+}
+
+{
+  /* verified 卻沒有日期 —— 一個沒有日期的「已驗證」跟沒驗證只差在語氣 */
+  const { mismatches } = confidenceReport(
+    [{ id: 'c', confidence: 'verified', feedTemplate: 'x', probeHandle: 'z' }],
+    { probed: ['c'], failed: [], flaky: none, today: '2026-09-05' },
+  );
+  check(
+    'verified 沒有 verifiedAt：點名，而且說怎麼補',
+    mismatches.length === 1 && /沒有 verifiedAt/.test(mismatches[0]) && /--patterns/.test(mismatches[0]),
+    JSON.stringify(mismatches),
+  );
+}
+
+{
+  /*
+   * 反向：不是 verified 的不需要日期。
+   * 少了這一格，把要求擴到所有 confidence 會靜靜通過，
+   * 而 lookup-required 本來就沒有「驗過」這回事。
+   */
+  const { mismatches } = confidenceReport(
+    [{ id: 'd', confidence: 'lookup-required' }, { id: 'e', confidence: 'documented' }],
+    { probed: [], failed: [], flaky: none, today: '2026-09-05' },
+  );
+  check('不是 verified 的不要求日期（反向案例）', mismatches.length === 0, JSON.stringify(mismatches));
+}
+
+{
+  /* 沒有傳 today 的時候不要印出「NaN 天前」 */
+  const { lines } = confidenceReport(
+    [{ id: 'f', confidence: 'verified', feedTemplate: 'x', probeHandle: 'x', verifiedAt: '2026-01-01' }],
+    { probed: ['f'], failed: [], flaky: none },
+  );
+  const v = lines.find((l) => l.includes('verified')) ?? '';
+  check('沒傳今天的日期時不印「NaN 天前」（反向案例）', v.includes('2026-01-01') && !/NaN/.test(v), v);
 }
 
 console.log(failed === 0 ? '\n全部通過。\n' : `\n${failed} 項失敗。\n`);

@@ -28,7 +28,9 @@
  * @property {Confidence} confidence
  * @property {HandleShape} [handleShape]
  * @property {string} [probeHandle] 驗證用的公開帳號，見 scripts/verify-sources.mjs --patterns
- * @property {string} [probeHandle] 驗證用的公開帳號，見 scripts/verify-sources.mjs --patterns
+ * @property {string} [verifiedAt] `confidence: 'verified'` 是哪一天驗的（YYYY-MM-DD）。
+ *   沒有日期的「已驗證」說不出它是什麼時候成立的 —— 而 git 也答不出來：
+ *   2026-09-04 為了隱私把 213 個 commit 壓成 1 個，每一行都 blame 到那一天。
  * @property {string} color
  * @property {string} [note]
  */
@@ -45,6 +47,7 @@ export const PLATFORMS = [
     homeTemplate: 'https://medium.com/@{handle}',
     feedTemplate: 'https://medium.com/feed/@{handle}',
     confidence: 'verified',
+    verifiedAt: '2026-09-05',
     probeHandle: 'Medium',
     color: '#000000',
     note: 'feed 只有全文的前段摘要，圖片會帶 Medium 的 CDN 網址。',
@@ -58,6 +61,7 @@ export const PLATFORMS = [
     homeTemplate: 'https://{handle}.substack.com',
     feedTemplate: 'https://{handle}.substack.com/feed',
     confidence: 'verified',
+    verifiedAt: '2026-09-05',
     probeHandle: 'astralcodexten',
     color: '#FF6719',
   },
@@ -70,6 +74,7 @@ export const PLATFORMS = [
     homeTemplate: 'https://note.com/{handle}',
     feedTemplate: 'https://note.com/{handle}/rss',
     confidence: 'verified',
+    verifiedAt: '2026-09-05',
     probeHandle: 'note_official',
     color: '#41C9B4',
     note: '日本最大的寫作平臺，中文創作者也不少。RSS 穩定。',
@@ -83,6 +88,7 @@ export const PLATFORMS = [
     homeTemplate: 'https://{handle}.hatenablog.com',
     feedTemplate: 'https://{handle}.hatenablog.com/rss',
     confidence: 'verified',
+    verifiedAt: '2026-09-05',
     probeHandle: 'staff',
     color: '#00A4DE',
   },
@@ -111,6 +117,7 @@ export const PLATFORMS = [
     homeTemplate: 'https://{handle}.blogspot.com',
     feedTemplate: 'https://{handle}.blogspot.com/feeds/posts/default',
     confidence: 'verified',
+    verifiedAt: '2026-09-05',
     probeHandle: 'googleblog',
     color: '#FF5722',
   },
@@ -124,6 +131,7 @@ export const PLATFORMS = [
     homeTemplate: 'https://{handle}',
     feedTemplate: 'https://{handle}/feed',
     confidence: 'verified',
+    verifiedAt: '2026-09-05',
     probeHandle: 'en.blog.wordpress.com',
     color: '#21759B',
     note: 'handle 直接填網域，例如 example.com。',
@@ -138,6 +146,7 @@ export const PLATFORMS = [
     homeTemplate: 'https://{handle}',
     feedTemplate: 'https://{handle}/rss/',
     confidence: 'verified',
+    verifiedAt: '2026-09-05',
     probeHandle: 'blog.ghost.org',
     color: '#15171A',
   },
@@ -229,6 +238,7 @@ export const PLATFORMS = [
     homeTemplate: 'https://bsky.app/profile/{handle}',
     feedTemplate: 'https://bsky.app/profile/{handle}/rss',
     confidence: 'verified',
+    verifiedAt: '2026-09-05',
     probeHandle: 'bsky.app',
     color: '#0085FF',
     note: 'handle 用完整網域式帳號，例如 fox.bsky.social。',
@@ -243,6 +253,7 @@ export const PLATFORMS = [
     homeTemplate: 'https://{handle}',
     feedTemplate: 'https://{handle}.rss',
     confidence: 'verified',
+    verifiedAt: '2026-09-05',
     probeHandle: 'mastodon.social/@Mastodon',
     color: '#6364FF',
     note: 'handle 填 instance/@user，例如 mastodon.social/@fox。',
@@ -303,6 +314,7 @@ export const PLATFORMS = [
     feedKind: 'hybrid',
     homeTemplate: 'https://www.youtube.com/@{handle}',
     confidence: 'verified',
+    verifiedAt: '2026-09-05',
     feedTemplate: 'https://www.youtube.com/feeds/videos.xml?channel_id={handle}',
     probeHandle: 'UC_x5XG1OV2P6uZZ5FSM9Ttw',
     color: '#FF0000',
@@ -333,6 +345,7 @@ export const PLATFORMS = [
     homeTemplate: 'https://github.com/{handle}',
     feedTemplate: 'https://github.com/{handle}.atom',
     confidence: 'verified',
+    verifiedAt: '2026-09-05',
     probeHandle: 'gaearon',
     color: '#181717',
   },

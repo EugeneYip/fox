@@ -269,6 +269,8 @@ if (PATTERNS) {
     probed: probedIds,
     failed: failedIds,
     flaky: FLAKY_404,
+    /* 拿來算「這個宣稱幾天前成立的」；用當地日期就夠，不需要時區精度 */
+    today: new Date().toISOString().slice(0, 10),
   });
   console.log('目錄上的 confidence，這一輪對得上嗎');
   for (const l of lines) console.log(l);
