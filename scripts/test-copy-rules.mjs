@@ -420,7 +420,7 @@ for (const [name, { hit, miss, expect, coFires }] of Object.entries(CASES)) {
    * 不在 CASES 的 hit／miss 格式裡。列在這裡是為了**明說**它們有案例 ——
    * 而不是讓上面那個「有沒有案例」的檢查安靜地放行。
    */
-  const STRUCTURAL_WITH_OWN_CASES = ['date-wrong-language'];
+  const STRUCTURAL_WITH_OWN_CASES = ['date-wrong-language', 'example-not-real'];
   const missing = declared.filter((r) => !(r in CASES) && !STRUCTURAL_WITH_OWN_CASES.includes(r));
   if (missing.length > 0) {
     failed += missing.length;
@@ -1156,6 +1156,68 @@ console.log('─'.repeat(64));
 }
 
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
+/*
+ * ── 文件裡的正反例，跟規則對得上嗎 ────────────────
+ *
+ * 第 6 輪（第三十七圈）加的。文案這五條是七支關卡裡唯一早就有文件義務的
+ * （`rule-not-documented` 要求兩份文件都寫到每一條的 id），
+ * 所以「有沒有寫」那半題早就答完了 —— 剩下的是「寫的跟做的一樣嗎」。
+ *
+ * `docs/CONTENT.md` 特地跟她說：「反例都放在灰底的框裡，那種框不會被檢查，
+ * 所以你可以放心照著看。」那句話是在請她**信任**那些例子。
+ *
+ * 判準不綁哪一條規則：`✗` 至少要有一條抓得到，`✓` 一條都不能抓到。
+ * 這樣 `CLAUDE.md` 那一對（在「語氣」那一節、沒有規則 id 的標題）也守到了。
+ */
+{
+  console.log('\n' + '─'.repeat(64));
+  /*
+   * 每一格都重建一份 —— `check()` 會在 `finally` 裡把整個目錄刪掉，
+   * 所以不能像別的區塊那樣建一次用到底（第一版就是這樣，第二次呼叫 ENOENT）。
+   */
+  const withDocs = async (/** @type {string} */ body) => {
+    const dir = await build({ 'dist/index.html': html('<p>乾淨的一頁。</p>') });
+    const guideAt = join(dir, 'docs', 'CONTENT.md');
+    await mkdir(dirname(guideAt), { recursive: true });
+    await writeFile(guideAt, body, 'utf8');
+    await writeFile(join(dir, 'CLAUDE.md'), body, 'utf8');
+    return check(dir);
+  };
+  /* 五條規則的 id 都要出現，不然 rule-not-documented 會跟著響 */
+  const ids = '`taiwan-tai` `halfwidth-punct` `cjk-latin-space` `straight-quotes` `halfwidth-ellipsis`\n';
+
+  const good = await withDocs(ids + '```\n✗  用Astro建的站\n✓  用 Astro 建的站\n```\n');
+  /*
+   * 比對的是 `X [example-not-real]` 這個**問題**標記，不是 id 本身 ——
+   * 那個 id 也會出現在「不用寫進文件的規則」那份說明裡，
+   * 用 id 當判準的話這一格會被別的東西滿足（第一版就是這樣綠的）。
+   */
+  const okGood = !/\[example-not-real\]/.test(good);
+  if (!okGood) failed++;
+  console.log(`  ${okGood ? '✓' : 'X'} 例子對得上時不報`);
+  if (!okGood) console.log('        ' + good.split('\n').filter((l) => /example-not-real/.test(l)).join(' ｜ '));
+
+  const badTick = await withDocs(ids + '```\n✓  用Astro建的站\n```\n');
+  const okTick = /\[example-not-real\]/.test(badTick) && /cjk-latin-space 會抓到它/.test(badTick);
+  if (!okTick) failed++;
+  console.log(`  ${okTick ? '✓' : 'X'} 標成正確寫法、規則卻抓得到 → 擋，並說出是哪一條`);
+  if (!okTick) console.log('        ' + badTick.split('\n').filter(Boolean).slice(-4).join(' ｜ '));
+
+  const badCross = await withDocs(ids + '```\n✗  這一句其實沒有任何問題。\n```\n');
+  const okCross = /\[example-not-real\]/.test(badCross) && /沒有任何一條規則抓得到/.test(badCross);
+  if (!okCross) failed++;
+  console.log(`  ${okCross ? '✓' : 'X'} 標成反例、卻沒有規則抓得到 → 擋（文件在教不存在的規矩）`);
+  if (!okCross) console.log('        ' + badCross.split('\n').filter(Boolean).slice(-4).join(' ｜ '));
+
+  /* 反向：一個例子都抽不到要說話，不然文件改寫法之後這一格會安靜地什麼都不比 */
+  const none = await withDocs(ids + '這一份完全沒有程式碼框。\n');
+  const okNone = /一個 ✗／✓ 的例子都抽不到 —— \*\*這一格沒有在守\*\*/.test(none);
+  if (!okNone) failed++;
+  console.log(`  ${okNone ? '✓' : 'X'} 一個例子都抽不到時說「這一格沒有在守」`);
+  if (!okNone) console.log('        ' + none.split('\n').filter(Boolean).slice(-4).join(' ｜ '));
+
+}
+
 process.exit(failed > 0 ? 1 : 0);
 
 /** @param {Record<string, string>} files */

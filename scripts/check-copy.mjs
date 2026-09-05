@@ -62,7 +62,7 @@ import { RULES, documentationDuty } from './lib/copy-rules.mjs';
  * `RULES`。同一個 repo 第 3 輪（第三十一圈）才在 `check-content.mjs`
  * 踩過「區塊排在它的消費者後面」。
  */
-const EXTRA_RULE_IDS = ['unused-i18n-key', 'rule-not-documented', 'date-wrong-language'];
+const EXTRA_RULE_IDS = ['unused-i18n-key', 'rule-not-documented', 'date-wrong-language', 'example-not-real'];
 
 /**
  * 這些檔案會**引用問題本身**（歷史紀錄、以及訂下這條規則的地方），
@@ -635,8 +635,9 @@ for (const rel of ['src/i18n/ui.ts', 'src/config/site.ts']) {
     ['unused-i18n-key', '管的是 ui.ts 的衛生，不是寫作約定'],
     ['rule-not-documented', '它自己就是這條檢查，寫進文件會變成自我指涉'],
     ['date-wrong-language', '守的是 <time> 標籤算繪出來的語言，那是程式的事不是寫法'],
+    ['example-not-real', '守的是那兩份文件裡的例子本身，不是一條寫作約定'],
   ]);
-  /** 全部 8 條，不是只有逐行掃語料的那 5 條 */
+  /** 全部 9 條，不是只有逐行掃語料的那 5 條 */
   const ALL_RULE_IDS = [...RULES.map((r) => r.id), ...EXTRA_RULE_IDS];
   /** 一份給在這裡寫程式的人（含 AI），一份給真的在寫文案的人 */
   const DOCS = ['CLAUDE.md', 'docs/CONTENT.md'];
@@ -684,6 +685,69 @@ for (const rel of ['src/i18n/ui.ts', 'src/config/site.ts']) {
           '兩份都要有，不然清單會分岔。或者把規則拿掉。',
       });
     }
+  }
+
+  /*
+   * ── 文件裡那些正反例，跟規則真的對得上嗎 ────────────────
+   *
+   * 第 6 輪（第三十七圈）加的。這一圈問「這一條規則，是誰要求的？
+   * 寫在哪份文件裡？兩邊還一致嗎？」
+   *
+   * 文案這五條是七支關卡裡**唯一**早就有文件義務的（`rule-not-documented`
+   * 要求兩份文件都寫到每一條的 id）。所以「有沒有寫」這半題早就答完了。
+   *
+   * 剩下的是後半：**寫的跟做的一樣嗎。**
+   *
+   * 那兩份文件教人的方式是**正反例**，而 `docs/CONTENT.md` 還特地說：
+   * 「反例都放在灰底的框裡，那種框不會被檢查，所以你可以放心照著看。」
+   * —— 那句話是在請她**信任**那些例子。
+   *
+   * 判準不綁哪一條規則，只問兩件事：
+   *   `✗` 的那一行，**至少要有一條規則抓得到**（不然文件在教一條不存在的規矩）
+   *   `✓` 的那一行，**一條都不能抓到**（不然照著寫會被擋）
+   *
+   * 這樣寫的好處是 `CLAUDE.md` 那一對（在「語氣」那一節，沒有規則 id 的標題）
+   * 也一起守到了。
+   *
+   * 加進來的時候 12 個例子全部對得上 —— 這一條是預防性的，不是為了修既有的錯。
+   */
+  const EXAMPLE = /^([✗✓])\s+(.+)$/;
+  let examples = 0;
+  for (const [docName, body] of docTexts) {
+    for (const fence of body.matchAll(/```[a-z]*\n([\s\S]*?)```/g)) {
+      const lines = fence[1].split('\n');
+      for (let i = 0; i < lines.length; i += 1) {
+        const m = EXAMPLE.exec(lines[i].trim());
+        if (!m) continue;
+        examples += 1;
+        const hits = RULES.filter((r) => {
+          r.bad.lastIndex = 0;
+          return r.bad.test(m[2]);
+        }).map((r) => r.id);
+        const shouldHit = m[1] === '✗';
+        if (shouldHit === hits.length > 0) continue;
+        problems.push({
+          file: docName,
+          line: body.slice(0, body.indexOf(fence[0])).split('\n').length + i + 1,
+          id: 'example-not-real',
+          text: m[2].slice(0, 40),
+          why: shouldHit
+            ? '這一行標成反例，但**沒有任何一條規則抓得到它** —— ' +
+              '文件在教一條不存在的規矩。　改法：確認那條規則還在（或還是這個寫法）；' +
+              '規則放寬了的話，這個例子要跟著改。'
+            : `這一行標成正確寫法，但 ${hits.join('、')} 會抓到它 —— ` +
+              '照著文件寫的人會被擋下來。　改法：改這個例子，或改那條規則。',
+        });
+      }
+    }
+  }
+  saw('example-not-real', examples);
+  if (examples === 0) {
+    notes.push(
+      '兩份文件裡一個 ✗／✓ 的例子都抽不到 —— **這一格沒有在守**。\n' +
+        '    那兩份是靠正反例教人的，抽不到通常表示例子換了寫法（或不在程式碼框裡了），\n' +
+        '    而不是真的沒有例子。',
+    );
   }
 }
 
