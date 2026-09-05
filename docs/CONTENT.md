@@ -348,6 +348,43 @@ npm run dev
 所以訊息裡多寫了一句提醒：「如果你覺得有寫，檢查一下欄位名有沒有打錯」。
 看到這種訊息時，先確認欄位名，再確認值。
 
+### 還有另一種：`npm run check:content` 擋下來
+
+上面那些是**欄位寫錯**，`dev` 或 `build` 當場就會說。
+另外還有一支檢查（`npm run check:content`，CI 上一定會跑）會看
+「寫好之後整個站對不對」。它報錯的時候會**指名你的檔案**，
+訊息開頭有一個像 `no-title` 這樣的名字。
+
+下面十一條就是全部會指到你檔案的規則。分成兩半 ——
+**上面那幾條是你改得動的，下面那幾條不是你寫錯了。**
+
+#### 你改得動的
+
+| 名字 | 它會說 | 怎麼改 |
+|---|---|---|
+| `no-title` | frontmatter 裡找不到 `title` | 兩行 `---` 之間補一行 `title:`。詩詞的 `poem.title` 是另一個欄位，兩個都要有 |
+| `poem-title-bracketed` | `poem.title` 自己寫了書名號 | 拿掉，畫面會自己加（`poem.source` 相反，那個要自己寫《》） |
+| `template-text-left` | 發佈了，但還留著 `npm run write` 的範本文字 | 換成真的內容；還沒寫完就把 `draft: true` 加回去 |
+| `bad-reference` | `related` 裡的某個名字在 `poems` 底下找不到 | 那是檔名（不含 `.md`），去 `src/content/poems/` 對拼字 |
+| `draft-unscannable` | 草稿的標題與原文都短於四個字 | 給它一個四個字以上的 `title` —— 太短的話「草稿有沒有外洩」查不完整 |
+| `external-missing` | 收錄的外站文章在產出裡找不到 | 先確認 `platform` 是 [PLATFORMS.md](PLATFORMS.md) 裡有的 id |
+
+#### 不是你寫錯了
+
+這幾條指到你的檔案，但原因在別的地方。**先跑一次 `npm run build`** ——
+多半只是產出比內容舊。再跑一次還在的話，把那行訊息整句貼給站主。
+
+| 名字 | 意思 |
+|---|---|
+| `missing-page` | 這篇不是草稿，但站上沒有它的頁面 |
+| `draft-page` | 這篇是草稿，但站上有它的頁面 |
+| `draft-leaked` | 這篇是草稿，但它的字出現在產出裡 |
+| `lang-leaked` | 這篇的語言是 A，卻在 B 的路徑下也生了一頁 |
+| `search-index-missing` | 整個搜尋索引不見了（站內搜尋會沒有結果） |
+
+（這份清單不會自己過期：`check:content` 的 `rule-not-in-guide` 會確認
+每一條「會指到你檔案」的規則都寫在這裡，少一條就擋。）
+
 ---
 
 ## 圖片

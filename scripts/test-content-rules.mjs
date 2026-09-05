@@ -402,6 +402,41 @@ const CASES = {
     },
     args: (/** @type {string} */ dir) => [`--syndication=${join(dir, 'synd', 'syndication.json')}`],
   },
+  /*
+   * ── 會指到她檔案的規則，她的文件裡要有 ────────────────
+   *
+   * 第 3 輪（第三十七圈）：這一支 20 條規則，`docs/CONTENT.md`、`CLAUDE.md`、
+   * `ARCHITECTURE.md` 加起來提到 **0 條**。其中 11 條會擋住建置**並指名她的檔案**
+   * —— 她照文件寫，然後在 CI 上被一個沒看過的名字擋下來。
+   * 跟 `check:copy` 的 `rule-not-documented` 是同一件事。
+   *
+   * 這一格的假指南**刻意只少寫一條**（`template-text-left`）——
+   * 全都不寫的話，「一律報錯」那種壞法也會過。
+   */
+  'rule-not-in-guide': {
+    /* 假的指南當然沒寫 schema 欄位，所以 field-undocumented 一定會跟著響 */
+    also: ['field-undocumented'],
+    content: { 'poems/wu-yi-xiang.md': poem() },
+    dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花') },
+    extra: {
+      'guide.md': '寫錯的時候會看到什麼：`no-title`、`poem-title-bracketed`、`draft-page`、`draft-unscannable`、`draft-leaked`、`external-missing`、`missing-page`、`lang-leaked`、`bad-reference`、`search-index-missing`。\n',
+    },
+    args: (/** @type {string} */ dir) => [`--guide=${join(dir, 'guide.md')}`],
+  },
+  /* 反向：十一條都寫了就不該報 */
+  'rule-not-in-guide（都寫了就不報）': {
+    expect: 'no-title',
+    also: ['field-undocumented'],
+    content: {
+      'poems/wu-yi-xiang.md': poem(),
+      'poems/broken.md': '---\nlang: zh-TW\n---\n沒有 title。\n',
+    },
+    dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花') },
+    extra: {
+      'guide.md': '寫錯的時候會看到什麼：`no-title`、`poem-title-bracketed`、`draft-page`、`draft-unscannable`、`draft-leaked`、`external-missing`、`missing-page`、`lang-leaked`、`bad-reference`、`search-index-missing`、`template-text-left`。\n',
+    },
+    args: (/** @type {string} */ dir) => [`--guide=${join(dir, 'guide.md')}`],
+  },
   'vertical-lost': {
     content: { 'poems/wu-yi-xiang.md': poem() },
     dist: {
@@ -787,7 +822,17 @@ try {
 
   {
     const dir = await build('clean', CLEAN);
-    const out = await check(dir);
+    /*
+     * 帶著**真的**寫作指南跑。
+     *
+     * `rule-not-in-guide` 比的是「會指到她檔案的規則有沒有寫進 docs/CONTENT.md」——
+     * 那跟 fixture 的內容無關，而 fixture 目錄裡沒有那份文件。
+     * 不帶 `--guide=` 的話它會被跳過、補成 0，於是出現在「沒東西可看」名單上，
+     * 而這一格的意思正好是「這份 fixture 上不該有那份名單」。
+     *
+     * 指到真的那一份，這一格就順便在驗它：文件少寫一條，這裡會紅。
+     */
+    const out = await check(dir, [`--guide=${resolve(ROOT, 'docs/CONTENT.md')}`]);
     /*
      * ── CLEAN 護得到哪幾條規則的邊界 ────────────────────
      *
@@ -798,7 +843,7 @@ try {
      * **只護得到它身上有東西可踩的那幾條**。主體是 0 的規則，
      * 邊界移一格也不會有人說話。所以把數字說出來。
      */
-    const verbose = await check(dir, ['--verbose']);
+    const verbose = await check(dir, ['--verbose', `--guide=${resolve(ROOT, 'docs/CONTENT.md')}`]);
     const subjects = new Map(
       [...verbose.matchAll(/^\s*(\d+)\s+([a-z0-9-]+)\s*$/gm)].map((m) => [m[2], Number(m[1])]),
     );

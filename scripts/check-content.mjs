@@ -38,6 +38,7 @@ import { countItems } from './lib/count-items.mjs';
 import { ALL_TEMPLATE_TEXT } from './lib/entry-template.mjs';
 import { dedupedInlineStyles } from './lib/site-css.mjs';
 import { validate, unsupported } from './lib/validate-schema.mjs';
+import { documentationDuty } from './lib/copy-rules.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const arg = (/** @type {string} */ name) => {
@@ -1024,6 +1025,7 @@ const RULES = [
   'search-crosslang-mute',
   'guide-field-unknown',
   'syndication-schema',
+  'rule-not-in-guide',
 ];
 /*
  * ── 某個語言一篇都沒有的時候，那個語言的搜尋頁要說得出來 ──────────
@@ -1933,6 +1935,83 @@ const SYNC_STALE_DAYS = 3;
             '    填了 key 會讓這個機制看起來已經在運作，所以這裡把數字說出來。'
           : '    配成對的：' + paired.map((v) => v.join(' ↔ ')).join('、')),
     );
+  }
+}
+
+/*
+ * ── 會把她送回自己檔案的規則，她的文件裡要寫 ────────────────
+ *
+ * 第 3 輪（第三十七圈）加的。這一圈問「這一條規則，是誰要求的？
+ * 寫在哪份文件裡？那份文件是給誰看的？」
+ *
+ * 量出來的：這一支 20 條規則，`docs/CONTENT.md`、`CLAUDE.md`、
+ * `ARCHITECTURE.md` 加起來提到 **0 條**。
+ *
+ * 但「全部都要寫進文件」會是我自己發明的規矩 —— 多數規則報的是 `dist/`、
+ * 設定檔或產生出來的資料，那是維護者的事，她不需要知道。
+ *
+ * 判準用**這條規則會叫誰去改哪個檔案**：報的檔案是 `src/content/` 底下
+ * 那一份的，就是她寫的那一份 —— 她會被 CI 擋下來、被指到自己的檔案，
+ * 而她的文件裡沒有那個名字。那正是 `check:copy` 的 `rule-not-documented`
+ * 當初存在的理由（「照文件寫的人會在 CI 上被擋下來卻不知道為什麼」）。
+ *
+ * 只要求 `docs/CONTENT.md` 一份，不像文案那五條要求兩份：
+ * 那五條同時是寫作約定與寫程式的約定，這幾條只有她會踩到。
+ *
+ * 排除的那幾條要**說得出理由**，而且 `unknown` 會抓出「排除清單裡有、
+ * 但根本不是規則」的 id —— 不然「要寫的 ＋ 不用寫的 ＝ 總數」會假成立。
+ */
+/** id → 為什麼她不需要知道這一條（報的不是她寫的檔案） */
+const NOT_A_WRITER_RULE = new Map([
+  ['feed-unreadable', '報的是產出的 feed，壞的是產生 feed 的程式'],
+  ['locale-dead-end', '報的是產出的空狀態頁，改法在版面不在內容'],
+  ['search-crosslang-mute', '報的是產出的搜尋頁，改法在那一頁的程式'],
+  ['vertical-lost', '報的是全站 CSS'],
+  ['domain-drift', '報的是三份設定檔（site.ts／astro.config／CNAME）'],
+  ['locale-list-drift', '報的是設定檔裡的語言清單'],
+  ['field-undocumented', '它本身就在要求文件跟 schema 對齊，報的是文件'],
+  ['guide-field-unknown', '同上，報的是文件'],
+  ['syndication-schema', '報的是 sync-feeds 產生的資料，不要手改'],
+  ['rule-not-in-guide', '它本身就在要求這件事，報的也是文件'],
+]);
+/*
+ * 只在對**真的** repo 跑的時候比，或是測試明講了 `--guide=`。
+ *
+ * 理由跟 check-a11y 的 `--doc=` 一樣：迷你 fixture 沒有那份寫作指南，
+ * 比對它的話每一格都會多噴 11 條「文件沒寫」——
+ * 那不是那些案例要測的東西（第一版就是這樣，一次紅了兩格）。
+ */
+if (arg('content') === undefined || arg('guide') !== undefined) {
+  const { required: writerRules, excluded, unknown } = documentationDuty(RULES, NOT_A_WRITER_RULE);
+  const guide = await readFile(GUIDE, 'utf8').catch(() => null);
+  saw('rule-not-in-guide', guide === null ? 0 : writerRules.length);
+  if (unknown.length > 0) {
+    notes.push(
+      `排除清單裡有不存在的規則：${unknown.join('、')} —— ` +
+        '那會讓「要寫的 ＋ 不用寫的 ＝ 總數」看起來成立，而其實在數不存在的東西。',
+    );
+  }
+  if (guide === null) {
+    notes.push(`讀不到 ${relative(ROOT, GUIDE)} —— 沒有比對過「她該知道哪幾條規則」。`);
+  } else {
+    notes.push(
+      `文件要求：${RULES.length} 條規則裡 **${writerRules.length} 條**會把她指回自己寫的檔案，` +
+        `所以要寫進 ${relative(ROOT, GUIDE)}；${excluded.length} 條不用 ——\n` +
+        excluded.map((id) => `      · ${id}：${NOT_A_WRITER_RULE.get(id)}`).join('\n'),
+    );
+    for (const id of writerRules) {
+      if (guide.includes(id)) continue;
+      problems.push({
+        file: relative(ROOT, GUIDE),
+        id: 'rule-not-in-guide',
+        msg:
+          `\`${id}\` 會擋住建置並指到她寫的那個檔案，而這份文件沒有提到它。\n` +
+          '      她照文件寫，然後在 CI 上被一個沒看過的名字擋下來。\n' +
+          '      改法：在「寫錯的時候會看到什麼」那一節加一列，寫出這條規則\n' +
+          '      會說什麼、以及怎麼改。真的不該由她知道的話，把它加進\n' +
+          '      check-content.mjs 的 NOT_A_WRITER_RULE 並寫下理由。',
+      });
+    }
   }
 }
 
