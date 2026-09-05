@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 47,500 行、2.5 MB、291 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 47,700 行、2.5 MB、292 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -47276,4 +47276,148 @@ const okBoundary = /靜態.*檢查|跑起來會不會過/s.test(out);
   `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：2 — 效能**
+
+### 2026-09-06 — 第 2 輪（第三十七圈）：效能
+
+**第三十七圈問：這一條規則，是誰要求的？寫在哪份文件裡？**
+判準：**這條規則寫在哪份文件裡？那份文件是給誰看的？兩邊還一致嗎？**
+
+#### 1. 11 條預算，0 份文件
+
+`docs/` 底下沒有效能文件。`ARCHITECTURE.md` 講的是取捨（「0 KB JavaScript」、
+「一年幾百 KB 可以接受」），**一個預算數字都沒有**。
+
+那 11 條上限只活在 `check-perf.mjs` 裡。這一支自己早就承認過一半：
+「11 條預算裡，6 條說得出上限是怎麼推導的，**5 條是挑的**」——
+而「挑的」那 5 條，挑的人是誰、根據什麼，沒有第二個地方寫。
+（記進待辦，這一輪不動它。）
+
+#### 2. 但架構文件講了一句**數得出來**的話
+
+就在「決定性的因素是 **0 KB JavaScript**」下面兩行：
+
+> 目前全站的 JavaScript 只有**四小段**：主題切換、語言下拉、
+> 詩詞直橫排切換、站內搜尋。
+
+那是整份架構文件裡**唯一一句會被產出打臉的效能宣稱** ——
+而且讀的人正是拿它來理解這個站的取捨的。
+
+量產出裡**不重複**的內嵌 script（排除 JSON-LD 與 `src=`）：
+
+| 大小 | 出現在 | 是什麼 |
+|---|---|---|
+| 2659 B | 2 頁 | 站內搜尋 |
+| 840 B | 44 頁 | 主題切換 |
+| **641 B** | **44 頁** | **算繪前套用已存的偏好** ← 不在清單上 |
+| 599 B | 3 頁 | 詩詞直橫排切換 |
+| 304 B | 44 頁 | 語言下拉 |
+
+**五段，不是四段。**
+
+#### 3. 而少掉的正好是最該講的那一段
+
+那第五段在 `Base.astro` 的 `<head>` 裡：
+
+```js
+document.documentElement.dataset.js = '';
+const saved = localStorage.getItem('fox-theme');
+⋯把上次選的主題與直橫排套回 <html> 上⋯
+```
+
+它 **641 B、每一頁都有、跑在畫面出現之前** ——
+是五段裡**唯一會擋住第一次算繪**的一段。
+
+其餘四段都是使用者按了才動的。講效能的時候漏掉的偏偏是那個會擋渲染的，
+而不是那些不會的。
+
+（它符合文件說的「沒有它也能用」：少了它網站照樣運作，
+只是深色模式的人會先看到一閃的淺色。所以要改的是**數字與清單**，
+不是那句「每一段都是增強功能」。）
+
+#### 4. 補上守門，兩邊都改
+
+- `check:perf` 拿產出裡不重複的段數去對那句話 —— 不一樣就擋
+- **對得上也要出聲**（`⋯有 5 段，產出裡數到 5 段 ✓`），
+  不然「對得上」跟「這一格沒在比」長得一樣
+- 文件換了寫法、抽不到那句話 → 「這一格沒有在守」，不是安靜放行
+- 抽出 `inlineScriptBodies()`，`inlineJsBytes()` 改用它 ——
+  **一個 parser 兩個消費者**，不要兩份正則各自漂
+- `ARCHITECTURE.md` 改成五小段，並把那一段單獨說清楚（為什麼它值得單獨講）
+
+#### 5. 突變掃描抓到我的 fixture 有個洞
+
+第一版的假站把兩段 script **都放在 `index.html`**。
+那樣的話「只掃第一頁」這種壞法仍然數得到 2 段 —— 這一格守不住走漏頁面。
+
+改成一頁一段之後，`htmlTexts.slice(0, 1)` 那個突變才紅。
+
+| | 之前 | 現在 |
+|---|---|---|
+| 那句「四小段」 | 沒有人對過 | 每次 `check:perf` 都對 |
+| 實際段數 | 5（文件說 4） | 5（文件說 5） |
+| 對得上時 | ——（沉默） | 說出來 |
+| 文件改寫法 | 安靜通過 | 「這一格沒有在守」 |
+
+`verify:all` 六道全綠、`test:tools` 831 格全綠、`ci:sim` 在 HEAD 上全綠。
+
+### 待辦（不屬於這一輪）
+
+- **11 條預算的上限沒有任何一份文件寫過**，而其中 5 條是「挑的」。
+  站主要是想知道「一頁可以長到多大才會被擋」，只能讀原始碼（→ 2 效能）
+- **`ARCHITECTURE.md` 裡還有別的可量的宣稱沒有人對**：
+  「一年幾百 KB」、「0 KB JavaScript」（那句指的是 Astro 的預設，
+  不是這個站的實際 —— 現在下面兩行有五段，讀起來要轉個彎）（→ 2 效能）
+- 上一輪與更早的都還在（`check:workflows` 的 9 條規則文件提到 0 條、
+  七支關卡只有兩支有 `--list-rules`、`SEVERITY` 的 WCAG 推理住在測試檔註解裡、
+  29 條裡只有 2 條提到 WCAG、
+  瀏覽器掃描沒有變成工具、只走了 4 頁、
+  `check.yml` 永遠不會自己觸發（→ 站主）、
+  `test:units` 的耗時在有負載時會跳到 291 秒、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  `reveal('email')` 沒有人呼叫、沒有 href 的 `<a>` 沒有規則在看、
+  `note` 那種「合法但 0 筆」沒有對應警告、`validate-schema` 只實作 8 個關鍵字、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  `<details>`／`<summary>` 各 44 個沒有規則在看、`<time>` 82 個沒人看 `datetime`、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `--patterns` 那 11 個平臺的「N 筆」沒驗、
+  `SCHEMA_STRUCTURAL` 與「走不到的是哪一個」還沒驗、
+  node 與 python 的 gzip 差 0.9% 沒人查過為什麼、
+  另外 22 個 a11y `--verbose` 數字還沒驗、搜尋結果的連結沒有任何無障礙檢查看過、
+  `tokens.css` 註解裡的對比值沒有東西在守、`domain-drift` 只看三份、
+  `rule-not-documented` 只守 id、`strictReferrerPolicy: false` 那條路沒有測試、
+  `verifiedAt` 仍然手寫、`field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、`docs/A11Y.md` 那三個瀏覽器量的數字沒人對、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `audit:privacy` 沒有 needles 時本機 exit 0、
+  我連續八次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 10 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `check:perf` 那句「全是 favicon」是寫死的描述、7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  28 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、`related` 單向、schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、`CoverImage` 的 `sizes` 用 40rem、
+  `ui.ts` 的 `en` 要不要必填、
+  4 條閒置豁免、本機 `ahead 89, behind 2`、
+  `npm run sync` 來源全失敗仍離開碼 0、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `VideoFacade` 一次都沒算繪過、`aria-live`／`role="status"` 沒有規則、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、`probe:served` 沒有自己的測試、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  真的開一次螢幕閱讀器聽、`CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：3 — 內容結構**
