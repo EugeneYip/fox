@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 46,800 行、2.5 MB、288 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 47,000 行、2.5 MB、289 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -46746,4 +46746,158 @@ fixture 帶的是**真的那份 schema**（照著讀進來，不是另寫一份�
   `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：7 — 建置與 CI**
+
+### 2026-09-06 — 第 7 輪（第三十六圈）：建置與 CI
+
+**第三十六圈問：這道檢查的邊界外面是什麼？那裡現在有幾個？**
+判準：**這一支說得出「它看不到什麼」嗎？而那些東西現在有幾個？**
+
+#### 1. 這一支什麼都沒說
+
+`ci:sim` 的自述很完整（10 步裡真的跑 4 步、`npm ci` 用 `npm ls` 代打、
+另外 2 份 workflow 沒有模擬到⋯⋯）。而它旁邊那一支：
+
+```
+3 份 workflow，沒有發現問題。
+```
+
+三個檔案，然後沒了。
+
+打開來看，它**該有的東西全都有**：9 條 `RULE_IDS`、`saw()`、
+零主體會補 0、`--verbose` 會印每條規則判斷過幾個。
+**預設輸出一個字都沒提。**
+
+第二十一圈到第二十九圈，另外六支陸續補齊了這件事
+（第二十九圈那一輪的收尾還寫著「這是第 1 輪點名的六支裡的最後一支」）。
+數了一下：那六支加上 `ci:sim` 是七支 —— **這一支不在名單上**。
+
+而它偏偏最需要講。它守的三份檔案**沒有第二個人在看**：
+`ci:sim` 只模擬 `deploy.yml`，另外兩份它自己明講沒有模擬到。
+
+#### 2. 用 `gh run list` 對一次現實
+
+這支腳本的註解裡有一句寫了很久的話：
+「它守的是**三份從來沒有在 GitHub 上跑過的 workflow**」。
+同一句在 `test-workflow-rules.mjs` 的開頭也有一份。
+
+實際數：
+
+| workflow | 跑過幾次 |
+|---|---|
+| `deploy.yml` | **8 次**（最近 2026-09-05，成功） |
+| `sync-feeds.yml` | **2 次**（排程，兩次都成功） |
+| `check.yml` | **0 次** |
+
+前兩份現在有真的執行紀錄可以對照了，**那句話對它們已經不成立**。
+
+`check.yml` 仍然是 0 —— 而理由在它自己的第 8 行寫著：
+`on: pull_request` 與 `workflow_dispatch`。這個專案是站主直接推 main，
+不開 PR。所以它不是「還沒輪到」，是**這個工作方式下永遠不會自己觸發**。
+
+兩處過期的宣稱都改成今天的數字，並註明哪一份仍然成立。
+
+#### 3. 綠燈現在說得出什麼
+
+```
+3 份 workflow（check.yml、deploy.yml、sync-feeds.yml）、9 條規則、
+這次判斷過 199 個東西 —— 沒有發現問題。
+要看每條規則判斷過幾個東西：npm run check:workflows -- --verbose
+
+這是**靜態**檢查：讀的是抹掉註解之後的 YAML。
+  它看不到的是「這份 workflow 在 GitHub 上跑起來會不會過」——
+  中間隔著 runner、Node 版本、快取、secret 與網路。
+  真的跑過幾次要問 GitHub：gh run list --repo EugeneYip/fox --workflow <檔名>
+```
+
+199 個主體的分佈：`duplicate-key` 129、`test-file-not-run` 35、
+`unknown-script` 11、`gate-missing-in-check` 8、`machine-path-in-config` 6、
+`needs-dist-before-build` 4、`gate-not-on-deploy-path` 3、
+`step-output-unset` 2、`dispatch-target-missing` 1。真的 repo 上沒有閒置的。
+
+#### 4. 突變掃描抓到我寫了一個能被別的東西滿足的判準
+
+第一版的邊界測試是一條：
+
+```js
+const okBoundary = /靜態.*檢查|跑起來會不會過/s.test(out);
+```
+
+把「這是靜態檢查」那一整句從輸出裡拿掉 —— **測試照樣全綠**。
+因為 `|` 的另一半在別的行上，判準被別的東西滿足了。
+
+（而且第一次跑那個突變的時候它**根本沒套用上去**：`--from` 裡有 `\n`，
+`npm run` 會多經過一次 shell 把反斜線吃掉。`CLAUDE.md` 正好記著這一條，
+改成直接跑 `node scripts/mutate.mjs` 才配得到。
+所以那一次的「全部通過」有兩層假：突變沒套用，而且判準本來就守不住。）
+
+拆成兩格之後：一句講**它是什麼**，一句講**它因此看不到什麼**，
+兩個突變各紅一格、而且只紅該紅的那一格。
+
+| | 之前 | 現在 |
+|---|---|---|
+| 綠燈說的話 | 「3 份 workflow」 | 檔名、9 條規則、199 個主體、`--verbose`、邊界 |
+| 「三份都沒跑過」 | 寫在兩個檔案裡 | 改成 8／2／**0**，並註明哪一份仍成立 |
+| 邊界的測試 | 無 | 5 格（其中 2 格是拆開的） |
+
+`verify:all` 六道全綠、`test:tools` 822 格全綠、`ci:sim` 在 HEAD 上全綠。
+
+### 待辦（不屬於這一輪）
+
+- **`check.yml` 在目前的工作方式下永遠不會自己觸發。** 要嘛加
+  `push: branches: [main]`（但那會跟 `deploy.yml` 重複跑一套 `verify:all`，
+  而那正是註解裡說要避免的），要嘛承認它是給未來的 PR 準備的
+  —— 這是站主的判斷（→ 站主）
+- **輸出裡那三個次數是寫死的日期快照**（2026-09-06 數的）。
+  跟 `ci:sim` 印 Node 版本那一句同一種寫法，但一樣會過期（→ 7 建置與 CI）
+- **`test:units` 這次跑了 291 秒**（上一輪 61 秒）—— 同一台機器、同一份程式碼。
+  既有的待辦裡就有「`test-ci-sim` 那一格在有負載時會紅」，這是同一件事的另一面
+- 上一輪與更早的都還在（那 67 處註解要不要改（→ 站主）、
+  `taiwan-tai` 44 處裡真的與引用分不開、workflow 只掃 step 名稱、
+  feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  `reveal('email')` 沒有人呼叫、沒有 href 的 `<a>` 沒有規則在看、
+  `note` 那種「合法但 0 筆」沒有對應警告、`validate-schema` 只實作 8 個關鍵字、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  `<details>`／`<summary>` 各 44 個沒有規則在看、`<time>` 82 個沒人看 `datetime`、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `--patterns` 那 11 個平臺的「N 筆」沒驗、
+  `SCHEMA_STRUCTURAL` 與「走不到的是哪一個」還沒驗、
+  node 與 python 的 gzip 差 0.9% 沒人查過為什麼、
+  另外 22 個 a11y `--verbose` 數字還沒驗、搜尋結果的連結沒有任何無障礙檢查看過、
+  `tokens.css` 註解裡的對比值沒有東西在守、`domain-drift` 只看三份、
+  `rule-not-documented` 只守 id、`strictReferrerPolicy: false` 那條路沒有測試、
+  `verifiedAt` 仍然手寫、`field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、`docs/A11Y.md` 那三個瀏覽器量的數字沒人對、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `audit:privacy` 沒有 needles 時本機 exit 0、
+  我連續七次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 10 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `check:perf` 那句「全是 favicon」是寫死的描述、7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  28 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、`related` 單向、schema 的必填／選填沒被選過、
+  11 條預算裡 5 條的上限是挑的、另外四支檢查的嚴重度、
+  `CoverImage` 的 `sizes` 用 40rem、
+  `ui.ts` 的 `en` 要不要必填、
+  4 條閒置豁免、本機 `ahead 83, behind 2`、
+  `npm run sync` 來源全失敗仍離開碼 0、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `VideoFacade` 一次都沒算繪過、`aria-live`／`role="status"` 沒有規則、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、`probe:served` 沒有自己的測試、
+  `--real-install` 成功路徑沒測試、視覺層 24 處實測沒重驗、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  真的開一次螢幕閱讀器聽、`CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：8 — 視覺與排版**
