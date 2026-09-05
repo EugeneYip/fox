@@ -249,6 +249,42 @@ if (existsSync(resolve(ROOT, 'dist'))) {
   const LINKS = /<link\b[^>]*\bhref\s*=\s*"(https?:\/\/[^"]+)"[^>]*>/gi;
   const SAFE_REL = /rel\s*=\s*"(?:canonical|alternate|me|author|license|help)"/i;
 
+  /*
+   * ── 隱私頁承諾的 rel，跟產出裡的外部連結對得上嗎 ──────────
+   *
+   * `/privacy` 對訪客說「站上的外部連結一律加上 rel="noreferrer"」。
+   * 那句話**是承諾**，而它的真假這支腳本查得到 —— 產出裡每一個外部
+   * `<a href="http…">` 帶著什麼 rel，就在同一個 `dist/` 裡。
+   *
+   * 第 5 輪（第三十四圈）量到：那句話原本是寫死的常數，而實際的 rel 來自
+   * `externalLinkRel`（`privacy.strictReferrerPolicy ? 'noopener noreferrer' : 'noopener'`）。
+   * 把那個開關關掉，44 頁裡 58 個外部連結全部掉了 noreferrer，
+   * **而那一頁還是照樣承諾**。承諾與事實各走各的。
+   *
+   * 那一句已經改成跟著開關走。這一條守的是**兩邊真的對得上** ——
+   * 而且它不需要讀 `privacy.ts`（那是 TypeScript，這支腳本讀不到）：
+   * 承諾就印在頁面上，事實就在隔壁的檔案裡，兩個都在 `dist/`。
+   */
+  const promiseFile = resolve(ROOT, 'dist/privacy/index.html');
+  /** 隱私頁自己說的那個 rel（例如 `noreferrer`）；讀不到就是 null */
+  let promisedRel = null;
+  if (existsSync(promiseFile)) {
+    const m = /<code>rel="([^"]+)"<\/code>/.exec(await readFile(promiseFile, 'utf8'));
+    promisedRel = m ? m[1] : null;
+  }
+  /*
+   * 先登記一次（主體 0）—— 不然沒有 `dist/privacy/` 的時候這條規則
+   * **整條不存在**，而「規則有幾條」在不同語料上就會不一樣。
+   * 這是這個 repo 的老規矩：閒置的規則要補 0，不要從名單上消失。
+   */
+  saw('external-link-rel-broken-promise', 0);
+  if (promisedRel === null) {
+    notices.push(
+      '隱私頁承諾的 rel 讀不到 —— 「外部連結的 rel 跟承諾對得上嗎」這一條沒有執行。\n' +
+        '  （dist/privacy/index.html 不在，或那句話換了寫法而 <code>rel="…"</code> 抽不到。）',
+    );
+  }
+
   for await (const file of walk(resolve(ROOT, 'dist'))) {
     if (!file.endsWith('.html')) continue;
     saw('built-third-party-request', 1);
@@ -260,6 +296,36 @@ if (existsSync(resolve(ROOT, 'dist'))) {
     for (const m of text.matchAll(LINKS)) {
       // canonical / alternate 只是宣告，不會發出請求
       if (!SAFE_REL.test(m[0])) hits.push([m[1], m[0]]);
+    }
+
+    /* 承諾 vs 事實：外部的 <a> 有沒有帶著隱私頁說的那個 rel */
+    if (promisedRel !== null) {
+      for (const m of text.matchAll(/<a\b[^>]*\bhref\s*=\s*"(https?:\/\/[^"]+)"[^>]*>/gi)) {
+        let host;
+        try {
+          host = new URL(m[1]).host;
+        } catch {
+          continue;
+        }
+        if (host.endsWith('bellafoxy.com')) continue;
+        saw('external-link-rel-broken-promise', 1);
+        const relAttr = /\brel\s*=\s*"([^"]*)"/i.exec(m[0])?.[1] ?? '';
+        if (relAttr.split(/\s+/).includes(promisedRel)) continue;
+        findings.push({
+          rel,
+          lineNo: text.slice(0, text.indexOf(m[0])).split('\n').length,
+          line: m[0].slice(0, 110),
+          matched: m[1].slice(0, 60),
+          rule: {
+            id: 'external-link-rel-broken-promise',
+            level: 'error',
+            why:
+              `隱私頁對訪客承諾外部連結一律有 rel="${promisedRel}"，而這一個沒有（rel="${relAttr}"）。` +
+              '　改法：那個連結的 rel 要用 src/config/privacy.ts 的 externalLinkRel，不要自己寫一份；' +
+              '真的要改承諾的話，改的是 /privacy 那一句。',
+          },
+        });
+      }
     }
 
     for (const [url, tag] of hits) {

@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 44,200 行、2.3 MB、270 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 44,400 行、2.4 MB、271 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -44222,4 +44222,139 @@ X docs/PLATFORMS.md 跟 platforms.data.mjs 對不上了。
   workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：5 — 隱私與安全**
+
+### 2026-09-05 — 第 5 輪（第三十四圈）：隱私與安全
+
+**第三十四圈問：這個答案，系統裡已經有了嗎？如果有，為什麼沒用上？**
+判準：**這個數字、這個判斷，是重新算的，還是從已經有的地方拿的？
+如果是重新算的，兩邊什麼時候會分岔？**
+
+第 7 輪（第三十三圈）我**用手**驗過 `/privacy` 每一句都是真的。
+這一圈的問法更尖：那些答案，**系統自己在驗嗎**？
+
+#### 1. 那一句承諾，是寫死的常數
+
+`/privacy` 對訪客說：
+
+> 站上的外部連結一律加上 `rel="noreferrer"`，對方網站不會知道你是從這裡點過去的。
+
+而真正決定 rel 的是 `src/config/privacy.ts`：
+
+```
+export const externalLinkRel = privacy.strictReferrerPolicy
+  ? 'noopener noreferrer'
+  : 'noopener';
+```
+
+**那個開關一關，站上每一個外部連結就沒有 noreferrer 了。**
+實測（把 `strictReferrerPolicy` 改成 `false` 再建置）：
+
+```
+外部連結 58 個，沒有 noreferrer 的 58 個
+```
+
+**而那一頁還是照樣承諾。** 承諾與事實各走各的。
+
+而答案就在手上 —— `privacy.astro` **開頭第 14 行就 import 了 `privacy`**，
+而且檔案開頭的註解自己寫著「有些句子會隨 privacy.ts 的開關而不同
+（例如影片嵌入），所以內容是用函式產生的」。機制在、開關在、
+上面影片那一段早就在用了。**只有這一句沒有用。**
+
+#### 2. 同一個值還有第二份
+
+`search.astro` 的前端拼 `<a>` 時寫死 `rel="noopener noreferrer"`，
+其他八處都用 `externalLinkRel`。開關關掉時，搜尋結果會**還帶著 noreferrer**
+而全站其他連結都掉了 —— 方向上比較保守，但那代表同一個隱私設定
+在站上有兩個答案，而其中一個不看開關。
+
+#### 3. 改法
+
+- 那一句（中英各一份）改成跟著 `privacy.strictReferrerPolicy` 走。
+  關掉時它會說「加上 `rel="noopener"`，沒有 noreferrer —— 對方網站會知道
+  你是從這個站點過去的」。
+- `search.astro` 改用同一個常數（經 `data-strings` 傳給前端）。
+- **加一條稽核規則守住「承諾 = 事實」**（`external-link-rel-broken-promise`，
+  主體 58）。
+
+那條規則刻意**不讀 `privacy.ts`** —— 那是 TypeScript，這支 Node 腳本讀不到
+（`platforms` 當年拆成 `.data.mjs` 就是為了這個）。
+它改成：**承諾印在頁面上、事實在隔壁的檔案裡，兩個都在 `dist/`**。
+從 `dist/privacy/index.html` 抽 `<code>rel="…"</code>`，
+再要求每一個外部 `<a>` 都帶著那個值。
+
+#### 4. 突變
+
+| 突變 | 結果 |
+|---|---|
+| 拿掉一個連結的 `rel` | 紅 ✓（必須修正 2 —— 中英兩頁），並印出行號與那一段 HTML |
+| **把開關關掉** | **綠 ✓** —— 頁面改口說 noopener，連結也是 noopener，兩邊仍然一致 |
+
+第二個是重點：這條規則守的是**一致**，不是某一個固定值。
+承諾改了、事實跟著改，就不該紅。
+
+#### 5. 兩件自己踩到的
+
+**一、`level: 'error'` 沒有生效。** 我照直覺寫 `findings.push({ level: 'error', rule: '…' })`，
+結果它被算成「請確認」而不是「必須修正」——因為這支腳本的報告讀的是
+`f.rule.level`，`rule` 是一個**物件**不是 id 字串。照既有的形狀重寫才對。
+
+**二、規則在沒有 `dist/privacy/` 的語料上整條消失。** 我把 `saw()` 放在
+「讀得到承諾」的 if 裡面，於是 `test-privacy-structural` 紅了：
+它掃原始碼數到 28 個定義處，而腳本在假語料上說 27 條。
+（那一格是第 5 輪〔第三十圈〕加的，判準是「數字問腳本自己要，不另外寫一份清單」——
+所以它抓得到這種不一致。）改成先 `saw(id, 0)` 登記，閒置的規則要補 0、
+不要從名單上消失 —— 這個 repo 的老規矩。
+
+#### 6. 這一圈的問題，在這一層得到的答案
+
+`/privacy` 上每一句都是真的（上一圈逐條量過），但**只有一句話是「碰巧」真的** ——
+它不看開關，今天的開關剛好是開的。
+
+| | 之前 | 現在 |
+|---|---|---|
+| 那句承諾 | 寫死，不看開關 | 跟著 `strictReferrerPolicy` 走 |
+| `search.astro` 的 rel | 自己寫一份 | 用同一個常數 |
+| 承諾 vs 事實 | 沒有人比（我上一圈用手比的） | 每次建置都比（主體 58） |
+| 開關關掉時 | 頁面說謊 | 頁面改口，檢查仍然綠 |
+
+### 待辦（不屬於這一輪）
+
+- **`strictReferrerPolicy: false` 那條路沒有測試。** 這一輪是用突變手動走的；
+  要常設就得有辦法用另一份 config 建置一次（→ 5 隱私與安全）
+- 上一輪與更早的都還在（`verifiedAt` 仍然手寫、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、`docs/A11Y.md` 那三個瀏覽器量的數字沒人對、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `audit:privacy` 沒有 needles 時本機 exit 0、搜尋頁的 client script 沒有自動測試、
+  我連續六次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  `test-ci-sim` 那一格在有負載時會紅、要不要讓列表顯示詩詞的 `title`、
+  `REVIEW-LOG.md` 開頭三個數字手寫、「涵蓋率：前景 N 種」那兩個數字沒人驗、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  另外幾支的 `--verbose` 數字沒人驗、乾淨基底上 10 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `check:perf` 那句「全是 favicon」是寫死的描述、7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  28 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、`related` 單向、schema 的必填／選填沒被選過、
+  11 條預算裡 5 條的上限是挑的、另外四支檢查的嚴重度、
+  `CoverImage` 的 `sizes` 用 40rem、
+  `check.yml` 跑過 0 次、`ci:sim` 只有手動跑、`ui.ts` 的 `en` 要不要必填、
+  `reveal('email')` 沒有人呼叫、4 條閒置豁免、本機 `ahead 48, behind 1`、
+  `npm run sync` 來源全失敗仍離開碼 0、排程遲了四小時只有一筆、
+  `ExternalLink.astro` 要刪還是接上去（它是唯一沒有人用的那個元件，
+  而站上八處各自手寫 `target="_blank"`）、`PAGE_SIZE` 沒有呼叫者、
+  `VideoFacade` 一次都沒算繪過、`aria-live`／`role="status"` 沒有規則、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、`probe:served` 沒有自己的測試、
+  `--real-install` 成功路徑沒測試、視覺層 24 處實測沒重驗、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  真的開一次螢幕閱讀器聽、`CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  workflow 不在 `check:copy` 範圍、`EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：6 — 文案與語氣**

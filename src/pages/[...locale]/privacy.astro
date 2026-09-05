@@ -95,7 +95,23 @@ const CONTENT: Record<Locale, { lead: string; sections: Section[] }> = {
       },
       {
         heading: '對外連結',
-        paragraphs: ['站上的外部連結一律加上 rel="noreferrer"，對方網站不會知道你是從這裡點過去的。'],
+        /*
+         * ── 這一句原本是寫死的，而它其實有開關 ──────────
+         *
+         * `externalLinkRel` 是 `privacy.strictReferrerPolicy ? 'noopener noreferrer' : 'noopener'`。
+         * 也就是說那個開關一關，站上每一個外部連結就沒有 noreferrer 了 ——
+         * **而這一頁還是會說「一律加上 rel="noreferrer"」**。
+         *
+         * 這一頁是網站對讀者的承諾，而承諾寫成了不看開關的常數。
+         * 第 5 輪（第三十四圈）：這一圈問「這個答案系統裡已經有了嗎」——
+         * 有，`privacy` 這個檔案開頭就 import 進來了，而且上面影片那一段
+         * 早就在用它了。只有這一句沒有。
+         */
+        paragraphs: [
+          privacy.strictReferrerPolicy
+            ? '站上的外部連結一律加上 rel="noreferrer"，對方網站不會知道你是從這裡點過去的。'
+            : '站上的外部連結加上 rel="noopener"，沒有 noreferrer —— 對方網站會知道你是從這個站點過去的。',
+        ],
       },
       {
         heading: '伺服器',
@@ -147,7 +163,9 @@ const CONTENT: Record<Locale, { lead: string; sections: Section[] }> = {
       {
         heading: 'Outbound links',
         paragraphs: [
-          'Every external link carries rel="noreferrer", so the site you land on is not told where you came from.',
+          privacy.strictReferrerPolicy
+            ? 'Every external link carries rel="noreferrer", so the site you land on is not told where you came from.'
+            : 'External links carry rel="noopener" but not noreferrer, so the site you land on is told that you came from here.',
         ],
       },
       {
@@ -169,7 +187,8 @@ const CONTENT: Record<Locale, { lead: string; sections: Section[] }> = {
 const { lead, sections } = CONTENT[locale];
 
 /** 把 key 名與屬性名包成 <code>，其餘照原樣輸出 */
-const CODEY = /(fox-theme|fox-poem-orientation|rel="noreferrer"|youtube-nocookie\.com)/g;
+/* `rel="noopener"` 也要進來 —— 開關關掉時那一段講的是它（見上面「對外連結」） */
+const CODEY = /(fox-theme|fox-poem-orientation|rel="noreferrer"|rel="noopener"|youtube-nocookie\.com)/g;
 const withCode = (text: string) => text.replace(CODEY, '<code>$1</code>');
 ---
 

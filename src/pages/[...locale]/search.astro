@@ -3,6 +3,17 @@ import Base from '@layouts/Base.astro';
 import PageHeader from '@components/layout/PageHeader.astro';
 import { localePaths } from '@i18n/paths';
 import { useTranslations, localizePath } from '@i18n/utils';
+/*
+ * ── 對外連結的 rel 只能有一個來源 ──────────
+ *
+ * 這裡原本寫死 `rel="noopener noreferrer"`，而站上其他八處都用
+ * `externalLinkRel`（`privacy.strictReferrerPolicy` 一關就會變成只有 noopener）。
+ *
+ * 第 5 輪（第三十四圈）量到：把那個開關關掉，44 頁裡 58 個外部連結全部
+ * 掉了 noreferrer，**只有搜尋結果還帶著** —— 方向上是比較保守沒錯，
+ * 但那代表同一個隱私設定在站上有兩個答案，而其中一個不看開關。
+ */
+import { externalLinkRel } from '@config/privacy';
 import { getSyndication } from '@lib/syndication';
 import type { Locale } from '@config/site';
 
@@ -58,6 +69,8 @@ const strings = JSON.stringify({
   otherLangOne: t('list.otherLang', { n: 1 }),
   otherLangMany: t('list.otherLang'),
   otherLangHref: localizePath('/archive', otherLocale),
+  /* 前端要拼 <a>，rel 從同一個常數來，不要在腳本裡再寫一次 */
+  externalRel: externalLinkRel,
   locale,
   /*
    * 結果那一行的「類型」。第 3 輪（第十一圈）真的去搜了一次才看到：
@@ -212,6 +225,7 @@ const strings = JSON.stringify({
     otherLangOne: string;
     otherLangMany: string;
     otherLangHref: string;
+    externalRel: string;
     locale: string;
     kinds: Record<string, string>;
   }
@@ -357,7 +371,7 @@ const strings = JSON.stringify({
       const li = document.createElement('li');
       const external = item.x === 1;
       li.innerHTML = `
-        <a href="${escapeHtml(item.u)}"${external ? ' target="_blank" rel="noopener noreferrer"' : ''}>
+        <a href="${escapeHtml(item.u)}"${external ? ` target="_blank" rel="${escapeHtml(s.externalRel)}"` : ''}>
           ${escapeHtml(item.t)}${external ? ' <span aria-hidden="true">↗</span>' : ''}
         </a>
         <span class="res__meta">${escapeHtml(s.kinds[item.k] ?? item.k)}${item.g ? ' · ' + escapeHtml(item.g) : ''}</span>
