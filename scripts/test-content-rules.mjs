@@ -975,6 +975,72 @@ try {
   }
 
   /*
+   * ── 版面斷點的清單 ──────────────────────────────────
+   *
+   * 第 8 輪（第三十圈）實測：把一處 `@media (max-width: 34rem)` 改成
+   * `32rem`，重建，六道關卡加兩套測試**全綠** —— 而 33rem 寬的視窗上
+   * 頁首與頁尾會切在不同的版面，中間裂一條縫。
+   *
+   * 這一項只數，不判斷對錯（這個站真的有四種斷點，「全部要一樣」是錯的），
+   * 所以這幾格驗的是「數得對」。
+   */
+  {
+    /**
+     * @param {string} label
+     * @param {string} css 放進假 dist 的一份外部 CSS
+     * @param {(out: string) => boolean} want
+     */
+    const withCss = async (label, css, want) => {
+      const dir = await build(`bp-${label}`, {
+        content: { 'poems/wu-yi-xiang.md': poem() },
+        dist: {
+          'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
+          '_astro/x.css': css,
+        },
+      });
+      const { out } = await checkWithCode(dir);
+      const ok = want(out);
+      if (!ok) failed++;
+      console.log(`  ${ok ? '✓' : 'X'} ${label}`);
+      if (!ok) {
+        const said = out.split('\n').filter((l) => l.includes('版面斷點')).join(' ｜ ');
+        console.log('        ' + (said || '（完全沒提到版面斷點）'));
+      }
+      await rm(dir, { recursive: true, force: true });
+    };
+
+    /*
+     * 少的那個**寫在前面** —— 這樣「出現順序」跟「照數量排」是兩個不同的答案。
+     * 第一版把 34rem 寫在前面，於是突變「不排序」照樣全綠：
+     * 兩種順序在那份語料上剛好一樣。判準沒問題，是語料分不出來
+     * （這一圈第三次踩到，前兩次在第 2 輪與第 5 輪）。
+     */
+    await withCss(
+      '兩種斷點：數得出各幾處，多的排前面',
+      '@media (max-width: 32rem){c{color:red}}@media (max-width: 34rem){a{color:red}}@media (max-width: 34rem){b{color:red}}',
+      (out) => /版面斷點：2 種，共 3 處 —— 34rem × 2、32rem × 1/.test(out),
+    );
+    /* 壓縮過的 CSS 寫的是 `(width<=34rem)` —— 只認沒壓縮那種的話，真的站上一處都數不到 */
+    await withCss(
+      '壓縮過的 (width<=34rem) 也算（反向案例）',
+      '@media (width<=34rem){a{color:red}}',
+      (out) => /版面斷點：1 種，共 1 處 —— 34rem × 1/.test(out),
+    );
+    /* 反向：一個 max-width 查詢都沒有時說「沒有檢查」，不是安靜跳過 */
+    await withCss(
+      '一個斷點都沒有：說「沒有檢查」而不是安靜跳過',
+      'a{color:red}@media print{b{color:blue}}',
+      (out) => /版面斷點沒有檢查/.test(out),
+    );
+    /* 反向：min-width 不算 —— 這個站用的是 max-width，混進來數字會對不上 */
+    await withCss(
+      'min-width 不算（反向案例）',
+      '@media (min-width: 40rem){a{color:red}}@media (max-width: 34rem){b{color:red}}',
+      (out) => /版面斷點：1 種，共 1 處 —— 34rem × 1/.test(out),
+    );
+  }
+
+  /*
    * ── 從 src/pages 走不到的元件 ────────────────────────
    *
    * 第 3 輪（第三十圈）加的。跟上面的同步資料一樣**只說話、不擋** ——

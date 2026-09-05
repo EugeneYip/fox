@@ -998,6 +998,22 @@ const RULES = [
  * 判準只問「產出的 CSS 裡還有沒有那條宣告」—— 靜態掃描看不出版面對不對，
  * 但看得出那條規則**在不在**。而它不在的時候，一定是壞的。
  */
+/**
+ * 真的送到讀者那裡的 CSS —— 外部檔與內嵌 `<style>` 兩半。
+ *
+ * Astro 的 `inlineStylesheets: 'auto'` 會把小的 scoped style 內嵌進 HTML，
+ * 所以只讀 `_astro/*.css` 會漏掉一大半（`check:a11y` 第 2 輪〔第十四圈〕
+ * 踩過：原本只掃到全站 CSS 的 38%）。
+ *
+ * 抽出來是因為底下有兩處要用（直排那條規則、斷點那份清單）——
+ * 各讀一次的話，兩邊會慢慢分岔。
+ */
+let servedCss = '';
+for (const f of await readdir(resolve(DIST, '_astro')).catch(() => [])) {
+  if (f.endsWith('.css')) servedCss += await readFile(resolve(DIST, '_astro', f), 'utf8');
+}
+servedCss += dedupedInlineStyles(built.filter((b) => b.path.endsWith('.html')).map((b) => b.text)).join('\n');
+
 {
   const wantVertical = entries.filter(
     (e) => e.collection === 'poems' && !/^vertical:\s*false\s*$/m.test(e.text),
@@ -1005,12 +1021,7 @@ const RULES = [
 
   if (wantVertical > 0) {
     saw('vertical-lost', wantVertical);
-    /* 外部 CSS 與內嵌 <style> 兩半都要看 —— Astro 兩種都會產生 */
-    let css = '';
-    for (const f of await readdir(resolve(DIST, '_astro')).catch(() => [])) {
-      if (f.endsWith('.css')) css += await readFile(resolve(DIST, '_astro', f), 'utf8');
-    }
-    css += dedupedInlineStyles(built.filter((b) => b.path.endsWith('.html')).map((b) => b.text)).join('\n');
+    const css = servedCss;
 
     if (css === '') {
       notes.push('直排沒有檢查：產出裡找不到任何 CSS。');
@@ -1369,6 +1380,56 @@ const SYNC_STALE_DAYS = 3;
         );
       }
     }
+  }
+}
+
+/*
+ * ── 版面斷點：同一個數字寫在九個地方 ────────────────
+ *
+ * 第 8 輪（第三十圈）實測：把 `Header.astro` 的
+ * `@media (max-width: 34rem)` 改成 `32rem`，重建，跑完
+ * **六道關卡加兩套測試 —— 全綠**。
+ *
+ * 後果是看得見的：在 33rem 寬的視窗上，頁首會停在桌機版面，
+ * 而頁尾、分頁、詩塊已經切到手機版面 —— 中間裂一條縫，
+ * 而沒有任何一道關卡分得出「刻意的斷點」與「打錯的斷點」。
+ *
+ * ── 為什麼是清單，不是「全部要一樣」──
+ *
+ * 這個站真的有四個 max-width 斷點：34rem（9 處）、48rem（2 處）、
+ * 52rem、40rem。「全部要一樣」會是**我自己發明的規矩**，而且是錯的。
+ *
+ * 而 `--w-prose: 34rem` 跟那九個 34rem 數字相同，是巧合不是關係 ——
+ * 前者是正文欄寬，後者是手機斷點；把它們綁起來同樣是發明。
+ *
+ * 所以這裡只做一件真的能做的事：**把有幾種斷點、各幾處數出來**。
+ * 34rem 從 9 處變成 8 處、旁邊冒出一個 32rem × 1，讀的人看得見。
+ * 一樣只說話、不擋 —— 不進 RULES 也不呼叫 saw()（理由同底下那一段）。
+ */
+{
+  /** 壓縮過的 CSS 寫成 `(width<=34rem)`，沒壓縮的是 `(max-width: 34rem)`，兩種都要認 */
+  /** @type {Map<string, number>} */
+  const widths = new Map();
+  for (const m of servedCss.matchAll(/\(\s*(?:max-width\s*:|width\s*<=)\s*([\d.]+(?:rem|px|em))\s*\)/g)) {
+    widths.set(m[1], (widths.get(m[1]) ?? 0) + 1);
+  }
+  if (widths.size === 0) {
+    notes.push('版面斷點沒有檢查：送出去的 CSS 裡一個 max-width 查詢都沒有。');
+  } else {
+    /*
+     * 數量多的排前面；一樣多的用**碼位**比，不用 localeCompare ——
+     * 不給語言的 localeCompare 跟著 `LANG` 走，`test:portability` 有一格在擋，
+     * 而它當場擋下了這一行的第一版。斷點字串都是 ASCII，碼位比較就夠了
+     * （`lib/sync-core.mjs` 也是這樣改的）。
+     */
+    const rows = [...widths.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+    notes.push(
+      `版面斷點：${rows.length} 種，共 ${rows.reduce((n, [, c]) => n + c, 0)} 處 —— ` +
+        rows.map(([w, c]) => `${w} × ${c}`).join('、') +
+        '\n    CSS 沒辦法把斷點寫成變數（媒體查詢裡不能用 custom property），所以同一個數字'
+        + '是一處一處寫的。\n    這裡不判斷對錯 —— 但一個只出現一次、又跟主要斷點只差一點的數字，'
+        + '通常是打錯的。',
+    );
   }
 }
 
