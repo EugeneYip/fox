@@ -481,6 +481,65 @@ console.log('─'.repeat(64));
   await rm(dir, { recursive: true, force: true });
 }
 
+/*
+ * ── 每條預算的上限是推導出來的還是挑的 ──────────────
+ *
+ * 第 2 輪（第三十一圈）：`why` 說的是這條預算在守什麼，不是上限為什麼是
+ * 這個數。量了一次，11 條的餘裕倍數從 1.50 到 17.14 —— 看起來像一套系統，
+ * 實際是四種訂法混在一起。`basis` 一律以「推導：」或「挑的：」開頭。
+ *
+ * 這三格守的是：每一條都有 basis、開頭只有那兩種、而且結尾那句話的
+ * 兩個數字跟實際的條數對得上（自己數一次，不是比對寫死的數字）。
+ */
+{
+  const dir = await mkdtemp(join(tmpdir(), 'perf-basis-'));
+  await writeFile(join(dir, 'index.html'), page({ body: '<p>小</p>' }), 'utf8');
+  /*
+   * 搜尋索引那條預算只在 `search-index.json` 存在時才會進表。
+   *
+   * 第一版沒放它，於是表上只有 10 條 —— 而突變「把搜尋索引那條的 basis
+   * 清空」照樣全綠：那一條連同它的 basis 一起從表上消失，兩邊都少一，
+   * 數字還是對得上。判準沒問題，是**語料裡沒有那條預算**
+   * （這一圈第四次踩到語料的問題）。
+   */
+  await writeFile(join(dir, 'search-index.json'), JSON.stringify([{ t: '烏衣巷', u: '/poems/x' }]), 'utf8');
+  const out = await check(dir, ['--verbose']);
+  const plain = await check(dir);
+
+  /* 表格那幾行（`✓ 名稱` 後面接數字與百分比）就是預算的條數 */
+  const budgetRows = [...out.matchAll(/^\s*[✓X]\s+\S/gm)].length;
+  const bases = [...out.matchAll(/^\s*(推導：|挑的：)/gm)].map((m) => m[1]);
+  const ok1 = budgetRows > 0 && bases.length === budgetRows;
+  if (!ok1) failed++;
+  console.log(`  ${ok1 ? '✓' : 'X'} 每一條預算都說得出上限是怎麼來的`);
+  if (!ok1) console.log(`        ${budgetRows} 條預算，只有 ${bases.length} 條有 basis`);
+
+  const derived = bases.filter((b) => b === '推導：').length;
+  const m = /(\d+) 條預算裡，(\d+) 條說得出上限是怎麼推導的，(\d+) 條是挑的/.exec(plain);
+  const ok2 =
+    m !== null &&
+    Number(m[1]) === budgetRows &&
+    Number(m[2]) === derived &&
+    Number(m[3]) === budgetRows - derived;
+  if (!ok2) failed++;
+  console.log(`  ${ok2 ? '✓' : 'X'} 結尾那句的兩個數字跟實際條數對得上`);
+  if (!ok2) {
+    console.log(
+      '        ' +
+        (m
+          ? `說 ${m[1]} 條裡 ${m[2]} 條推導、${m[3]} 條挑的；實際 ${budgetRows} 條裡 ${derived} 條推導`
+          : '那一行根本沒印'),
+    );
+  }
+
+  /* 反向：不能兩種都不是 —— 開頭寫成別的字，上面兩格就會少數到它 */
+  const ok3 = derived > 0 && derived < budgetRows;
+  if (!ok3) failed++;
+  console.log(`  ${ok3 ? '✓' : 'X'} 兩種 basis 都真的存在（不是全部推導、也不是全部挑的）`);
+
+  await rm(dir, { recursive: true, force: true });
+}
+
 // 乾淨的一份：一頁小 HTML，什麼都不該超標
 {
   const dir = await mkdtemp(join(tmpdir(), 'perf-clean-'));

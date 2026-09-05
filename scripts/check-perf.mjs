@@ -332,6 +332,8 @@ const totalImages = images.reduce((n, f) => n + f.raw, 0);
 const budgets = [
   {
     label: '最大單頁 HTML（gzip）',
+    basis:
+      '挑的：第 2 輪（第一圈）訂的，當時現值 6.7 KB —— 2.1 倍。**沒有推導。** 後來有人拿 TCP 初始壅塞視窗替這個 14 背書，而第 2 輪（第二十八圈）實測推翻了那個框架（見下一條的 ⚠）—— 推翻只套用在下一條上，這個 14 沒有跟著重訂。',
     subjects: pageStats.length,
     fix: '先量 CSP 雜湊佔了多少（下面「CSP 雜湊數」那條有數字），再看內容 —— 這條的成長主因一直是雜湊，不是文字。',
     value: worstPage.gzip,
@@ -350,6 +352,8 @@ const budgets = [
   },
   {
     label: '首次造訪關鍵路徑（gzip）',
+    basis:
+      '推導：現值 13.9 KB 的 1.5 倍。',
     subjects: pageStats.length,
     fix: '已經越過 14 KB 那個門檻了，只能守住不再長：看上面兩條（HTML 本身、全站 CSS）哪一邊在長。',
     value: worstCritical.critical,
@@ -372,6 +376,8 @@ const budgets = [
   },
   {
     label: '全站 CSS 合計（gzip）',
+    basis:
+      '挑的：當時現值 5.1 KB —— 2.7 倍。沒有記下為什麼是 14。',
     subjects: css.length,
     fix: '回頭找重複的規則。這個站沒有 UI 框架，CSS 不該長這麼快；--verbose 看得到內嵌與外部各佔多少。',
     value: totalCssGzip,
@@ -385,6 +391,8 @@ const budgets = [
   },
   {
     label: '一般頁面內嵌 JS',
+    basis:
+      '推導：現值 2.0 KB 的 1.5 倍。',
     subjects: pageStats.length,
     fix: '把那段 JS 從共用版面移到真的需要它的那一頁 —— 每一段都要是「關掉也能用」的增強功能。',
     value: worstOrdinaryJs.inlineJs,
@@ -397,6 +405,8 @@ const budgets = [
   },
   {
     label: '最大單頁內嵌 JS',
+    basis:
+      '推導：現值 3.8 KB 的 1.5 倍，取整到 6。',
     subjects: pageStats.length,
     fix: '把搜尋那段程式碼抽成獨立檔案，不要繼續內嵌。',
     value: worstJs.inlineJs,
@@ -409,6 +419,8 @@ const budgets = [
   },
   {
     label: '單頁請求數（不含 HTML）',
+    basis:
+      '挑的：現值 2 的兩倍。沒有記下為什麼是 4。',
     subjects: pageStats.length,
     fix: '先確認多出來的是不是第三方（那是硬性限制，不能有）。是自家資源的話，考慮合併或內嵌。',
     value: worstReq.requests.total,
@@ -433,6 +445,8 @@ const budgets = [
      * 上限設 41，就是讓這件事在該做的時候自己紅燈，而不是靠人記得去數。
      */
     label: 'CSP 雜湊數（單頁最多）',
+    basis:
+      '推導：一個雜湊約 43 B，而 auto 比 never 只領先 294 B —— 42 個就該換手，所以上限取 41。',
     subjects: pageStats.length,
     fix: '把 astro.config 的 inlineStylesheets 改成 never —— 這條紅燈就是那個時候到了。',
     value: worstHashes.cspHashes,
@@ -447,6 +461,8 @@ const budgets = [
   },
   {
     label: '最大單一檔案',
+    basis:
+      '挑的：當時最大 24.9 KB —— 2.4 倍。沒有記下為什麼是 60。',
     subjects: assets.length,
     /*
      * ── 觸發的是不是 Astro 產的圖，建議完全不同 ──────────
@@ -482,6 +498,8 @@ const budgets = [
   },
   {
     label: '圖片合計',
+    basis:
+      '挑的：當時 42.9 KB —— 7.0 倍，而那 42.9 KB 沒有一張是頁面會載入的。沒有記下為什麼是 300。',
     subjects: images.length,
     fix: '--verbose 會列出最大的幾個檔案。能壓就壓、能改 WebP／AVIF 就改；真的每一張都需要，再談調高門檻。',
     value: totalImages,
@@ -517,6 +535,8 @@ if (textFiles.length > 0) {
   const biggestFeed = textFiles.reduce((a, b) => (b.gzip > a.gzip ? b : a));
   budgets.push({
     label: '最大的文字資源（gzip）',
+    basis:
+      '推導：feed 的筆數有上限，滿載時推估 gzip 約 27 KB，留一點餘裕到 40。',
     subjects: textFiles.length,
     fix: '先看是哪一種：有人把 feed 的筆數上限拿掉了，還是單筆變肥了。不要直接調高門檻。',
     value: biggestFeed.gzip,
@@ -539,6 +559,8 @@ if (textFiles.length > 0) {
 if (searchIndex) {
   budgets.push({
     label: '搜尋索引（gzip）',
+    basis:
+      '推導：平均每筆 426 B（gzip），60 KB 約 144 筆。',
     subjects: 1,
     fix: '不要只是調高門檻，選一個：(a) 索引分片載入、(b) 縮短 search-index.json.ts 的 600 字摘要、(c) 影片只收標題不收描述。',
     value: searchIndex.gzip,
@@ -679,6 +701,20 @@ for (const b of budgets) {
      */
     console.log(`      改法：${b.fix}`);
     console.log(`      ${b.why}`);
+    /*
+     * ── 這個數字是推導出來的，還是挑的 ──────────────
+     *
+     * 第 2 輪（第三十一圈）問「是我們選的，還是它剛好長成這樣」。
+     * `why` 說的是**這條預算在守什麼**，不是**上限為什麼是這個數**。
+     * 量了一次：11 條的餘裕倍數從 1.50 到 17.14 —— 看起來像一套系統
+     * （整數、對齊），實際上是四種不同的訂法混在一起。
+     *
+     * `basis` 一律以「推導：」或「挑的：」開頭，所以兩者在輸出上分得開，
+     * 也 grep 得出來。挑的那幾條**不是錯** —— 一個門檻本來就可以是判斷。
+     * 但「挑的」跟「算出來的」被讀成同一種東西的時候，
+     * 調高門檻會顯得跟當初訂它一樣有根據，而那不成立。
+     */
+    console.log(`      ${b.basis}`);
     if (!ok) console.log('');
   }
 }
@@ -855,6 +891,12 @@ if (over === 0 && staleDocs === 0) {
    */
   console.log('全部在預算內。');
   console.log(`最接近上限的是「${closest.label}」（${closestPct}%）。`);
+  /* 見上面 basis 那一段：「挑的」跟「算出來的」要分得開 */
+  const derived = budgets.filter((b) => b.basis.startsWith('推導：')).length;
+  console.log(
+    `${budgets.length} 條預算裡，${derived} 條說得出上限是怎麼推導的，` +
+      `${budgets.length - derived} 條是挑的（--verbose 看每一條）。`,
+  );
   /* 這一行在紅燈那條路上也會印 —— 見底下 else 那一段的說明 */
   /*
    * ── 每條預算的數字從哪來，只有 --verbose 說得出來 ──────────
