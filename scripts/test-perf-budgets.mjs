@@ -887,6 +887,35 @@ for (const [key, value] of Object.entries(CASES)) {
   console.log(`  ${okQuiet ? '✓' : 'X'} 說明裡的數字沒過期時不報（反向案例）`);
 
   /*
+   * ── 全部對得上時，也要說出「比了幾條」 ──────────
+   *
+   * 第 2 輪（第三十四圈）：這一段原本只在**有東西過期**時出聲，
+   * 所以「說明裡的數字都是對的」跟「這道檢查一條都沒比到」在畫面上一模一樣。
+   * 實際量到的就是後者的一半：11 條裡有 5 條寫了現值，而樣式只配得到 4 條
+   * （「最大單一檔案」那句的檔名太長，超出 14 個字的視窗），配不到就 `continue`。
+   *
+   * 這裡不重算一次「應該有幾條」—— 那等於把抽取邏輯抄第二份（第三十二圈的教訓）。
+   * 驗的是**它自己說的數字跟它自己列的名字對不對得上**，
+   * 以及那個數字不是 0（0 的話這道檢查等於沒跑）。
+   */
+  /* 標籤自己就含全形括號（「最大單頁 HTML（gzip）」），所以靠行尾的「），其餘」收尾 */
+  const cover = /說明裡的現值：比對了 (\d+) 條（(.*)），其餘/.exec(clean);
+  const okCoverLine = cover !== null;
+  if (!okCoverLine) failed++;
+  console.log(`  ${okCoverLine ? '✓' : 'X'} 全部對得上時說得出「比對了幾條」`);
+  if (!okCoverLine) {
+    console.log('        ' + (clean.split('\n').find((l) => l.includes('說明裡的現值')) ?? '（那一行沒印）'));
+  }
+
+  if (cover) {
+    const said = Number(cover[1]);
+    const named = cover[2].split('、').filter(Boolean).length;
+    const okConsistent = said > 0 && said === named;
+    if (!okConsistent) failed++;
+    console.log(`  ${okConsistent ? '✓' : 'X'} 那一行說的條數跟它列出來的名字一樣多（說 ${said}、列 ${named}）`);
+  }
+
+  /*
    * 然後把腳本自己的一句說明改成過期的值，確認它抓得到 —— 而且離開碼是 1。
    * 用 scripts/mutate.mjs 那一套的做法：改完一定要還原。
    */

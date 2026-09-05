@@ -353,7 +353,7 @@ const budgets = [
   {
     label: '首次造訪關鍵路徑（gzip）',
     basis:
-      '推導：現值 13.9 KB 的 1.5 倍。',
+      '推導：訂的時候現值是 13.9 KB，取 1.5 倍。（這個 13.9 記的是**當時**，不是現在 —— 現在的值報告每次都會印。）',
     subjects: pageStats.length,
     fix: '已經越過 14 KB 那個門檻了，只能守住不再長：看上面兩條（HTML 本身、全站 CSS）哪一邊在長。',
     value: worstCritical.critical,
@@ -392,7 +392,7 @@ const budgets = [
   {
     label: '一般頁面內嵌 JS',
     basis:
-      '推導：現值 2.0 KB 的 1.5 倍。',
+      '推導：訂的時候現值是 2.0 KB，取 1.5 倍。（同上，13.9 那條也是 —— 這幾個數字都是歷史。）',
     subjects: pageStats.length,
     fix: '把那段 JS 從共用版面移到真的需要它的那一頁 —— 每一段都要是「關掉也能用」的增強功能。',
     value: worstOrdinaryJs.inlineJs,
@@ -623,6 +623,8 @@ if (!process.argv.some((a) => a.startsWith('--dir='))) {
   const selfSrc = await readFile(new URL(import.meta.url), 'utf8');
   /** @type {string[]} */
   const drifted = [];
+  /** 說明裡真的有「現值」說法、因此這一輪比對過的那幾條 */
+  const checkedLabels = [];
   for (const b of budgets) {
     if (b.unit === 'count') continue;
     /*
@@ -644,8 +646,27 @@ if (!process.argv.some((a) => a.startsWith('--dir='))) {
     const whyM = /why:\s*((?:'[^']*'\s*\+?\s*)+)/.exec(seg);
     if (!whyM) continue;
     const why = whyM[1].replace(/'\s*\+\s*'/g, '').replace(/^'|',?\s*$/g, '');
-    const claim = /(?:目前|現在)[^。；]{0,14}?([0-9][0-9.]*)\s*KB/.exec(why);
+    /*
+     * ── 那個視窗原本是 14 個字 ──────────
+     *
+     * 第 2 輪（第三十四圈）逐條量：11 條預算的 `why` 裡，
+     * 有三條寫著「目前／現在⋯⋯N KB」這種**現值**說法，而這個樣式只配得到兩條。
+     * 漏掉的是「最大單一檔案」那一條：它的說法是「目前最大的是 ⋯⋯，N KB」，
+     * 而中間夾著一個很長的檔名。
+     *
+     * （這裡刻意不把那句話原樣抄下來 —— 抄了的話這個檔案裡就有兩份一樣的字串，
+     * 而突變掃描會配到前面那一份，改的不是你以為的那一個。這一圈問的正是這件事。）
+     *
+     * 「目前」到數字之間隔了 20 個字，超過 14 就配不到 ——
+     * 而配不到的時候這裡是 `continue`，**安靜地跳過**。
+     * 那個 24.9 這支腳本每跑一次就算一次，只是沒有拿去比。
+     *
+     * 放寬到 30 之後逐條驗過：只有那一條從「配不到」變成 24.9，
+     * 其餘八條的結果一個字都沒變（沒有把上限之類的數字誤配進來）。
+     */
+    const claim = /(?:目前|現在)[^。；]{0,30}?([0-9][0-9.]*)\s*KB/.exec(why);
     if (!claim) continue;
+    checkedLabels.push(b.label);
     const claimed = Number(claim[1]) * 1024;
     const drift = Math.abs(claimed - b.value) / b.value;
     if (drift > DRIFT_LIMIT) {
@@ -670,6 +691,21 @@ if (!process.argv.some((a) => a.startsWith('--dir='))) {
      */
     staleDocs = drifted.length;
   }
+
+  /*
+   * ── 這一輪到底比了幾條 ──────────
+   *
+   * 原本這一段只有在**有東西過期**的時候才出聲。全部對得上的時候它一句話都不說 ——
+   * 於是「說明裡的數字都是對的」跟「這道檢查一條都沒比到」在畫面上長得一模一樣。
+   *
+   * 第 2 輪（第三十四圈）就是這樣才發現漏掉一條的：從輸出上看不出來。
+   * 所以把涵蓋範圍講出來，跟這支腳本其他幾段（「11 條預算裡 6 條說得出上限」）一致。
+   */
+  const wording = checkedLabels.length === 0 ? '**一條都沒比到**' : `比對了 ${checkedLabels.length} 條`;
+  console.log(
+    `\n說明裡的現值：${wording}（${checkedLabels.join('、') || '—'}）` +
+      `，其餘 ${budgets.length - checkedLabels.length} 條的說明沒有寫現值，沒東西可比。`,
+  );
 }
 
 console.log('\n效能預算（量 gzip 後的大小，那才是實際下載量）');
