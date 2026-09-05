@@ -10,6 +10,10 @@
  *
  * `check-workflows.mjs` 存在的理由是「三個 workflow 到現在一次都沒有在
  * GitHub 上跑過」—— 它是那三份檔案唯一的守門人。
+ *
+ * （那句話寫的是當時。第 7 輪〔第三十六圈〕實際數過：`deploy.yml` 跑了
+ * 8 次、`sync-feeds.yml` 2 次，都成功；而 **`check.yml` 仍然是 0 次** ——
+ * 它只在 PR 上觸發，而這個專案不開 PR。所以那句話對三份裡的一份還成立。）
  * 而到第 7 輪（第六圈）為止，**它自己的四條規則一個案例都沒有**。
  *
  * 更難看的是：第 3 輪（第六圈）我在紀錄裡寫「沒有一支檢查腳本是沒有測試的了」。
@@ -605,13 +609,62 @@ try {
   }
 
   {
-    const out = await check(await build('clean', base()));
+    const dir = await build('clean', base());
+    const out = await check(dir);
     const ok = out.includes('沒有發現問題');
     console.log(`  ${ok ? '✓' : 'X'} 正常的 workflow 不誤報`);
     if (!ok) {
       failed++;
       console.log(out.split('\n').map((l) => '        ' + l).join('\n'));
     }
+
+    /*
+     * ── 綠燈說得出什麼 ──────────────────
+     *
+     * 第 7 輪（第三十六圈）加的。這一支的綠燈原本只有
+     * 「3 份 workflow，沒有發現問題」—— 三個檔案，然後沒了。
+     *
+     * 四格分別守：規則數、`--verbose` 的存在、`--verbose` 時不再提示自己、
+     * 以及**邊界那一句**（這是靜態檢查，看不到 workflow 真的跑起來的樣子）。
+     * 最後一格最重要：這一支守的三份檔案裡有一份到今天仍然一次都沒跑過，
+     * 而綠燈完全沒有透露這件事。
+     */
+    const okRules = /\d+ 條規則、這次判斷過 \d+ 個東西/.test(out);
+    if (!okRules) failed++;
+    console.log(`  ${okRules ? '✓' : 'X'} 綠燈說得出幾條規則、判斷過幾個東西`);
+    if (!okRules) console.log('        ' + out.split('\n').filter(Boolean).slice(-4).join(' ｜ '));
+
+    const okHint = /--verbose/.test(out);
+    if (!okHint) failed++;
+    console.log(`  ${okHint ? '✓' : 'X'} 綠燈說得出怎麼看「判斷過幾個東西」`);
+
+    /*
+     * ── 這兩格刻意分開 ──────────
+     *
+     * 第一版寫成一條 `/靜態.*檢查|跑起來會不會過/`，然後突變掃描抓到它：
+     * 把「這是靜態檢查」那一行整句拿掉，**測試照樣全綠** ——
+     * 因為 `|` 的另一半在別的行上，判準被別的東西滿足了。
+     * （這個 repo 記過好幾次的形狀：判準能被別的東西滿足。）
+     *
+     * 分成兩格之後，兩句各自有人守：一句講**它是什麼**，
+     * 一句講**它因此看不到什麼**。
+     */
+    const okStatic = /這是\*\*靜態\*\*檢查/.test(out);
+    if (!okStatic) failed++;
+    console.log(`  ${okStatic ? '✓' : 'X'} 綠燈說得出「這是靜態檢查」`);
+    if (!okStatic) console.log('        ' + out.split('\n').filter(Boolean).slice(-4).join(' ｜ '));
+
+    const okCant = /跑起來會不會過/.test(out);
+    if (!okCant) failed++;
+    console.log(`  ${okCant ? '✓' : 'X'} 綠燈說得出它因此看不到什麼`);
+    if (!okCant) console.log('        ' + out.split('\n').filter(Boolean).slice(-4).join(' ｜ '));
+
+    const { stdout: verbose } = await run('node', [resolve(ROOT, 'scripts/check-workflows.mjs'), `--root=${dir}`, '--verbose'])
+      .catch((/** @type {any} */ e) => ({ stdout: String(e?.stdout ?? '') }));
+    const okQuiet = /每條規則實際判斷過的東西/.test(verbose) && !/要看每條規則判斷過幾個東西/.test(verbose);
+    if (!okQuiet) failed++;
+    console.log(`  ${okQuiet ? '✓' : 'X'} --verbose 印出數字，而且不再提示自己（反向案例）`);
+    if (!okQuiet) console.log('        ' + verbose.split('\n').filter(Boolean).slice(-4).join(' ｜ '));
   }
 
   /*

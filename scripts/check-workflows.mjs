@@ -80,8 +80,20 @@ if (process.argv.includes('--list-rules')) {
  * 每條規則這次實際判斷過幾個東西。
  *
  * 第二十一圈的問題：一條只判斷過 3 個東西的規則，跟判斷過幾百個的，
- * 綠燈的意思完全不一樣。這一支尤其值得問 ——
- * 它守的是**三份從來沒有在 GitHub 上跑過的 workflow**。
+ * 綠燈的意思完全不一樣。這一支尤其值得問。
+ *
+ * ── 那句「三份都沒跑過」已經過期了 ──────────
+ *
+ * 寫這一段的時候三份 workflow 一次都沒在 GitHub 上跑過，所以這支腳本
+ * 是它們唯一的守門人。第 7 輪（第三十六圈）用 `gh run list` 實際數過：
+ *
+ *   deploy.yml       8 次（最近一次 2026-09-05，成功）
+ *   sync-feeds.yml   2 次（排程，兩次都成功）
+ *   check.yml        **0 次**
+ *
+ * 前兩份現在有真的執行紀錄可以對照了。`check.yml` 沒有 ——
+ * 它只在 `pull_request` 與 `workflow_dispatch` 上觸發，而這個專案
+ * 是站主直接推 main，不開 PR。所以它到今天仍然只有這支腳本在守。
  *
  * @type {Map<string, number>}
  */
@@ -653,8 +665,48 @@ if (process.argv.includes('--verbose')) {
   }
 }
 for (const n of notes) console.log(`\n  ⚠ ${n}`);
+
+/*
+ * ── 綠燈要說得出「判斷過什麼」與「看不到什麼」 ────────────
+ *
+ * 第 7 輪（第三十六圈）加的。這一支原本的綠燈只有一句
+ * 「3 份 workflow，沒有發現問題」—— 三個檔案，然後沒了。
+ * 沒說幾條規則、沒說判斷過幾個東西、沒說 `--verbose` 存在，
+ * 也沒說**它是靜態檢查**。
+ *
+ * 另外六支從第二十一圈到第二十九圈陸續補齊了這件事，這一支是漏掉的那一支。
+ * 而它偏偏是最需要講的：它守的東西**沒有第二個人在看**
+ * （`ci:sim` 只模擬 `deploy.yml`，另外兩份它明講沒有模擬到）。
+ *
+ * 邊界那一句要講清楚差別：這支讀的是**抹掉註解之後的 YAML 文字**。
+ * 它判斷得出「這個 script 名字在 package.json 裡不存在」，
+ * 判斷不出「這份 workflow 在 GitHub 上跑起來會不會過」——
+ * 那兩件事之間隔著 runner、快取、secret、與網路。
+ */
+const total = [...subjects.values()].reduce((n, v) => n + v, 0);
+const idle = [...subjects.entries()].filter(([, n]) => n === 0).map(([id]) => id).sort();
 if (problems.length === 0) {
-  console.log(`\n${files.length} 份 workflow，沒有發現問題。\n`);
+  console.log(
+    `\n${files.length} 份 workflow（${files.join('、')}）、` +
+      `${RULE_IDS.length} 條規則、這次判斷過 ${total} 個東西 —— 沒有發現問題。`,
+  );
+  if (idle.length > 0) {
+    console.log(
+      `\n這次沒有東西可判斷的規則（${idle.length} 條）：${idle.join('、')}\n` +
+        '  它們是綠的，但那不是「判斷過而且沒問題」，是「沒有這種寫法」。',
+    );
+  }
+  if (!process.argv.includes('--verbose')) {
+    console.log('要看每條規則判斷過幾個東西：npm run check:workflows -- --verbose');
+  }
+  console.log(
+    '\n這是**靜態**檢查：讀的是抹掉註解之後的 YAML。\n' +
+      '  它看不到的是「這份 workflow 在 GitHub 上跑起來會不會過」——\n' +
+      '  中間隔著 runner、Node 版本、快取、secret 與網路。\n' +
+      `  真的跑過幾次要問 GitHub：gh run list --repo EugeneYip/fox --workflow <檔名>\n` +
+      '  （2026-09-06 數過：deploy.yml 8 次、sync-feeds.yml 2 次、check.yml **0 次**\n' +
+      '   —— check.yml 只在 PR 上觸發，而這個專案是直接推 main。）\n',
+  );
   process.exit(0);
 }
 for (const p of problems) {
