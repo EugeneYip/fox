@@ -52,15 +52,15 @@ const deployYml = (/** @type {string[]} */ steps) =>
   ].join('\n');
 
 /**
- * @param {{ steps: string[], scripts: Record<string, string>, cname?: boolean }} o
+ * @param {{ steps: string[], scripts: Record<string, string>, cname?: boolean, engines?: string }} o
  */
-async function fakeRepo({ steps, scripts, cname = true }) {
+async function fakeRepo({ steps, scripts, cname = true, engines = '>=22.0.0' }) {
   const dir = await mkdtemp(join(tmpdir(), 'ci-sim-'));
   await mkdir(join(dir, '.github', 'workflows'), { recursive: true });
   await writeFile(join(dir, '.github', 'workflows', 'deploy.yml'), deployYml(steps), 'utf8');
   await writeFile(
     join(dir, 'package.json'),
-    JSON.stringify({ name: 'fake', version: '1.0.0', engines: { node: '>=22.0.0' }, scripts }, null, 2),
+    JSON.stringify({ name: 'fake', version: '1.0.0', engines: { node: engines }, scripts }, null, 2),
     'utf8',
   );
   await writeFile(join(dir, '.nvmrc'), '22\n', 'utf8');
@@ -218,5 +218,28 @@ console.log('\nCI 模擬的實測\n' + '─'.repeat(56));
 }
 
 console.log('─'.repeat(56));
+/*
+ * ── 「不是 CI 那個版本」要說得出怎麼查是哪個版本 ──────────
+ *
+ * `.nvmrc` 是浮動的大版本，所以 CI 每次裝當時最新的 22.x。
+ * 這句警告從第二十一圈就在印，而**沒有人查過那到底是哪一版** ——
+ * 第 7 輪（第二十八圈）翻了 CI 的 log 才知道是 v22.23.2，
+ * 而這台機器是 v22.15.1，差 8 個小版本。
+ *
+ * 一個「你驗的不是真的那個」的警告，如果不說怎麼知道真的是哪個，
+ * 讀的人只能聳肩。這一格守的是那句指令還在。
+ */
+{
+  const dir = await fakeRepo({
+    steps: ['verify:all'],
+    scripts: { 'verify:all': 'echo ok' },
+    engines: '>=99.0.0',
+  });
+  const { out } = await sim(dir);
+  const okHow = /低於 engines 的門檻/.test(out) && /gh run view/.test(out) && /node: v/.test(out);
+  ok('版本不符時，說得出怎麼查 CI 實際裝哪一版', okHow, out.split('\n').slice(0, 8).join(' | '));
+  await rm(dir, { recursive: true, force: true });
+}
+
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
 process.exit(failed > 0 ? 1 : 0);

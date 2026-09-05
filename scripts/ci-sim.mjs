@@ -155,7 +155,24 @@ if (floor) {
 const nvmrc = readFileSync(resolve(ROOT, '.nvmrc'), 'utf8').trim();
 console.log(`  Node：這台機器 v${nodeNow}　engines 要求 ${engineRange}　CI 裝 .nvmrc 的 ${nvmrc}.x 最新版`);
 if (nodeMismatch) {
+  /*
+   * ── CI 到底跑哪一版 ──────────────────────────────
+   *
+   * `.nvmrc` 寫的是 `22`，也就是**浮動的大版本** —— CI 每次裝的是當時
+   * 最新的 22.x。這句話從第二十一圈就在印，而**沒有人查過那到底是哪一版**：
+   * 要知道得去翻 CI 的 log。
+   *
+   * 第 7 輪（第二十八圈）翻了：兩次 run 的「準備 Node」都是 **v22.23.2**，
+   * 而這台機器是 v22.15.1 —— 差 8 個小版本。
+   *
+   * 這裡不寫死那個數字（它會浮動），寫的是**怎麼重查** ——
+   * 跟這個 repo 其他量測一樣：數字要帶著它的出處。
+   */
   console.log(`  ⚠ 這台機器低於 engines 的門檻 —— 下面的結果證明的是 v${nodeNow}，不是 CI 會跑的版本`);
+  console.log(
+    '     要知道 CI 實際裝哪一版：gh run view <run-id> --repo EugeneYip/fox --log | grep "node: v"' +
+      '（2026-09-05 實測是 v22.23.2）',
+  );
 }
 
 /*
