@@ -45,7 +45,7 @@ const configured = new Map(sources.map((s) => [s.platform, s]));
 function row(p) {
   const s = configured.get(p.id);
   const state = !s ? '—' : s.enabled ? '**已啟用**' : '已預留';
-  return `| \`${p.id}\` | ${p.name['zh-TW']} | ${REGION[p.region]} | ${MEDIA[p.media]} | ${KIND[p.feedKind]} | ${SHAPE[p.handleShape ?? 'username']} | ${CONFIDENCE[p.confidence]} | ${state} |`;
+  return `| \`${p.id}\` | ${p.name['zh-TW']} | ${REGION[p.region]} | ${MEDIA[p.media]} | ${KIND[p.feedKind]} | ${SHAPE[p.handleShape ?? 'username']} | ${CONFIDENCE[p.confidence]}${p.verifiedAt ? `（${p.verifiedAt}）` : ''} | ${state} |`;
 }
 
 /** @param {string} kind */
@@ -113,9 +113,12 @@ const doc = `# 平臺對照表
 | 🔀 需橋接 | ${byKind('bridge').length} | 官方沒有 RSS，靠 RSSHub 轉，可能不穩 |
 | ✍️ 手動 | ${byKind('manual').length} | 抓不到，只能在 \`src/content/external/\` 手動登錄 |
 
-「已實測」= 用一個公開的知名帳號實際打過，確認回來的是解析得動的 feed
+「已實測（日期）」= 用一個公開的知名帳號實際打過，確認回來的是解析得動的 feed
 （那個帳號記在 \`probeHandle\`，只用於驗證，不會出現在網站上，也不會被同步）。
 隨時可以用 \`npm run verify -- --patterns\` 重驗，抓平臺改版或下架。
+**那個日期是人手寫的**：跑完 \`--patterns\` 過了，由跑的人把當天日期填進
+\`verifiedAt\`。所以它記的是「最後一次有人回來寫」，不是「最後一次真的通過」——
+那支腳本自己會說最舊的宣稱是幾天前。
 「依文件」= 平臺文件或長期慣例，但這次沒實測。
 「需自行查」= 網址含內部 ID，無法由帳號名推導，要到個人頁面複製 RSS 連結。
 
@@ -292,8 +295,36 @@ let claudeDrift = false;
   }
 }
 
+/*
+ * ── 「已實測」要帶著日期出現在表上 ────────────────────
+ *
+ * 第 4 輪（第三十七圈）加的。這一圈問「這個宣稱是誰要求的？寫在哪份
+ * 文件裡？兩邊還一致嗎？」
+ *
+ * 資料裡每一個 `confidence: 'verified'` 都有 `verifiedAt`
+ * （`confidence-report` 有一條在守這件事），而**這份給人讀的表上一個日期都沒有**
+ * —— 讀者看到「已實測」，分不出那是昨天還是半年前。
+ *
+ * 那個差別是真的：`verifiedAt` 是**人手寫的**，跑完 `--patterns` 由跑的人
+ * 填當天日期。沒有人回來寫的話，「已實測」會一直是「已實測」。
+ *
+ * 這一格守的是「別在改表格樣板的時候把日期悄悄弄不見」。
+ */
+const verifiedCount = PLATFORMS.filter((p) => p.confidence === 'verified').length;
+const datedRows = (doc.match(/已實測（\d{4}-\d{2}-\d{2}）/g) ?? []).length;
+let dateDrift = false;
+if (datedRows !== verifiedCount) {
+  dateDrift = true;
+  console.log(`X 表上帶日期的「已實測」有 ${datedRows} 列，而資料裡 verified 的平臺有 ${verifiedCount} 個。`);
+  console.log('  讀者看到「已實測」卻沒有日期的話，分不出那是昨天還是半年前。');
+  console.log('  改法：表格那一列要印 verifiedAt；真的有 verified 卻沒填日期的話，');
+  console.log('  npm run verify -- --patterns 會點名是哪一個。');
+} else if (verifiedCount > 0) {
+  console.log(`✓ ${verifiedCount} 個「已實測」都帶著日期（最舊：${PLATFORMS.filter((p) => p.confidence === 'verified').map((p) => p.verifiedAt).sort()[0]}）`);
+}
+
 if (process.argv.includes('--check')) {
-  if (claudeDrift) process.exit(1);
+  if (claudeDrift || dateDrift) process.exit(1);
   if (upToDate) {
     console.log(`✓ docs/PLATFORMS.md 是最新的（${PLATFORMS.length} 個平臺、${cjkStrings.size} 個中文字串，CLAUDE.md 的數字也對得上）`);
   } else {
