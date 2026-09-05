@@ -1029,6 +1029,48 @@ const crawlerRow = (/** @type {string} */ text) => `| \`allowAiCrawlers\` | \`fa
 }
 
 console.log('─'.repeat(64));
+/*
+ * ── 豁免名單上，哪幾條這一輪什麼都沒擋 ──────────
+ *
+ * 第 5 輪（第二十八圈）問「這件事是誰決定的，那個人還在嗎」。
+ * 豁免名單的每一條都是一個決定，而**沒有東西在看那些理由還成不成立**。
+ *
+ * 實測（逐條拿掉再跑）：9 條裡 4 條真的在擋、1 條是值本來就住的地方、
+ * **4 條什麼都沒擋**。一條什麼都沒擋的豁免不是無害的，是一個沒有守衛的門。
+ *
+ * 這兩格守的是那句話會隨著事實變 —— 不是寫死的宣傳。
+ */
+{
+  /* docs/PRIVACY.md 裡沒有任何被禁的樣式 → 該被列成「什麼都沒擋」 */
+  /* docs/PRIVACY.md 裡沒有任何被禁的樣式 → 該被列成「什麼都沒擋」 */
+  const idleDir = await build({ 'docs/PRIVACY.md': '# 隱私\n\n這一份只描述規則，不引用被禁的東西。\n' });
+  const idle = await audit(idleDir, {});
+  const okIdle = /什麼都沒擋/.test(idle.out) && /docs\/PRIVACY\.md/.test(idle.out);
+  if (!okIdle) failed++;
+  console.log(`  ${okIdle ? '✓' : 'X'} 豁免什麼都沒擋時，說出來並點名是哪一條`);
+  if (!okIdle) console.log('        ' + idle.out.split('\n').filter((l) => l.includes('豁免')).join(' | '));
+  await rm(idleDir, { recursive: true, force: true });
+
+  /* 同一個檔案放進一個被禁的樣式 → 該從「什麼都沒擋」的名單裡消失 */
+  /*
+   * 用 `target-blank-no-rel` —— 它對 `.md` 有效。
+   *
+   * 第一版挑了 Google Fonts 的網址，而那條是 `aboutLoading`：
+   * `.md` 刻意不掃（文件本來就在討論「為什麼不用它」）。
+   * 挑錯規則的話這一格會永遠紅，而看起來像功能壞了。
+   */
+  const busyDir = await build({
+    'docs/PRIVACY.md': '# 隱私\n\n<a href="https://example.com" target="_blank">外連</a>\n',
+  });
+  const busy = await audit(busyDir, {});
+  const busyLine = busy.out.split('\n').find((l) => l.includes('什麼都沒擋')) ?? '';
+  const okBusy = !busyLine.includes('docs/PRIVACY.md');
+  if (!okBusy) failed++;
+  console.log(`  ${okBusy ? '✓' : 'X'} 同一條豁免真的擋住東西時，就不在那份名單裡（反向案例）`);
+  if (!okBusy) console.log('        ' + (busyLine || '（沒有那一行）'));
+  await rm(busyDir, { recursive: true, force: true });
+}
+
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
 process.exit(failed > 0 ? 1 : 0);
 

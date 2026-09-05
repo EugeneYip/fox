@@ -1202,18 +1202,47 @@ const UNWIRED_MARK = '⚠ 這個開關沒有接上';
   }
 }
 
+/**
+ * 每一條豁免這一輪**實際擋住了幾條規則的命中**。
+ *
+ * ── 為什麼要數這個 ──────────────────────────────
+ *
+ * 第 5 輪（第二十八圈）問「這件事是誰決定的，那個人還在嗎」。
+ * 豁免名單上的每一條都是一個決定：「這個檔案不用受這條規則管」。
+ * 那些決定當初都有理由（測試檔一定會有假信箱、規則本身會提到要防的字串⋯⋯），
+ * 而**沒有任何東西在看那些理由還成不成立**。
+ *
+ * 那一輪逐條拿掉量過：9 條裡只有 2 條真的在擋東西
+ * （`test-privacy-rules.mjs` 拿掉會多出 7 處、`test-privacy-structural.mjs` 多 1 處）。
+ * 另外 6 條**今天什麼都沒擋** —— 檔案裡已經沒有那些樣式了
+ * （多半是後來改寫成「描述它，不要引用它」）。
+ *
+ * 一條什麼都沒擋的豁免不是無害的：它是一個**沒有守衛的門**。
+ * 下一個人在 `docs/PRIVACY.md` 裡寫一個真的信箱，不會有任何東西響。
+ *
+ * 這裡不自作主張刪掉它們 —— 未來的用途我不知道。
+ * 改成每一輪自己說出來，讓「這條還需要嗎」變成看得見的問題。
+ * @type {Map<string, number>}
+ */
+const shadowedByAllowlist = new Map();
+
 {
   for await (const file of filesToScan()) {
     const rel = relative(ROOT, file);
     const allowlisted = ALLOWLIST.has(rel);
+    if (allowlisted) shadowedByAllowlist.set(rel, shadowedByAllowlist.get(rel) ?? 0);
+    /*
+     * `identity.local.ts` 連規則迴圈都不會進去（下一行就 continue），
+     * 所以影子數不到它 —— 而它的豁免**確實在承重**：真的值本來就住在那裡。
+     * 實測拿掉它的豁免會多出 1 處。標成 -1 表示「不是閒置，是本來就該豁免」。
+     */
+    if (allowlisted && rel === IDENTITY_HOME) shadowedByAllowlist.set(rel, -1);
     if (allowlisted && rel === IDENTITY_HOME) continue;
 
     const text = await readFile(file, 'utf8');
     const lines = text.split('\n');
 
     for (const rule of RULES) {
-      // 被豁免的檔案只跑 identity-value；其餘規則照舊略過
-      if (allowlisted && rule.id !== 'identity-value') continue;
       if (rel === IDENTITY_HOME && rule.id === 'identity-value') continue;
       if (rule.only && !rule.only.test(rel)) continue;
       /*
@@ -1227,6 +1256,18 @@ const UNWIRED_MARK = '⚠ 這個開關沒有接上';
        * 真的載入了由 built-third-party-request 掃 dist/ 抓。
        */
       if (rule.aboutLoading && /\.mdx?$/.test(rel) && !rel.startsWith('public/')) continue;
+      /*
+       * 被豁免的檔案只跑 identity-value —— 但在跳過之前先**空跑一次**，
+       * 記下這條豁免今天實際擋住了什麼（見 shadowedByAllowlist 的說明）。
+       */
+      if (allowlisted && rule.id !== 'identity-value') {
+        rule.pattern.lastIndex = 0;
+        if (rule.pattern.test(text)) {
+          shadowedByAllowlist.set(rel, (shadowedByAllowlist.get(rel) ?? 0) + 1);
+        }
+        rule.pattern.lastIndex = 0;
+        continue;
+      }
       /* 上面每一道 continue 都是「這條規則沒看這個檔案」—— 活過來的才算數 */
       saw(rule.id, 1);
       rule.pattern.lastIndex = 0;
@@ -1342,6 +1383,30 @@ console.log('\n隱私稽核\n' + '─'.repeat(52));
  * `reveal()` 就算整個壞掉也洩漏不了。**結構上安全的只有那條路。**
  * 有人把本名直接打進頁面，就完全靠這組身分規則，而它現在沒在跑。
  */
+/*
+ * ── 哪幾條豁免這一輪什麼都沒擋 ──────────
+ *
+ * 理由見 shadowedByAllowlist 的說明。這一段跟「這次沒有東西可看的規則」
+ * 是同一個形狀：綠燈有兩種，而這兩種在畫面上長得一樣。
+ */
+{
+  const idle = [...shadowedByAllowlist.entries()].filter(([, n]) => n === 0).map(([rel]) => rel);
+  const busy = [...shadowedByAllowlist.entries()].filter(([, n]) => n > 0);
+  const home = [...shadowedByAllowlist.entries()].filter(([, n]) => n === -1).map(([rel]) => rel);
+  if (shadowedByAllowlist.size > 0) {
+    notices.push(
+      `豁免名單有 ${shadowedByAllowlist.size} 條，這一輪**只有 ${busy.length} 條真的擋住東西**` +
+        (busy.length ? `（${busy.map(([r, n]) => `${r} ${n} 條規則`).join('、')}）` : '') +
+        (home.length ? `，另外 ${home.join('、')} 是值本來就住的地方（不算閒置）` : '') +
+        `。\n  其餘 ${idle.length} 條什麼都沒擋：${idle.join('、')}\n` +
+        '  那不是「安全」，是**沒有守衛的門** —— 下一個人在那些檔案裡寫一個真的信箱，\n' +
+        '  不會有任何東西響。\n' +
+        '  改法：確認那條豁免現在還為了什麼而存在。說不出來就把它刪掉，\n' +
+        '  讓稽核去看那個檔案；真的需要引用被禁的東西時，先想想能不能改成描述它。',
+    );
+  }
+}
+
 for (const n of notices) console.log('\n⚠ ' + n);
 
 const CI = Boolean(process.env.CI);
