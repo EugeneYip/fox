@@ -69,6 +69,7 @@ const RULE_IDS = [
   'machine-path-in-config',
   'dispatch-target-missing',
   'step-output-unset',
+  'gate-count-stale',
 ];
 
 if (process.argv.includes('--list-rules')) {
@@ -657,6 +658,74 @@ console.log('\n建置管線檢查\n' + '─'.repeat(56));
  * 零的那幾條要看得見：它們的綠燈是「沒有東西可判斷」，
  * 不是「判斷過而且沒問題」。跟另外四支檢查同一個作法。
  */
+/*
+ * ── 「六道關卡」這個數字寫在四份文件裡 ────────────────────
+ *
+ * 第 7 輪（第三十七圈）加的。這一圈問「這一條規則，是誰要求的？
+ * 寫在哪份文件裡？兩邊還一致嗎？」
+ *
+ * `verify:all` 有幾道關卡這件事，人會讀的文件裡寫了**四次**：
+ * `CLAUDE.md`、`docs/DEPLOY.md`、`AGENTS.md`、`docs/STATE.md`。
+ * 加一道關卡，四份同時變成錯的。
+ *
+ * 而這不是假想 —— `CLAUDE.md` 自己就留著一行：
+ * 「（原本這裡寫「五道」，那是更早以前的數字。）」
+ * **它已經過期過一次了**，而那次是靠人記得回來改。
+ *
+ * 這裡不判斷「幾道才對」，只比 `package.json` 的 `verify:all` 真的有幾步。
+ * 那是這個數字唯一的事實來源。
+ *
+ * `docs/REVIEW-LOG.md` 不比：那是歷史紀錄，裡面每一筆寫的是**當時**的數字。
+ *
+ * 這一段要在「補 0」那一行**之前** —— 它自己會 `saw()`，
+ * 排在後面的話那條規則會被補成 0，而 `--verbose` 印的是補完的那一份
+ * （第一版就是這樣，明明比了 4 句卻印 0）。第十次犯同一個形狀。
+ */
+{
+  const CLAIM_DOCS = ['CLAUDE.md', 'AGENTS.md', 'docs/DEPLOY.md', 'docs/STATE.md'];
+  const CN = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+  const pkgRaw = await readFile(resolve(ROOT, 'package.json'), 'utf8').catch(() => null);
+  /** `verify:all` 真的有幾步 */
+  let actual = null;
+  if (pkgRaw !== null) {
+    try {
+      const line = JSON.parse(pkgRaw).scripts?.['verify:all'];
+      if (typeof line === 'string') actual = line.split('&&').filter((x) => x.trim()).length;
+    } catch {
+      /* package.json 壞掉的話下面會說「沒有比對」 */
+    }
+  }
+  let claims = 0;
+  for (const rel of CLAIM_DOCS) {
+    const body = await readFile(resolve(ROOT, rel), 'utf8').catch(() => null);
+    if (body === null) continue;
+    for (const m of body.matchAll(/([零一二三四五六七八九十]|\d+)\s*道關卡/g)) {
+      claims += 1;
+      if (actual === null) continue;
+      const said = CN.indexOf(m[1]) >= 0 ? CN.indexOf(m[1]) : Number(m[1]);
+      if (said === actual) continue;
+      add(
+        rel,
+        body.slice(0, m.index).split('\n').length,
+        'gate-count-stale',
+        `這裡寫「${m[1]}道關卡」，而 package.json 的 verify:all 有 ${actual} 步。\n` +
+          `      同一個數字在 ${CLAIM_DOCS.length} 份文件裡各寫了一次 —— 加一道關卡就會同時錯四份，\n` +
+          '      而它已經過期過一次了（CLAUDE.md 自己還留著「原本這裡寫五道」那一行）。\n' +
+          `      改法：把那句話的數字改成 ${actual}，四份都要改（這一條會把沒改到的都點出來）。`,
+      );
+    }
+  }
+  saw('gate-count-stale', claims);
+  if (actual === null) {
+    notes.push('讀不到 package.json 的 verify:all —— 「幾道關卡」那個數字沒有比對。');
+  } else if (claims === 0) {
+    notes.push(
+      '四份文件裡一句「N 道關卡」都抽不到 —— **這一格沒有在守**。\n' +
+        '      那句話換了寫法的話，這裡的樣式要跟著改（不然它會安靜地什麼都不比）。',
+    );
+  }
+}
+
 for (const id of RULE_IDS) if (!subjects.has(id)) subjects.set(id, 0);
 if (process.argv.includes('--verbose')) {
   console.log('\n每條規則實際判斷過的東西：');

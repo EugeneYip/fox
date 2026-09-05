@@ -608,6 +608,46 @@ try {
     if (!ok) console.log('        ' + (out.split('\n').filter((l) => l.includes('必跑清單')).join(' ｜ ') || '（那一句沒印）'));
   }
 
+  /*
+   * ── 「N 道關卡」寫在四份文件裡 ──────────────────
+   *
+   * 第 7 輪（第三十七圈）：`verify:all` 有幾道關卡這件事，
+   * 人會讀的文件裡寫了**四次**（`CLAUDE.md`、`AGENTS.md`、
+   * `docs/DEPLOY.md`、`docs/STATE.md`）。加一道，四份同時錯。
+   *
+   * 而它**已經過期過一次** —— `CLAUDE.md` 還留著
+   * 「（原本這裡寫「五道」，那是更早以前的數字。）」那一行。
+   *
+   * base 的 `verify:all` 是 2 步，所以文件寫「二道關卡」是對的，
+   * 寫「六道關卡」是錯的。
+   */
+  {
+    /** @type {Record<string, string>} */
+    const stale = base();
+    stale['CLAUDE.md'] = '跑 `npm run verify:all`，那是六道關卡。\n';
+    const out = await check(await build('gate-count-stale', stale));
+    const ok = /\[gate-count-stale\]/.test(out) && /有 2 步/.test(out);
+    if (!ok) failed++;
+    console.log(`  ${ok ? '✓' : 'X'} 文件說的關卡數跟 verify:all 對不上時擋得住`);
+    if (!ok) console.log('        ' + out.split('\n').filter((l) => /關卡/.test(l)).slice(0, 2).join(' ｜ '));
+
+    /** @type {Record<string, string>} */
+    const right = base();
+    right['CLAUDE.md'] = '跑 `npm run verify:all`，那是二道關卡。\n';
+    const out2 = await check(await build('gate-count-ok', right));
+    const ok2 = !/\[gate-count-stale\]/.test(out2);
+    if (!ok2) failed++;
+    console.log(`  ${ok2 ? '✓' : 'X'} 數字對得上時不誤報（反向案例）`);
+    if (!ok2) console.log('        ' + out2.split('\n').filter((l) => /關卡/.test(l)).slice(0, 2).join(' ｜ '));
+
+    /* 四份文件裡一句都抽不到的時候要說話，不然改寫法之後這一格會安靜地什麼都不比 */
+    const none = await check(await build('gate-count-none', base()));
+    const ok3 = /一句「N 道關卡」都抽不到 —— \*\*這一格沒有在守\*\*/.test(none);
+    if (!ok3) failed++;
+    console.log(`  ${ok3 ? '✓' : 'X'} 一句都抽不到時說「這一格沒有在守」`);
+    if (!ok3) console.log('        ' + none.split('\n').filter((l) => /關卡|沒有在守/.test(l)).slice(0, 2).join(' ｜ '));
+  }
+
   {
     const dir = await build('clean', base());
     const out = await check(dir);
@@ -761,7 +801,24 @@ try {
       failed++;
       console.log('\n  X --list-rules 什麼都沒印 —— 下面的比對會空過，那是假的綠燈');
     }
-    const missing = ids.filter((i) => !(i in CASES));
+    /*
+     * 不是「一份壞掉的 workflow」那種規則的，在別的地方驗。
+     *
+     * `gate-count-stale` 讀的是 `package.json` 與四份文件，跟 workflow 檔無關 ——
+     * 做不出「一份剛好違反它的 workflow」。它的三格在上面
+     * 「N 道關卡」那個區塊裡。
+     *
+     * 這份豁免要**指得出在哪裡驗**，不然它只是一個放行的洞
+     * （跟 test-a11y-rules 的 TESTED_ELSEWHERE 同一個作法）。
+     */
+    const TESTED_ELSEWHERE = new Map([['gate-count-stale', '上面「N 道關卡」那個區塊']]);
+    if (TESTED_ELSEWHERE.size > 0) {
+      console.log(
+        `\n  · 不做假 workflow、在別處驗的規則（${TESTED_ELSEWHERE.size} 條）：` +
+          [...TESTED_ELSEWHERE].map(([r, w]) => `${r}（${w}）`).join('、'),
+      );
+    }
+    const missing = ids.filter((i) => !(i in CASES) && !TESTED_ELSEWHERE.has(i));
     if (missing.length > 0) {
       failed += missing.length;
       console.log(`\n  X 這些規則沒有測試案例：${missing.join('、')}`);
