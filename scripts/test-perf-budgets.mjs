@@ -365,6 +365,40 @@ console.log('─'.repeat(64));
   if (!ok3) failed++;
   console.log(`  ${ok3 ? '✓' : 'X'} 那一行講了怎麼重量（probe:served）`);
   if (!ok3) console.log('        ' + line);
+
+  /*
+   * ── 關鍵路徑那條的理由要帶著它的量測 ──────────
+   *
+   * 第 2 輪（第二十八圈）問「這個數字是誰訂的、理由還在嗎」。
+   * 那條原本寫「14 KB 附近是 TCP 初始壅塞視窗，超過就要多一個來回；
+   * 已經越過了」—— 站上線之後量真的，那個框架用錯了：
+   * HTML 與 CSS **從來不在同一趟裡**（CSS 是普通的 <link>，
+   * 沒有 preload、GitHub Pages 也不送 Early Hints），
+   * 所以在總和上省位元組不會少掉任何一個來回。
+   *
+   * 這一格守的是那個修正還在，而且**帶著怎麼重量** ——
+   * 一個沒有出處的效能理由，下一個人只能選擇相信或重做一次。
+   */
+  /*
+   * why 只有超標或 --verbose 才印，而這份 fixture 的關鍵路徑是通過的。
+   *
+   * **判準要對著那一段，不是對著整份輸出。** 第一版寫
+   * `/\d{4}-\d{2}-\d{2}/.test(whole) && whole.includes('probe:served')`，
+   * 而壓縮那一行本來就有日期跟 probe:served —— 兩個突變（拿掉日期、
+   * 拿掉指令）都照樣綠。這個 repo 兩圈之內第四次踩到同一件事：
+   * **判準能被別的東西滿足的時候，它證明的比它看起來的少。**
+   */
+  const whole = await check(dir, ['--verbose']);
+  const from = whole.indexOf('首次造訪關鍵路徑');
+  const nextLabel = whole.indexOf('全站 CSS 合計', from + 1);
+  const section = from < 0 ? '' : whole.slice(from, nextLabel < 0 ? from + 2000 : nextLabel);
+  const ok4 =
+    section.includes('從來不在同一趟裡') &&
+    /\d{4}-\d{2}-\d{2}/.test(section) &&
+    section.includes('probe:served');
+  if (!ok4) failed++;
+  console.log(`  ${ok4 ? '✓' : 'X'} 關鍵路徑那條說明了「省位元組不會少掉來回」，並帶量測日期與重量指令`);
+  if (!ok4) console.log('        ' + (section.slice(0, 400) || '（那一段完全沒印）'));
   await rm(dir, { recursive: true, force: true });
 }
 
@@ -662,9 +696,9 @@ console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
 process.exit(failed > 0 ? 1 : 0);
 
 /** @param {string} dir */
-async function check(dir) {
+async function check(dir, /** @type {string[]} */ extra = []) {
   try {
-    const { stdout } = await run('node', [resolve(ROOT, 'scripts/check-perf.mjs'), `--dir=${dir}`]);
+    const { stdout } = await run('node', [resolve(ROOT, 'scripts/check-perf.mjs'), `--dir=${dir}`, ...extra]);
     return stdout;
   } catch (err) {
     return String(/** @type {{ stdout?: string }} */ (err)?.stdout ?? '');
