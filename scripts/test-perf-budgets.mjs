@@ -345,7 +345,7 @@ console.log('─'.repeat(64));
   await writeFile(join(dir, 'index.html'), page({ body: `<p>${noise(20_000)}</p>` }), 'utf8');
   const out = await check(dir);
   const line = out.split('\n').find((l) => l.includes('這個 gzip 數字是')) ?? '';
-  const worst = Number(/讀者實際下載 ([\d.]+) KB/.exec(out)?.[1] ?? 0);
+  const worst = Number(/最大單頁 HTML：([\d.]+) KB/.exec(out)?.[1] ?? 0);
   const ok1 = line !== '' && worst > 0;
   if (!ok1) failed++;
   console.log(`  ${ok1 ? '✓' : 'X'} 印得出「這個 gzip 數字是上界」那一行`);
@@ -763,12 +763,12 @@ for (const [key, value] of Object.entries(CASES)) {
   const dir = await mkdtemp(join(tmpdir(), 'perf-brotli-'));
   await writeFile(join(dir, 'index.html'), page({ body: '<p>小</p>' }), 'utf8');
   const out = await check(dir);
-  const saysGzip = /讀者實際下載.*gzip/.test(out);
+  const saysGzip = /讀者[^\n]*下載[^\n]*gzip/.test(out);
   const noFalseClaim = !/brotli[^\n]*現代瀏覽器拿到的/.test(out);
   const stillShowsBrotli = /brotli/.test(out);
 
   for (const [name, ok] of [
-    ['報告說得出「讀者實際下載⋯gzip」', saysGzip],
+    ['報告說得出「讀者⋯下載⋯gzip」', saysGzip],
     ['沒有再把 brotli 說成「現代瀏覽器拿到的」', noFalseClaim],
     ['brotli 的數字仍然印得出來（換主機才有意義）', stillShowsBrotli],
   ]) {
@@ -778,6 +778,50 @@ for (const [key, value] of Object.entries(CASES)) {
   if (!saysGzip) {
     console.log('      ' + out.split('\n').filter((l) => /下載|brotli/.test(l)).join(' ｜ '));
   }
+  await rm(dir, { recursive: true, force: true });
+}
+
+/*
+ * ── 對著讀者說的那個數字，要是讀者的數字 ──────────
+ *
+ * 第 2 輪（第三十三圈）量到：那一行原本寫「最大單頁：**讀者實際下載**
+ * 10.5 KB」，用的是 `worstPage.gzip` —— **只有 HTML**。
+ * 讀者第一次到訪還要抓一支阻塞渲染的樣式表，真正的量是 14.1 KB，多 35%。
+ *
+ * 上面兩格早就在守這一行了，守的是**措辭**：有沒有說 gzip、有沒有帶重量的
+ * 指令、有沒有把 brotli 講成讀者拿得到的。**沒有一格問過那個數字是誰的。**
+ * 措辭釘得很牢，數字沒有人看。
+ *
+ * 所以這一格量的是關係，不是字：讀者那一行必須**大於**只有 HTML 的那一行，
+ * 而且要**等於**「首次造訪關鍵路徑」那條預算 —— 那條算的就是它。
+ *
+ * fixture 要有一支外部樣式表，不然兩個數字會相等，這一格就變成
+ * 「10.5 > 10.5」永遠假、或「隨便都相等」永遠真 —— 兩種都不是在守東西。
+ */
+{
+  const dir = await mkdtemp(join(tmpdir(), 'perf-reader-'));
+  await writeFile(join(dir, 's.css'), `body{color:red}${'/*' + noise(4000) + '*/'}`, 'utf8');
+  await writeFile(
+    join(dir, 'index.html'),
+    page({ head: '<link rel="stylesheet" href="/s.css">', body: `<p>${noise(3000)}</p>` }),
+    'utf8',
+  );
+  const out = await check(dir);
+  const num = (/** @type {RegExp} */ re) => Number(re.exec(out)?.[1] ?? NaN);
+  const html = num(/最大單頁 HTML：([\d.]+) KB/);
+  const reader = num(/讀者第一次到訪最多下載 ([\d.]+) KB/);
+  const critical = num(/首次造訪關鍵路徑（gzip）\s+([\d.]+) KB/);
+
+  const okBigger = reader > html;
+  if (!okBigger) failed++;
+  console.log(`  ${okBigger ? '\u2713' : 'X'} 讀者那一行比「只有 HTML」那一行大（${reader} > ${html}）`);
+  if (!okBigger) console.log('        一樣大就表示它印的還是 HTML 那個數字 —— 那正是這一格要抓的。');
+
+  const okSame = Number.isFinite(reader) && reader === critical;
+  if (!okSame) failed++;
+  console.log(`  ${okSame ? '\u2713' : 'X'} 讀者那一行就是「首次造訪關鍵路徑」那條預算（${critical} KB）`);
+  if (!okSame) console.log(`        讀者 ${reader}、關鍵路徑 ${critical} —— 同一件事要有同一個數字。`);
+
   await rm(dir, { recursive: true, force: true });
 }
 

@@ -749,9 +749,7 @@ console.log(
  * 保留 brotli 的數字（換一個主機就有意義，而且它說明壓縮還有多少空間），
  * 但把「誰拿得到」講清楚。
  */
-console.log(
-  `  最大單頁：讀者實際下載 ${kb(worstPage.gzip)}（gzip —— GitHub Pages 只供應這個）`,
-);
+console.log(`  最大單頁 HTML：${kb(worstPage.gzip)}（gzip —— GitHub Pages 只供應這個）`);
 console.log(
   `  　　　　　同一份用 brotli 是 ${kb(br(worstPage.buf))}，少 ${Math.round((1 - br(worstPage.buf) / worstPage.gzip) * 100)}%` +
     `　—— 這個站拿不到，換一個會供應 brotli 的主機才有`,
@@ -794,6 +792,30 @@ console.log(
     `比它少 ${Math.abs(MEASURED.hi)}%～${Math.abs(MEASURED.lo)}%（${MEASURED.pages} 頁，內容 md5 逐頁核對）` +
     `　—— 要重量：${MEASURED.cmd}`,
 );
+
+/*
+ * ── 那個數字不是「讀者實際下載」的量 ──────────
+ *
+ * 這一行原本寫「最大單頁：**讀者實際下載** 10.5 KB」。
+ * 它是 `worstPage.gzip`，**只有 HTML**。而讀者第一次到訪還要再抓一支
+ * 阻塞渲染的樣式表 —— 真正的量是 14.1 KB，多 34%。
+ *
+ * 諷刺的是這一支自己算得出來：上面「首次造訪關鍵路徑」那條預算就是它，
+ * 就印在同一張表上兩行之前。**知道答案，只是這一行沒有用它。**
+ *
+ * 更值得記的是：這一行**修過一次「誰拿得到」**（見上面 brotli 那段的註解 ——
+ * 第 2 輪〔第二十八圈〕把「現代瀏覽器拿到的」改成「這個站拿不到」）。
+ * 那次修的是**壓縮法**，沒有回頭看**內容**。同一句話裡的兩個假設，
+ * 只有一個被檢查過。
+ *
+ * 第 2 輪（第三十三圈）：這一圈問「這是給誰用的、那個人真的會走到這裡嗎」。
+ * 整支關卡只有這一行是對著**讀者**說的 —— 而它說的不是讀者的數字。
+ */
+console.log(
+  `  讀者第一次到訪最多下載 ${kb(worstCritical.critical)}（gzip）：${worstCritical.path} 的 HTML ` +
+    `${kb(worstCritical.gzip)} ＋ 阻塞渲染的樣式表 ${kb(worstCritical.critical - worstCritical.gzip)}`,
+);
+console.log('  　　　　　第二頁起樣式表在快取裡，就只剩 HTML —— 也就是上面那個數字。');
 
 /*
  * ── 說出這些預算實際量到什麼 ──────────
