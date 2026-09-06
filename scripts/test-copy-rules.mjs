@@ -15,7 +15,7 @@
  * **一條會誤報的規則比沒有規則糟**：它會讓人學會忽略這個檢查。
  * 所以每條規則都要有「不該抓的」案例，而不只是「該抓的」。
  */
-import { documentationDuty } from './lib/copy-rules.mjs';
+import { documentationDuty, RULES } from './lib/copy-rules.mjs';
 import { mkdtemp, mkdir, writeFile, rm, readFile, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, dirname, join } from 'node:path';
@@ -1181,6 +1181,52 @@ console.log('─'.repeat(64));
   if (!okQuiet) failed++;
   console.log(`  ${okQuiet ? '✓' : 'X'} --verbose 模式不再提示自己（反向案例）`);
   if (!okQuiet) console.log('        ' + verbose.split('\n').filter(Boolean).slice(-4).join(' | '));
+}
+
+/*
+ * ── `EXTRA_RULE_IDS` 這份名單自己對不對 ────────────────
+ *
+ * 第 6 輪（第四十二圈）加的。這一圈問「這份清單是誰維護的？漏一個會怎樣？」
+ *
+ * `EXTRA_RULE_IDS` 跟 `audit:privacy` 的 `STRUCTURAL_IDS` 是同一個角色：
+ * **補 0 那一行用的名單**，而且結尾那句「N 條規則」也是
+ * `RULES.length + EXTRA_RULE_IDS.length` 算出來的。
+ *
+ * 也就是說少登記一條的話有兩個後果，兩個都不會紅：
+ *   那條規則在區塊沒跑到的時候整條從計數裡消失
+ *   結尾印的規則數少一條
+ *
+ * **這不是假想的** —— 上一圈第 5 輪在 `audit:privacy` 上就抓到三條沒登記的
+ * （沒有 `dist/` 的時候規則數從 31 掉到 28，而輸出連「沒跑」都沒說）。
+ * 同一個形狀，這一支還沒有人守。
+ */
+{
+  const src = await readFile(resolve(ROOT, 'scripts/check-copy.mjs'), 'utf8');
+  const extra = [...(/const EXTRA_RULE_IDS = \[([^\]]*)\]/.exec(src)?.[1] ?? '').matchAll(/'([a-z0-9-]+)'/g)].map(
+    (m) => m[1],
+  );
+  const ruleIds = RULES.map((r) => r.id);
+  const used = new Set([
+    ...[...src.matchAll(/saw\('([a-z0-9-]+)'/g)].map((m) => m[1]),
+    ...[...src.matchAll(/\bid:\s*'([a-z0-9-]+)'/g)].map((m) => m[1]),
+  ]);
+  const unregistered = [...used].filter((id) => !ruleIds.includes(id) && !extra.includes(id)).sort();
+  const neverUsed = extra.filter((id) => !used.has(id)).sort();
+  const ok = extra.length > 0 && unregistered.length === 0 && neverUsed.length === 0;
+  if (!ok) failed++;
+  console.log(`  ${ok ? '✓' : 'X'} EXTRA_RULE_IDS 跟 check-copy 用到的 id 對得上（${extra.length} 條）`);
+  if (!ok) {
+    if (extra.length === 0) console.log('        抽不到 EXTRA_RULE_IDS —— 這一格等於沒驗');
+    if (unregistered.length > 0) {
+      console.log(
+        `        用到卻沒登記的：${unregistered.join('、')}\n` +
+          '        補 0 那一行看不到它，結尾那句「N 條規則」也會少算一條。',
+      );
+    }
+    if (neverUsed.length > 0) {
+      console.log(`        登記了卻沒有人用的：${neverUsed.join('、')}　（規則刪了就順手拿掉）`);
+    }
+  }
 }
 
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
