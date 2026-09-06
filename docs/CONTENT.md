@@ -368,6 +368,7 @@ npm run dev
 | `bad-reference` | `related` 裡的某個名字在 `poems` 底下找不到 | 那是檔名（不含 `.md`），去 `src/content/poems/` 對拼字 |
 | `draft-unscannable` | 草稿的標題與原文都短於四個字 | 給它一個四個字以上的 `title` —— 太短的話「草稿有沒有外洩」查不完整 |
 | `external-missing` | 收錄的外站文章在產出裡找不到 | 先確認 `platform` 是 [PLATFORMS.md](PLATFORMS.md) 裡有的 id |
+| `collection-unregistered` | 這篇所在的資料夾不在 `src/content/` 的四個分類裡 | 搬進 `posts`／`poems`／`notes`／`external` 其中一個 |
 
 #### 不是你寫錯了
 
@@ -384,6 +385,27 @@ npm run dev
 
 （這份清單不會自己過期：`check:content` 的 `rule-not-in-guide` 會確認
 每一條「會指到你檔案」的規則都寫在這裡，少一條就擋。）
+
+---
+
+## 內容只住在這四個資料夾
+
+`src/content/` 底下**只有四個資料夾會被讀到**：
+
+```
+posts     文章
+poems     詩詞
+notes     短札
+external  收錄的外站文章
+```
+
+自己開一個新的（例如 `src/content/essays/`）**不會有任何錯誤訊息** ——
+建置照樣成功，那幾篇就是不會出現在站上。實測過：放一篇進去，
+頁數一頁都沒有多，而檢查器還把它算進「幾篇內容」裡。
+
+所以現在有一條 `collection-unregistered` 在守這件事：
+資料夾不在那四個裡面就會擋下來，並且告訴你該搬去哪一個。
+真的需要第五種分類的話，那要先在 `src/content.config.ts` 裡定義它 —— 找站主。
 
 ---
 

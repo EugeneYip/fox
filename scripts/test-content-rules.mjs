@@ -320,6 +320,27 @@ const CASES = {
    * 其餘三個情境（一致、少一個、抽不到）在底下的獨立區塊裡 ——
    * 那幾格要驗的是筆記的措辭與離開碼，`CASES` 只比對「有沒有響」。
    */
+  /*
+   * ── `src/content/` 底下多一個沒註冊的資料夾 ────────────────
+   *
+   * 第 3 輪（第四十二圈）：`content.config.ts` 最後一行是一份手寫的註冊表，
+   * 而沒有東西在比它跟真的資料夾。實測放一篇進沒註冊的資料夾：
+   * 建置成功、頁數沒變、`check:content` 還把它算進「幾篇內容」，離開碼 0。
+   *
+   * fixture 要自己給一份 `content.config.ts`（`--src=` 指過去），
+   * 不然規則會走「抽不到」那條路，只印筆記不擋。
+   */
+  'collection-unregistered': {
+    content: {
+      'poems/wu-yi-xiang.md': poem(),
+      'essays/x.md': '---\ntitle: 一篇散文\nlang: zh-TW\n---\n內文。\n',
+    },
+    dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花') },
+    extra: {
+      'src/content.config.ts': 'export const collections = { posts, poems, notes, external };\n',
+    },
+    args: (/** @type {string} */ dir) => [`--src=${join(dir, 'src')}`],
+  },
   'locale-list-drift': {
     content: { 'poems/wu-yi-xiang.md': poem() },
     dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花') },
@@ -433,7 +454,7 @@ const CASES = {
     },
     dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花') },
     extra: {
-      'guide.md': '寫錯的時候會看到什麼：`no-title`、`poem-title-bracketed`、`draft-page`、`draft-unscannable`、`draft-leaked`、`external-missing`、`missing-page`、`lang-leaked`、`bad-reference`、`search-index-missing`、`template-text-left`。\n',
+      'guide.md': '寫錯的時候會看到什麼：`no-title`、`poem-title-bracketed`、`draft-page`、`draft-unscannable`、`draft-leaked`、`external-missing`、`missing-page`、`lang-leaked`、`bad-reference`、`search-index-missing`、`template-text-left`、`collection-unregistered`。\n',
     },
     args: (/** @type {string} */ dir) => [`--guide=${join(dir, 'guide.md')}`],
   },

@@ -1149,6 +1149,7 @@ const RULES = [
   'search-crosslang-mute',
   'guide-field-unknown',
   'syndication-schema',
+  'collection-unregistered',
   'rule-not-in-guide',
 ];
 /*
@@ -1486,6 +1487,75 @@ servedCss += dedupedInlineStyles(built.filter((b) => b.path.endsWith('.html')).m
           '      不一樣的話會出現「路由得到但型別沒有」或反過來的頁面。\n' +
           '      改法：四個地方一起改 —— 但先確認真的要加語言（`不加日文` 是專案的硬性限制）。',
       });
+    }
+  }
+}
+
+/*
+ * ── `src/content/` 底下的資料夾，都註冊了嗎 ────────────────
+ *
+ * 第 3 輪（第四十二圈）加的。這一圈問「這份清單是誰維護的？漏一個會怎樣？」
+ *
+ * `content.config.ts` 最後一行是一份**手寫的註冊表**：
+ *
+ *     export const collections = { posts, poems, notes, external };
+ *
+ * 今天四個名字剛好對上 `src/content/` 底下的四個資料夾 —— 而**沒有東西在比**。
+ *
+ * 實測漏一個會怎樣：把一篇 md 放進沒有註冊的 `src/content/essays/`，
+ * 然後跑一次全套：
+ *
+ *   build              44 頁（**沒有變**，那一篇一頁都沒有）
+ *   check:content      「**7 篇內容**」（它把那一篇算進去了）
+ *   離開碼             **0**
+ *
+ * 也就是說她寫了一篇、檢查器數到了、而站上沒有它，**沒有任何一道關卡出聲**。
+ * Astro 的 glob 是逐個 collection 掛的，沒註冊的資料夾就是不存在。
+ *
+ * 這一段要在「補 0」那一行**之前** —— 它自己會 `saw()`。
+ * （同一個形狀在這個 repo 犯到第十二次了，所以每一次都留這句話。）
+ */
+{
+  const configText = await readFile(resolve(SRC, 'content.config.ts'), 'utf8').catch(() => null);
+  /** 註冊表裡的名字 —— 從 `export const collections = { … }` 抽 */
+  const registered = new Set(
+    [...(/export const collections\s*=\s*\{([^}]*)\}/.exec(configText ?? '')?.[1] ?? '')
+      .matchAll(/([a-zA-Z][\w]*)/g)].map((m) => m[1]),
+  );
+  /** `src/content/` 底下真的有哪些資料夾 */
+  const dirs = (await readdir(CONTENT, { withFileTypes: true }).catch(() => []))
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name);
+
+  if (configText === null || registered.size === 0) {
+    notes.push(
+      'content.config.ts 讀不到、或抽不到 `collections` 那一行 —— ' +
+        '**「資料夾有沒有註冊」這一格沒有在守**。\n' +
+        '    那一行換了寫法的話，這裡的樣式要跟著改（不然它會安靜地什麼都不比）。',
+    );
+    saw('collection-unregistered', 0);
+  } else {
+    saw('collection-unregistered', dirs.length);
+    for (const d of dirs) {
+      if (registered.has(d)) continue;
+      const files = (await readdir(resolve(CONTENT, d)).catch(() => [])).filter((f) => /\.mdx?$/.test(f));
+      problems.push({
+        file: `src/content/${d}`,
+        id: 'collection-unregistered',
+        msg:
+          `這個資料夾沒有註冊進 content.config.ts 的 collections（裡面有 ${files.length} 篇）—— ` +
+          '**Astro 不會讀它，那幾篇在站上一頁都不會有**，而且建置不會失敗。\n' +
+          '      改法：內容放進已經註冊的資料夾' +
+          `（${[...registered].join('、')}）；` +
+          '真的要開一個新的分類，那要先在 `content.config.ts` 裡定義它。',
+      });
+    }
+    const ghost = [...registered].filter((r) => !dirs.includes(r));
+    if (ghost.length > 0) {
+      notes.push(
+        `collections 註冊了 ${ghost.join('、')}，而 src/content/ 底下沒有這些資料夾 —— ` +
+          '不是錯（還沒有那種內容而已），但那幾個名字今天什麼都沒載入。',
+      );
     }
   }
 }
