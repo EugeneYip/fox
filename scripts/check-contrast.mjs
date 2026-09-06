@@ -16,7 +16,7 @@
  *   純裝飾                                     沒有要求
  */
 import { readFile, readdir } from 'node:fs/promises';
-import { resolve, resolve as resolvePath, dirname } from 'node:path';
+import { resolve, resolve as resolvePath, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /*
@@ -878,6 +878,52 @@ async function* walkSurf(dir) {
     const direct = unused.filter((t) => !anyUse.has(t));
     const onlyByDead = unused.filter((t) => anyUse.has(t));
 
+    /*
+     * ── 「沒人用」的那幾個，值有沒有被直接寫死在別處 ──────────
+     *
+     * 見底下報告那一段的說明。判準是**整個宣告的值一字不差** ——
+     * 子字串會把 `2.1` 配到 `2.1rem`、`8px` 配到 `18px`。
+     */
+    /** @type {Map<string, string>} token → 「值 X 寫死在 檔案:行」 */
+    const literalUse = new Map();
+    {
+      /** 那個 token 在 :root 裡的（最後一次）值；light-dark(a, b) 拆成兩個 */
+      const valuesOf = (/** @type {string} */ name) => {
+        const ms = [...stripComments(css).matchAll(new RegExp(`^\\s*${name}\\s*:\\s*([^;]+);`, 'gm'))];
+        if (ms.length === 0) return [];
+        const v = ms[ms.length - 1][1].trim();
+        const ld = /^light-dark\(\s*([^,]+),\s*(.+)\)$/.exec(v);
+        const out = ld ? [ld[1].trim(), ld[2].trim()] : [v];
+        return out.filter((x) => x && !x.includes('var('));
+      };
+      for await (const file of walkSrc(resolve(ROOT, 'src'))) {
+        if (file.endsWith('tokens.css')) continue;
+        const text = await readFile(file, 'utf8');
+        /* 行號要對得上真的檔案，所以逐行走**原文**（拿掉註解會讓行號整個位移，
+           第一版報的是 187 行而那個宣告在 277 行）。註解行用開頭擋掉就夠了 ——
+           判準要求整行是 `屬性: 值;`，散文很難剛好長成那樣。 */
+        const lines = text.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+          const t0 = lines[i].trim();
+          if (t0.startsWith('*') || t0.startsWith('//') || t0.startsWith('/*')) continue;
+          /* 宣告不一定佔一整行（`.probe { line-height: 3.7; }`），所以全行找 */
+          for (const m of lines[i].matchAll(/([a-z-]+)\s*:\s*([^;{}]+);/g)) {
+            const value = m[2].trim();
+            if (value.includes('var(')) continue;
+            for (const t of unused) {
+              if (literalUse.has(t)) continue;
+              if (valuesOf(t).includes(value)) {
+                literalUse.set(
+                  t,
+                  `　（值 \`${value}\` 直接寫在 ${relative(ROOT, file)}:${i + 1} 的 ${m[1]}）`,
+                );
+              }
+            }
+          }
+        }
+      }
+    }
+
   /*
    * ── 指到不存在的 token ──────────
    *
@@ -924,9 +970,36 @@ async function* walkSurf(dir) {
       console.log(`未使用：宣告的 ${declared.length} 個 token 都有人用 ✓`);
     } else {
       console.log(`未使用：${declared.length} 個 token 裡有 ${unused.length} 個沒有人真的用到 —`);
-      for (const t of direct) console.log(`  ✗ ${t}`);
+      /*
+       * ── 「沒人用」有兩種，而它們的處置完全相反 ──────────
+       *
+       * 第 8 輪（第四十四圈）問「這件事站主要自己做嗎」。這一格掛在他名下，
+       * 而輸出說的是「要刪還是要接上去，站主決定」—— **但它沒說是哪一種**。
+       *
+       * 逐個查那 7 個的值有沒有被直接寫死在別處，答案是 6 比 1：
+       *
+       *   6 個真的沒人用（`--t-2xl`、`--r-lg`、`--dur-slow`、三個 shadow）
+       *   1 個**不是沒人用** —— `--lh-loose: 2.1`，而 `PoemBlock.astro`
+       *     寫著 `line-height: 2.1;`（直排時那就是每一句的寬度）
+       *
+       * 第二種不是「要不要刪」的問題，是 **token 沒有當成唯一來源**：
+       * 改了 tokens.css 那一行，那個地方不會跟著動。
+       *
+       * 判準是**整個宣告的值一字不差**，不是子字串 —— 用子字串查會把
+       * `2.1` 配到 `2.1rem`、把 `8px` 配到 `18px`，那樣得到的是假陽性
+       * （我第一次就是那樣查的，7 個裡誤報了 2 個）。
+       */
+      for (const t of direct) console.log(`  ✗ ${t}${literalUse.get(t) ?? ''}`);
       for (const t of onlyByDead) console.log(`  ✗ ${t}　（只被上面那些沒人用的 token 引用，不是真的活著）`);
-      console.log('  不是錯，但轉了不會有任何效果。要刪還是要接上去，站主決定。');
+      const hardCoded = [...literalUse.keys()];
+      if (hardCoded.length > 0) {
+        console.log(
+          `  其中 ${hardCoded.length} 個**不是沒人用** —— 它的值被直接寫死在別的地方，\n` +
+            '  也就是 token 沒有當成唯一來源：改了 tokens.css，那邊不會跟著動。\n' +
+            '  那幾個要問的是「接上去嗎」，不是「要不要刪」。',
+        );
+      }
+      console.log('  其餘的不是錯，但轉了不會有任何效果。要刪還是要接上去，站主決定。');
     }
   }
 

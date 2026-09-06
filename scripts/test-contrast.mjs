@@ -1207,4 +1207,77 @@ console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
   if (!okGrad) console.log('        ' + grad.split('\n').filter((l) => /歸不到|gradient/.test(l)).join(' ｜ '));
 }
 
+/*
+ * ── 「沒人用」的 token，值有沒有被寫死在別處 ──────────────
+ *
+ * 第 8 輪（第四十四圈）：那一格掛在站主名下，而輸出說「要刪還是要接上去，
+ * 站主決定」—— 它沒說是哪一種。逐個查那 7 個的值：6 個真的沒人用，
+ * 1 個（`--lh-loose: 2.1`）的值直接寫在 `PoemBlock.astro` 的 `line-height`。
+ * 那不是「要不要刪」，是 token 沒有當成唯一來源。
+ *
+ * 兩個方向都要，而且要驗**行號對得上真的檔案** —— 第一版逐行走的是
+ * 拿掉註解之後的文字，報 187 行而那個宣告在 277 行。
+ */
+{
+  console.log('\n' + '─'.repeat(64));
+  const dir = await mkdtemp(join(tmpdir(), 'contrast-dead-'));
+  await mkdir(join(dir, 'src/styles'), { recursive: true });
+  await mkdir(join(dir, 'src/components'), { recursive: true });
+  /* 兩個沒人用的 token：一個的值有人寫死，一個沒有 */
+  await writeFile(
+    join(dir, 'src/styles/tokens.css'),
+    realTokens.replace(
+      ':root {',
+      ':root {\n  --probe-copied: 3.7;\n  --probe-orphan: 9.9;\n  --probe-sub: 7.3px;',
+    ),
+    'utf8',
+  );
+  await writeFile(join(dir, 'src/styles/global.css'), realGlobal, 'utf8');
+  await writeFile(
+    join(dir, 'src/components/Probe.astro'),
+    /*
+     * 註解**跨兩行** —— stripComments 把整段換成一個空格，所以逐行走剝過註解的
+     * 文字時行號會少一行。單行註解看不出這件事（第一版就是那樣，於是「行號用
+     * 剝過的」那個突變靜靜通過）。
+     *
+     * `.other` 那一行是子字串的陷阱：`17.3px` 含有 `7.3px`，而 --probe-sub 是 `7.3px`。
+     */
+    '<p class="probe">x</p>\n<style>\n  /* 一段註解\n     跨兩行 */\n' +
+      '  .probe { line-height: 3.7; }\n  .other { border-radius: 17.3px; }\n</style>\n',
+    'utf8',
+  );
+  let out = '';
+  try {
+    ({ stdout: out } = await run('node', [resolve(ROOT, 'scripts/check-contrast.mjs'), `--root=${dir}`]));
+  } catch (err) {
+    out = String(/** @type {{ stdout?: string }} */ (err)?.stdout ?? '');
+  }
+  await rm(dir, { recursive: true, force: true });
+
+  const okCopied = /--probe-copied.*值 `3\.7` 直接寫在 src\/components\/Probe\.astro:5 的 line-height/.test(out);
+  if (!okCopied) failed++;
+  console.log(`  ${okCopied ? '✓' : 'X'} 值被寫死的那個會點名（含檔案與行號）`);
+  if (!okCopied) console.log('        ' + (out.split('\n').find((l) => l.includes('probe-copied')) ?? '（沒印）'));
+
+  const okOrphan = /✗ --probe-orphan\s*$/m.test(out);
+  if (!okOrphan) failed++;
+  console.log(`  ${okOrphan ? '✓' : 'X'} 真的沒人用的那個不加註（反向案例）`);
+  if (!okOrphan) console.log('        ' + (out.split('\n').find((l) => l.includes('probe-orphan')) ?? '（沒印）'));
+
+  /* 收尾那個數字要跟上面點名的行數一致 —— 寫死數字的話 fixture 一改就假紅 */
+  const said = /其中 (\d+) 個\*\*不是沒人用\*\*/.exec(out);
+  const listed = (out.match(/直接寫在 /g) ?? []).length;
+  const okSub = /✗ --probe-sub\s*$/m.test(out);
+  if (!okSub) failed++;
+  console.log(`  ${okSub ? '✓' : 'X'} 子字串不算（17.3px 不該讓 7.3px 被點名）`);
+  if (!okSub) console.log('        ' + (out.split('\n').find((l) => l.includes('probe-sub')) ?? '（沒印）'));
+
+  const okSummary = said !== null && Number(said[1]) === listed && listed > 0;
+  if (!okSummary) failed++;
+  console.log(
+    `  ${okSummary ? '✓' : 'X'} 收尾那個數字跟點名的行數一致` +
+      (said ? `（說 ${said[1]}、列 ${listed}）` : '（那一句沒印）'),
+  );
+}
+
 process.exit(failed > 0 ? 1 : 0);
