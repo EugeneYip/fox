@@ -62,6 +62,20 @@ import { RULES, documentationDuty } from './lib/copy-rules.mjs';
  * `RULES`。同一個 repo 第 3 輪（第三十一圈）才在 `check-content.mjs`
  * 踩過「區塊排在它的消費者後面」。
  */
+/*
+ * ── 上一次確認過的英文覆蓋 ────────────────────────
+ *
+ * 第 6 輪（第三十八圈）加的。這一圈問「這件事現在靠誰記得？忘了會怎樣？」
+ *
+ * 這一項的註解自己就寫著答案：「它從 100% 掉下來的時候，**要有人看得見**」
+ * —— 也就是**靠人**。而它刻意不擋（`ui.ts` 的 `en` 是選填），
+ * 所以掉下來只是輸出裡的一個數字，讀起來像現況，不像回退。
+ *
+ * 記一個基準在這裡：掉下來的時候那一段會說「這是回退」並附上上一次的數字。
+ * 真的決定要少一句英文的話，把這裡一起改 —— 那一改就是「我知道我在改什麼」。
+ */
+const EN_COVERAGE = { date: '2026-09-06', pairs: 108, pct: 100 };
+
 const EXTRA_RULE_IDS = ['unused-i18n-key', 'rule-not-documented', 'date-wrong-language', 'example-not-real'];
 
 /**
@@ -819,7 +833,8 @@ if (l10nPairs.length > 0) {
       `英文覆蓋：${l10nPairs.length} 組文案全部都有 en（100%）。\n` +
         '    （數的是 `ui.ts` 與 `site.ts` 裡每一個有 `zh-TW` 的物件 —— 不只 `ui.ts`。）\n' +
         '    這一項不擋 —— `ui.ts` 的 `en` 型別上是選填（`Partial`），少一句只會安靜地退回中文。\n' +
-        '    所以數字寫在這裡：它從 100% 掉下來的時候，要有人看得見。',
+        `    ${EN_COVERAGE.date} 記下的是 ${EN_COVERAGE.pairs} 組 ${EN_COVERAGE.pct}% —— ` +
+        '掉下來的話底下那一段會說那是**回退**，不是現況。',
     );
   } else {
     notes.push(
@@ -827,7 +842,12 @@ if (l10nPairs.length > 0) {
         missing.slice(0, 6).map((p) => `      · ${p.rel}　${p.path}`).join('\n') +
         (missing.length > 6 ? `\n      …另外 ${missing.length - 6} 組` : '') +
         '\n    英文讀者看到的會是中文（`pick()` 會安靜地退回），而沒有任何一道關卡會響 ——\n' +
-        '    `ui.ts` 的 `en` 型別上是選填，`site.ts` 的則是必填（`satisfies L10n`）。',
+        '    `ui.ts` 的 `en` 型別上是選填，`site.ts` 的則是必填（`satisfies L10n`）。' +
+        (Number(pct) < EN_COVERAGE.pct
+          ? `\n    **這是回退**：${EN_COVERAGE.date} 記下的是 ${EN_COVERAGE.pairs} 組 ${EN_COVERAGE.pct}%。\n` +
+            '    「有幾組沒有 en」單看是一個數字，跟上一次比才看得出是不是掉下來的 ——\n' +
+            '    而這一項不擋，所以沒有人會替你記得上一次是多少。'
+          : ''),
     );
   }
 }

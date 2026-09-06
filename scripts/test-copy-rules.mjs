@@ -1218,6 +1218,44 @@ console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
 
 }
 
+/*
+ * ── 英文覆蓋掉下來的時候，要說得出「這是回退」──────────────
+ *
+ * 第 6 輪（第三十八圈）：這一項的註解自己就寫著答案 ——
+ * 「它從 100% 掉下來的時候，**要有人看得見**」，也就是**靠人**。
+ * 而它刻意不擋（`ui.ts` 的 `en` 是選填），所以掉下來只是輸出裡的一個數字，
+ * 讀起來像現況，不像回退。
+ *
+ * 記了一個基準之後，掉下來那一段會附上上一次的數字。
+ */
+{
+  console.log('\n' + '─'.repeat(64));
+  const withUi = async (/** @type {string} */ ui) => {
+    const dir = await build({
+      'dist/index.html': html('<p>乾淨的一頁。</p>'),
+      'src/i18n/ui.ts': ui,
+    });
+    return check(dir);
+  };
+
+  const full = await withUi("export const ui = {\n  'a.b': { 'zh-TW': '中', en: 'EN' },\n};\n");
+  const okFull = /全部都有 en（100%）/.test(full) && /記下的是 \d+ 組 \d+% ——/.test(full);
+  if (!okFull) failed++;
+  console.log(`  ${okFull ? '✓' : 'X'} 100% 的時候也說得出基準是多少`);
+  if (!okFull) console.log('        ' + full.split('\n').filter((l) => /英文覆蓋|記下的/.test(l)).join(' ｜ '));
+
+  const dropped = await withUi("export const ui = {\n  'a.b': { 'zh-TW': '中' },\n};\n");
+  const okDrop = /\*\*這是回退\*\*/.test(dropped) && /沒有人會替你記得上一次是多少/.test(dropped);
+  if (!okDrop) failed++;
+  console.log(`  ${okDrop ? '✓' : 'X'} 掉下來時說「這是回退」，並附上上一次的數字`);
+  if (!okDrop) console.log('        ' + dropped.split('\n').filter((l) => /英文覆蓋|回退/.test(l)).join(' ｜ '));
+
+  /* 反向：沒掉的時候不該說回退 */
+  const okQuiet = !/\*\*這是回退\*\*/.test(full);
+  if (!okQuiet) failed++;
+  console.log(`  ${okQuiet ? '✓' : 'X'} 沒掉的時候不說回退（反向案例）`);
+}
+
 process.exit(failed > 0 ? 1 : 0);
 
 /** @param {Record<string, string>} files */
