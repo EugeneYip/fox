@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 54,200 行、2.8 MB、322 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 54,400 行、2.8 MB、323 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -52365,3 +52365,194 @@ CSS 巢狀上線之後每一條樣式規則自己都有一個（空的、但是 
 並且把「還有幾處」變成一個會自己說話的數字。
 
 **下一輪：1 — 無障礙**
+
+### 2026-09-06 — 第 1 輪（第四十一圈）：無障礙
+
+**第四十一圈問：這一課學過了，當時修乾淨了嗎？**
+判準：**翻出 `REVIEW-LOG.md` 裡記過的一課，找出它今天在 repo 裡
+每一個同形狀的地方 —— 有幾個當時沒修到？**
+
+#### 1. 第一課：「算可及名稱之前，先把 `aria-hidden` 的子樹拿掉」（第十四圈）
+
+那一課的原話就在 `check-a11y.mjs` 裡：
+
+> 只有 `decorative-glyph-in-name` 在做這件事，**`hasAccessibleName` 沒有**。
+> 兩條規則在同一個檔案裡隔十幾行，一條知道 aria-hidden、一條不知道。
+
+今天把每一個 `textOf(` 都翻出來，逐一問它算的是不是可及名稱：
+
+| 位置 | 算什麼 | 有沒有先拿掉 aria-hidden |
+|---|---|---|
+| `hasAccessibleName` | 可及名稱 | ✓（那一課修的就是它） |
+| `link-name` 那段 | 可及名稱 | ✓ |
+| `same-name-different-target` | 可及名稱 | ✓ |
+| `heading-order` 的 `text` | **只用在錯誤訊息裡引述標題** | 不需要 |
+| `lang-content-mismatch` | **兩個語言版本的可見文字** | 不該拿掉（`aria-hidden` 的字是看得見的） |
+
+**這一課修乾淨了。**
+
+#### 2. 第二課：「判斷寫兩份遲早會分岔」（第十六圈）—— 這一課沒有
+
+原話也在檔案裡，寫在 `empty-heading` 旁邊：
+
+> 有沒有名字走既有的 `hasAccessibleName()` —— 那支就是為了這件事寫的，
+> 而且 `button-name`／`link-name` 已經在用它。**判斷寫兩份遲早會分岔。**
+
+而 `svg-unnamed`（第三十六圈才加的，比那一課**晚**）**又寫了第二份**：
+
+```js
+const named =
+  Boolean(attr(openTag, 'aria-label')?.trim()) ||
+  Boolean(attr(openTag, 'aria-labelledby')?.trim()) ||
+  /<title>[^<]+<\/title>/i.test(m[1]);
+```
+
+**而它是對的。** SVG 的命名規則跟 HTML 元素不一樣，
+`hasAccessibleName()` 有兩件事對 SVG 是錯的：
+
+| | HTML 元素 | SVG |
+|---|---|---|
+| `title` **屬性** | 算名字 | **不算**（SVG 用 `<title>` 子元素） |
+| 內文字 | 算名字 | **不算** |
+
+共用那一支會讓這一條**變寬** —— 而它守的正是「圖沒有說明」。
+
+**所以錯的不是那個決定，是那個決定沒有說出口。**
+看起來就像忘了那一課。補上理由，並且加兩格測試把差別釘住：
+
+```
+✓ svg-unnamed（aria-label 也算名字）
+✓ svg-unnamed（title 屬性不算名字）
+```
+
+第二格是重點。突變（讓 `svg-unnamed` 也認 `title` 屬性 —— 也就是
+「順手統一一下」那個改法）：
+
+```
+X svg-unnamed（title 屬性不算名字）
+```
+
+沒有這一格的話，「為什麼不共用」只是一句註解；有了它，
+哪天有人真的去統一會在這裡停下來。
+
+#### 3. 順著這一課找到第三份
+
+`same-name-different-target` 也自己算名字：
+
+```js
+const name = (attr(openTag, 'aria-label') ?? textOf(withoutHidden(m[1]))).trim();
+```
+
+它需要的是**名字的值**（拿來分組），而 `hasAccessibleName()` 回傳的是布林，
+所以不能直接共用。但它比那一支**窄**：`aria-labelledby`、`<img alt>`、
+內嵌 `<svg aria-label>` 命名的連結，它一律當成「沒有名字」跳過。
+
+量今天的產出：
+
+```
+產出裡的連結：901
+  名字來自 aria-label 或內文（這條規則看得到）：901
+  名字只來自 labelledby／img alt／svg（看不到）：0
+```
+
+**今天一個都沒有影響。** 但那是因為站上 0 張 `<img>`、99 個 SVG 全部
+`aria-hidden` —— 跟第四十圈那幾條「還沒有內容」是同一個理由。記進待辦。
+
+| | 之前 | 現在 |
+|---|---|---|
+| 第十四圈那一課 | 不知道還有沒有漏 | 五個位置逐一驗過，**乾淨** |
+| 第十六圈那一課 | 有第二份，沒說為什麼 | 說了，而且兩格測試釘著 |
+| 第三份實作 | 沒有人注意到 | 量過：今天 0 個受影響 |
+
+`verify:all` 六道全綠、`test:tools` 44 步全過。
+
+### 待辦（不屬於這一輪）
+
+- **`same-name-different-target` 比 `hasAccessibleName()` 窄。** 今天 0 個
+  受影響，但那是因為站上沒有 `<img>`、SVG 全藏起來。第一張內容圖進來那天
+  要重量一次（→ 1 無障礙）
+- **這一輪只驗了兩課。** `check-a11y.mjs` 裡還有十幾段「第 N 輪（第 M 圈）」
+  的註解，每一段都是一課 —— 沒有人回頭問過它們修乾淨了沒（→ 1 無障礙）
+- **「判斷寫兩份」這件事沒有東西在數。** 今天是三份（`hasAccessibleName`、
+  `svg-unnamed`、`same-name-different-target`），第四份出現時沒有人會知道（→ 1 無障礙）
+- 上一輪與更早的都還在（那 59 條「元件沒算繪過」沒有人在守、
+  「要跑起來才有」那 25 條這個方法看不到、分類判準是兩條寫死的正則、
+  `ci:sim` 還是只模擬 `deploy.yml`、
+  同一種「當天就爛」的數字可能還在別的關卡的輸出裡、
+  偶發紅燈的共同點是 `test:units`、量離開碼不要把輸出丟掉、
+  沒有東西在守「空狀態不要自相矛盾」、英文那一半沒有人系統地讀過、
+  `tags.count_one` 與 `list.count_one` 連算繪都沒有過、
+  `csp-frame-src-mismatch` 在站上主體是 0、手動那一次沒有自動化、
+  兩條規則不在 `STRUCTURAL_IDS` 裡、
+  `rss` 與 `bridge` 兩條路一次都沒跑過（→ 站主）、
+  Data API v3 那一半也沒跑過、「不只 404」寫在五個地方沒有東西在比、
+  `FLAKY_ENDPOINT` 與 `flaky` 是兩份判斷、CSP 的 `frame-src` 在全部 44 頁上、
+  `related` 只驗了畫得出來、那六個欄位刪掉之後又回到沒人用過、
+  那段建議裡的 273 KB／94 KB 沒有人在守、
+  其他關卡的「改法」也可能點名不存在的東西、
+  「站上 0 張內容圖」是三條待辦的共同原因、
+  那三條 a11y 的「第一次」是手動做出來的、
+  markdown 裡的原始 HTML 沒有人在擋、另外六支關卡的寫死數字沒比過、
+  `column` 跟外層 `.wrap--*` 是靠人對的、
+  「42 個用了但沒說明」要重寫或刪掉、`--w-prose`／`--w-content` 也是抄進 `sizes` 的、
+  `rule-undocumented` 只看 id 有沒有出現、
+  那張表是手寫的而 `--list-rules` 是機器的、
+  `gate-count-stale` 的判準是「同一行有 `verify:all`」、
+  `EN_COVERAGE.date` 沒有人問多久以前、組數比對只認得變少、
+  其他三支規則測試的空綠沒驗、
+  那 5 條的 `whyWarn` 還是空的（→ 站主）、
+  結構性規則沒有 `whyWarn` 欄位、`email` 是 warn 而 `google-fonts` 是 error、
+  標籤數也是一種近似、`note` 的 0 筆連續五圈、
+  那 4 個沒人用的匯出（→ 站主）、判準看名字不解析 import、
+  `CONTENT.md` 533 行（→ 站主）、判準是檔名不是用途、
+  `role="status"` 本身沒有被檢查、
+  `<details>`／`<summary>`／`<time>` 那 170 個仍然沒有規則、
+  「22 個 `--verbose` 數字」那條的數字過期了、
+  探針還是要人手貼、只跑了首頁、
+  `LOOKS_BAD` 那個正則是猜的、`verify:all` 還是 `&&` 串、
+  `ui.ts` 的 `en` 要不要改必填（→ 站主）、
+  job summary 只有站主會去看、`sync:health` 沒有接進六道關卡、
+  只比 `npm run X`、那段 git 診斷沒有測試、
+  「上界」宣稱要重量得先推（→ 站主）、
+  螢幕閱讀器仍然沒有人做過、重驗是量本機產出不是正式站、
+  `15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、
+  `example-not-real` 只看程式碼框裡的例子、
+  那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  那 9 條「維護者的事」的規則沒有文件、
+  `ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、
+  搜尋結果那 2 個連結沒有規則看過（但關卡會說出來）、
+  `check.yml` 永遠不會自己觸發（→ 站主）、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `SCHEMA_STRUCTURAL` 3 個什麼都沒擋、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  我連續十一次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 14 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  7 條 a11y 規則的邊界沒人守、
+  7 個沒人用的 token（→ 站主）、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、本機 `ahead 140, behind 3`、
+  `inlineStylesheets: always` 只到 98%、圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  `test-content-rules` 的改法檢查只看第一處、
+  `--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：2 — 效能**

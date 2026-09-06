@@ -592,6 +592,27 @@ const CASES = {
     quiet: true,
     html: page({ body: '<svg role="img" viewBox="0 0 8 8"><title>一隻狐狸</title><path d="M0 0h8v8H0z"/></svg>' }),
   },
+  'svg-unnamed（aria-label 也算名字）': {
+    rule: 'svg-unnamed',
+    quiet: true,
+    html: page({ body: '<svg role="img" aria-label="一隻狐狸" viewBox="0 0 8 8"><path d="M0 0h8v8H0z"/></svg>' }),
+  },
+  /*
+   * ── 這一格釘的是「刻意跟 hasAccessibleName() 不一樣」 ──────────
+   *
+   * 第 1 輪（第四十一圈）：這一圈問「這一課學過了，當時修乾淨了嗎？」。
+   * 那一課是「判斷寫兩份遲早會分岔」（寫在 `empty-heading` 旁邊，
+   * 所以標題那條改成走 `hasAccessibleName()`）。`svg-unnamed` 又寫了第二份 ——
+   * 而那是**對的**：`hasAccessibleName()` 認 `title` **屬性**，
+   * 而 SVG 上那不是名字（SVG 用 `<title>` 子元素）。共用會讓這一條變寬。
+   *
+   * 沒有這一格的話，「為什麼不共用」只是一句註解；有了它，
+   * 哪天有人「順手統一一下」會在這裡停下來。
+   */
+  'svg-unnamed（title 屬性不算名字）': {
+    rule: 'svg-unnamed',
+    html: page({ body: '<svg role="img" title="一隻狐狸" viewBox="0 0 8 8"><path d="M0 0h8v8H0z"/></svg>' }),
+  },
   /* 反向一：定義在（而且真的在裁切）就不該報 */
   'sr-only-broken（有在裁切就不報）': {
     rule: 'sr-only-broken',

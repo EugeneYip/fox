@@ -615,6 +615,24 @@ for await (const file of htmlFiles(DIST)) {
    * 要嘛有名字（`aria-label`／`aria-labelledby`／`<title>` 子元素）。
    * 兩個都沒有的話，螢幕閱讀器會把它當成一張沒有說明的圖念出來。
    * 沒有第三種正當寫法，所以是 error。
+   *
+   * ── 為什麼這裡不呼叫 `hasAccessibleName()` ────────────────
+   *
+   * 第 1 輪（第四十一圈）補的說明。這支腳本裡有一課寫在
+   * `empty-heading` 旁邊：「判斷寫兩份遲早會分岔」，所以標題那條特地
+   * 改成走既有的 `hasAccessibleName()`。而這一條**又寫了第二份** ——
+   * 當時沒有說為什麼，看起來就像忘了那一課。
+   *
+   * 理由是 SVG 的命名規則跟 HTML 元素不一樣，`hasAccessibleName()`
+   * 有兩件事對 SVG 是**錯的**：
+   *
+   *   `title` **屬性**　　HTML 元素上算名字，SVG 上不算 —— SVG 用的是
+   *                      `<title>` **子元素**。認了它會把沒有名字的圖放過去。
+   *   內文字　　　　　　  `<text>` 之類的內容不是可及名稱。
+   *
+   * 也就是說共用那一支會讓這一條**變寬**，而它守的正是「圖沒有說明」。
+   * 所以是刻意寫第二份，不是漏掉 —— 兩個差別各有一格測試釘著
+   * （`test-a11y-rules.mjs` 的 `svg-unnamed（title 屬性不算名字）`）。
    */
   saw('svg-unnamed', (html.match(/<svg\b/gi) ?? []).length);
   for (const m of html.matchAll(/<svg\b[^>]*>([\s\S]*?)<\/svg>/gi)) {
