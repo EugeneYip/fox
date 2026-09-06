@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 56,100 行、2.9 MB、342 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 56,400 行、2.9 MB、343 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -56080,4 +56080,237 @@ failures = 1
   `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：5 — 隱私與安全**
+### 2026-09-06 — 第 5 輪（第四十三圈）：隱私與安全
+
+**第四十三圈問：這個綠勾的分母是什麼？誰決定了它？**
+判準：**找一個印出 ✓ 或百分比的地方，問它的分母怎麼來的 —— 是數出來的，
+還是一份人挑的清單決定的？如果是後者，那個 ✓ 涵蓋了多少？**
+
+`audit:privacy` 印的分母是這一句：
+
+```
+掃了 187 個檔案（另外 9 個在豁免名單上，沒掃）、31 條規則。
+```
+
+三個數字，三份清單在背後。
+
+#### 1. 豁免名單那一份：**已經有人守了**
+
+`ALLOWLIST` 有 9 條。我先自己量了一次 —— 逐條拿掉、跑一次、看差別：
+
+| 拿掉這條豁免 | 會多出什麼 |
+|---|---|
+| `scripts/audit-privacy.mjs` | 2 條規則 |
+| `scripts/lib/privacy-rules.mjs` | 6 條 |
+| `scripts/test-privacy-rules.mjs` | 5 條 |
+| `scripts/test-privacy-structural.mjs` | 9 條 |
+| `src/config/privacy.ts`、`identity.local.example.ts`、`identity-needles.mjs`、`docs/PRIVACY.md` | **什麼都不會多** |
+
+然後才發現這件事**這支腳本自己每一輪都在說**：
+
+> ⚠ 豁免名單有 9 條，這一輪**只有 4 條真的擋住東西**⋯⋯
+
+`shadowedByAllowlist` 是前面某一輪加的，連理由都寫好了
+（「一條什麼都沒擋的豁免不是無害的：它是一個**沒有守衛的門**」）。
+**我的量測跟它一字不差。**這一格沒有新發現，但對得上本身是有意義的。
+
+順手驗了那段註解的另一句話 —— 「`identity-value` 仍然會穿透這份豁免清單」。
+拿 `PRIVACY_NEEDLES` 塞一個**假的**名字進 `docs/PRIVACY.md`（豁免名單上的檔案）：
+
+```
+✗ docs/PRIVACY.md:254  [identity-value]      ← 響了
+```
+
+真的值就算寫在豁免的檔案裡也擋不住。**那句話今天仍然成立。**
+
+#### 2. 量錯了一次：我自己的工具汙染了量測
+
+第一次逐條拿掉是用 `npm run mutate` 做的，於是每一輪都多一個 warn ——
+`! scripts/audit-privacy.mjs.orig [unscanned-file-type]`。
+**那是 `mutate.mjs` 留下的備份檔**，不是豁免擋住的東西。
+差一點就把「每一條豁免都擋住東西」寫進紀錄。改成用程式讀檔／改檔／還原，
+不留備份，數字才乾淨。
+
+#### 3. 真正沒有人守的是 `SCAN_DIRS`
+
+```js
+const SCAN_DIRS = ['src', 'scripts', 'public', 'docs', '.github'];
+```
+
+`unscanned-file-type` 守的是「已經在掃的資料夾裡，有沒有沒人認得的副檔名」。
+它守不到**少一個資料夾** —— 那條規則的迴圈本身就是
+`for (const dir of SCAN_DIRS)`。
+
+而 `.claude/launch.json` **被 git 追蹤**，也就是在這個公開 repo 裡。
+`.claude` 不在那份清單上。
+
+實測：把一段 Google Fonts 網址加上一個看起來像 AWS 金鑰的字串
+放進 `.claude/`：
+
+| | 結果 |
+|---|---|
+| 判決 | **必須修正 0、請確認 1**（跟基準一模一樣） |
+| 有沒有提到那個檔案 | **沒有** |
+| 「掃了 N 個檔案」 | **187，一點都沒動** |
+
+被追蹤的頂層資料夾有 6 個（`.claude`、`.github`、`docs`、`public`、
+`scripts`、`src`），清單上有 5 個。
+
+#### 4. 改了三件事
+
+**一、`.claude` 加進 `SCAN_DIRS`** —— 掃描從 187 變成 **188**。
+
+**二、加第 32 條規則 `unscanned-dir`。** 判準用 `git ls-files`：
+**repo 是公開的，所以「在不在 repo 裡」才是該問的問題**，
+不是「硬碟上有沒有這個資料夾」（`node_modules`、`dist`、`.astro`
+都在硬碟上，都不在 repo 裡）。不是 git repo 的時候主體數是 0 而不是說謊。
+
+**三、`unscanned-file-type` 改成只看「會進到公開 repo 的檔案」。**
+`.claude/` 納進來之後，那裡有一個工具產生的 `scheduled_tasks.lock`
+（被 `.git/info/exclude` 擋著）會讓它每一輪響一次 ——
+而那條規則的理由是「這個檔案裡放什麼都不會有人看，**而它在會出貨的目錄裡**」，
+對一個進不了 repo 的檔案來說那句話不成立。
+判準是 `git ls-files --cached --others --exclude-standard`，
+正好是「已經在 repo 裡的」加上「還沒加但不被忽略的」。
+
+#### 5. 突變：一個抓到、一個補上、一個只有真的 repo 擋得住
+
+| 突變 | 結果 |
+|---|---|
+| 迴圈永遠 `continue`（不再點名） | ✗ 紅 |
+| git 失敗時 `saw('unscanned-dir', 99)` | **綠** —— 沒有一格在守「查不了要說 0」 |
+| `SCAN_DIRS` 拿掉 `.claude` | 單元測試**綠**；真的 repo 上離開碼 **1**、`✗ .claude/ [unscanned-dir]` |
+
+第二個補進既有那一格（「查不了的那幾項在名單裡，值是 0」——
+它本來只看 `private-file-tracked` 與 `gitignore-weakened`，現在三項）。
+
+第三個是實話實說：假 repo 沒有 `.claude`，所以單元測試看不到它。
+**擋住它的是關卡本身**，不是測試。
+
+`unscanned-file-type` 的新判準兩個方向都補了測試：被忽略的不報、
+沒被忽略的照樣報。
+
+| | 之前 | 現在 |
+|---|---|---|
+| 掃描的資料夾 | 5 個（`.claude` 在視野外） | 6 個 |
+| 掃了幾個檔案 | 187 | **188** |
+| 規則 | 31 | **32** |
+| 少一個資料夾 | 沒有人會說 | `unscanned-dir` 會說（error） |
+| 被 git 忽略的怪副檔名 | 每一輪響一次 | 不報（它進不了 repo） |
+
+`verify:all` 六道全綠、`test:tools` 44 步全過、`ci:sim` 0。
+
+### 待辦（不屬於這一輪）
+
+- **`npm run mutate` 的 `.orig` 備份留在工作樹裡，而 `*.orig` 不在
+  `.gitignore`。** 它會被 `git add -A` 收進去（這一圈第 2 輪差點就是），
+  也會讓稽核多一個 warn（→ 7 建置與 CI）
+- **「跳過 `node_modules`／`dist`／`.astro`／`.git`」那份清單在
+  `audit-privacy.mjs` 裡有兩份**（兩個 walker 各一份），改一邊不會有人說
+  （→ 5 隱私與安全）
+- **`unscanned-dir` 只看頂層。** 一個被追蹤的深層資料夾（例如
+  `src/x/`）本來就在掃，所以今天夠用；但判準寫的是「頂層」不是「有沒有被掃到」
+  （→ 5 隱私與安全）
+- **那 4 條什麼都沒擋的豁免還在。** 腳本每一輪都會說，刪不刪是站主的決定
+  —— 這一輪只確認了那份報告是對的（→ 站主）
+- 上一輪與更早的都還在（`check:content` 那一半還是只看 `syndication.json`、
+  排程跑的 `sync:health` 沒有 `--strict`、`CHANGE_ME` 那條路連 failures 都不加、
+  `test-contrast` 把 `#faf6ee` 寫死在 fixture 裡、
+  manifest 的 `icons[]` 沒有人確認存在、`start_url`／`scope`／`lang` 還沒人比、
+  schema 欄位抽取的自我檢查只驗得到內容用過的那 25 個、
+  `images` 還是副檔名認的、GitHub Pages 會不會壓 `.atom`／`.rss` 沒有人量過、
+  CSS 那三條沒有被 `sawTags` 涵蓋、另外 5 條的主體不是用正則數的、
+  這份檔案自己的頁首也是個沒人守的數字、
+  `box-shadow` 那兩處不算、`BG_PROPS` 還是列舉的、
+  同一個判斷寫在四個地方、四格抽名單用的都是正則、
+  `FLAKY_ENDPOINT` 的平臺 id 沒有人比、那五份對照表只驗了單向、
+  只比資料夾名字不比 `loader` 的 `base`、`collections` 的抽取只認一種寫法、
+  那八種只是「不數」不是「不該數」、`url()` 與 `@font-face` 只掃 HTML、
+  `MEASURED` 仍是快照、
+  `CASES` 的鍵沒有反向檢查、
+  那個掃描分不出元件與動態標籤名、`writing-mode` 只有一個檔案在用、
+  `needs-dist-before-build` 打不開 npm 的 `&&` 串、
+  那份「每條規則都有反例」的報告只說不擋、兩份文件的例子沒有分開數、
+  另外五份文件還是寫「404、500」、`accept` 那些 header 沒被測過、
+  `field()` 假設 frontmatter 是第一個 `---`、
+  只比了檔名沒比路徑、識別字沒有比、`why:` 欄位沒掃、
+  `same-name-different-target` 比 `hasAccessibleName()` 窄、
+  「判斷寫兩份」沒有東西在數、
+  那 59 條「元件沒算繪過」沒有人在守、
+  「要跑起來才有」那 25 條這個方法看不到、分類判準是兩條寫死的正則、
+  同一種「當天就爛」的數字可能還在別的關卡的輸出裡、
+  偶發紅燈的共同點是 `test:units`、量離開碼不要把輸出丟掉、
+  沒有東西在守「空狀態不要自相矛盾」、英文那一半沒有人系統地讀過、
+  `tags.count_one` 與 `list.count_one` 連算繪都沒有過、
+  `csp-frame-src-mismatch` 在站上主體是 0、手動那一次沒有自動化、
+  `rss` 與 `bridge` 兩條路一次都沒跑過（→ 站主）、
+  Data API v3 那一半也沒跑過、
+  CSP 的 `frame-src` 在全部 44 頁上、
+  `related` 只驗了畫得出來、那六個欄位刪掉之後又回到沒人用過、
+  那段建議裡的 273 KB／94 KB 沒有人在守、
+  「站上 0 張內容圖」是三條待辦的共同原因、
+  那三條 a11y 的「第一次」是手動做出來的、
+  markdown 裡的原始 HTML 沒有人在擋、另外六支關卡的寫死數字沒比過、
+  `column` 跟外層 `.wrap--*` 是靠人對的、
+  「42 個用了但沒說明」要重寫或刪掉、`--w-prose`／`--w-content` 也是抄進 `sizes` 的、
+  `rule-undocumented` 只看 id 有沒有出現、
+  那張表是手寫的而 `--list-rules` 是機器的、
+  `gate-count-stale` 的判準是「同一行有 `verify:all`」、
+  `EN_COVERAGE.date` 沒有人問多久以前、組數比對只認得變少、
+  其他三支規則測試的空綠沒驗、
+  那 5 條的 `whyWarn` 還是空的（→ 站主）、
+  結構性規則沒有 `whyWarn` 欄位、`email` 是 warn 而 `google-fonts` 是 error、
+  標籤數也是一種近似、`note` 的 0 筆連續五圈、
+  那 3 個沒人用的匯出（→ 站主）、判準看名字不解析 import、
+  `CONTENT.md` 已經超過 550 行（→ 站主）、判準是檔名不是用途、
+  `role="status"` 本身沒有被檢查、
+  `<details>`／`<summary>`／`<time>` 那 170 個仍然沒有規則、
+  「22 個 `--verbose` 數字」那條的數字過期了、
+  探針還是要人手貼、只跑了首頁、
+  `LOOKS_BAD` 那個正則是猜的、`verify:all` 還是 `&&` 串、
+  `ui.ts` 的 `en` 要不要改必填（→ 站主）、
+  job summary 只有站主會去看、`sync:health` 沒有接進六道關卡、
+  只比 `npm run X`、那段 git 診斷沒有測試、
+  「上界」宣稱要重量得先推（→ 站主）、
+  螢幕閱讀器仍然沒有人做過、重驗是量本機產出不是正式站、
+  `15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、
+  `example-not-real` 只看程式碼框裡的例子、
+  那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  那 9 條「維護者的事」的規則沒有文件、
+  `ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、
+  搜尋結果那 2 個連結沒有規則看過（現在關卡會逐條說出來）、
+  `check.yml` 永遠不會自己觸發（→ 站主）、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `SCHEMA_STRUCTURAL` 3 個什麼都沒擋、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 15 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  7 條 a11y 規則的邊界沒人守、
+  7 個沒人用的 token（→ 站主）、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、本機 `ahead 160, behind 3`、
+  `inlineStylesheets: always` 只到 98%、圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  `test-content-rules` 的改法檢查只看第一處、
+  `--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：6 — 文案與語氣**

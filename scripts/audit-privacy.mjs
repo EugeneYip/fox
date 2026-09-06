@@ -62,7 +62,24 @@ const ALLOWLIST = new Set([
   'docs/PRIVACY.md',
 ]);
 
-const SCAN_DIRS = ['src', 'scripts', 'public', 'docs', '.github'];
+/*
+ * ── 這份清單決定了「掃了 N 個檔案」那個 N ──────────
+ *
+ * 第 5 輪（第四十三圈）量到的：`.claude/` 有檔案**被 git 追蹤**
+ * （`.claude/launch.json`），而它不在這份清單裡 —— 也就是說這支稽核
+ * 從來沒有讀過它。實測把一段 Google Fonts 網址加上一個看起來像 AWS
+ * 金鑰的字串放進 `.claude/`：
+ *
+ *     必須修正 0、請確認 1        ← 跟基準一模一樣
+ *     掃了 187 個檔案（⋯）        ← 數字也沒變
+ *
+ * `unscanned-file-type` 抓不到它：那條規則只走**已經在這份清單裡**的
+ * 資料夾，看的是副檔名。少一個資料夾它看不到。
+ *
+ * 所以底下多了一項 `unscanned-dir`：拿 `git ls-files` 問「哪些頂層資料夾
+ * 真的在這個公開 repo 裡」，不在這份清單上的就點名。
+ */
+const SCAN_DIRS = ['src', 'scripts', 'public', 'docs', '.github', '.claude'];
 
 /*
  * 根目錄的檔案也要掃。
@@ -638,14 +655,47 @@ if (existsSync(resolve(ROOT, 'dist'))) {
     }
   }
 
+  /*
+   * ── git 忽略掉的檔案不算 ──────────────────────
+   *
+   * 這條規則的理由是「這個檔案裡放什麼都不會有人看，而它在會出貨的目錄裡」。
+   * 被 `.gitignore`（或 `.git/info/exclude`）擋住的檔案**進不了這個公開
+   * repo**，所以那句話對它不成立。
+   *
+   * 第 5 輪（第四十三圈）把 `.claude/` 納入掃描之後撞到的：那個資料夾裡
+   * 有一個工具產生的 `scheduled_tasks.lock`，它被 `.git/info/exclude`
+   * 擋著，卻會讓這條規則每一輪都響一次。
+   *
+   * `--cached --others --exclude-standard` 正好是「已經在 repo 裡的」加上
+   * 「還沒加但不被忽略的」—— 也就是**會進到公開 repo 的那些**。
+   * git 不能用（測試的假 repo）就退回原本的行為：全部都算。
+   */
+  /** @type {Set<string> | null} */
+  let inRepo = null;
+  try {
+    inRepo = new Set(
+      execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], {
+        cwd: ROOT,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      })
+        .split('\n')
+        .filter(Boolean),
+    );
+  } catch {
+    inRepo = null;
+  }
+
   /** @type {Map<string, string>} 副檔名 → 第一個踩到的檔案 */
   const unknown = new Map();
   for (const dir of SCAN_DIRS) {
     for await (const file of walkAll(resolve(ROOT, dir))) {
+      const rel = relative(ROOT, file);
+      if (inRepo !== null && !inRepo.has(rel)) continue;
       saw('unscanned-file-type', 1);
       const ext = extname(file);
       if (SCAN_EXT.has(ext) || BINARY_EXT.has(ext)) continue;
-      if (!unknown.has(ext)) unknown.set(ext, relative(ROOT, file));
+      if (!unknown.has(ext)) unknown.set(ext, rel);
     }
   }
 
@@ -665,6 +715,73 @@ if (existsSync(resolve(ROOT, 'dist'))) {
           '（兩份清單都在 audit-privacy.mjs 開頭）。',
       },
     });
+  }
+}
+
+/*
+ * ── 有沒有整個資料夾在視野外 ───────────────────────────
+ *
+ * `unscanned-file-type` 守的是「已經在掃的資料夾裡，有沒有沒人認得的
+ * 副檔名」。它守不到**少一個資料夾** —— 那條規則的迴圈本身就是
+ * `for (const dir of SCAN_DIRS)`。
+ *
+ * 第 5 輪（第四十三圈）量到的：`.claude/launch.json` 被 git 追蹤，
+ * 而 `.claude` 不在 `SCAN_DIRS` 裡。把 Google Fonts 網址與一個看起來像
+ * AWS 金鑰的字串放進那個資料夾，稽核印的是「必須修正 0」，
+ * 連「掃了 N 個檔案」那個數字都不會動。
+ *
+ * 判準用 `git ls-files`：**這個 repo 是公開的，所以「在不在 repo 裡」
+ * 才是真正該問的問題**，不是「硬碟上有沒有這個資料夾」
+ * （`node_modules`、`dist`、`.astro` 都在硬碟上，但都不在 repo 裡）。
+ * 不是 git repo（測試的假 repo）就說「沒有比對」，不安靜放行。
+ */
+{
+  /** @type {string[] | null} */
+  let trackedFiles = null;
+  try {
+    trackedFiles = execFileSync('git', ['ls-files'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .split('\n')
+      .filter(Boolean);
+  } catch {
+    trackedFiles = null;
+  }
+
+  if (trackedFiles === null) {
+    /* 主體 0 才是實話 —— 跟 private-file-tracked 那兩項同一個處理 */
+    saw('unscanned-dir', 0);
+  } else {
+    /** @type {Map<string, number>} 頂層資料夾 → 被追蹤的檔案數 */
+    const topDirs = new Map();
+    for (const f of trackedFiles) {
+      const i = f.indexOf('/');
+      if (i <= 0) continue;
+      const d = f.slice(0, i);
+      topDirs.set(d, (topDirs.get(d) ?? 0) + 1);
+    }
+    saw('unscanned-dir', topDirs.size);
+    for (const [dir, n] of topDirs) {
+      if (SCAN_DIRS.includes(dir)) continue;
+      findings.push({
+        rel: `${dir}/`,
+        lineNo: 1,
+        line: `${n} 個被 git 追蹤的檔案`,
+        matched: dir,
+        rule: {
+          id: 'unscanned-dir',
+          level: 'error',
+          why:
+            `這個資料夾裡有 ${n} 個檔案被 git 追蹤（也就是**在這個公開 repo 裡**），` +
+            '但它不在 SCAN_DIRS 裡 —— 這支稽核從來沒有讀過它們，' +
+            '而「掃了 N 個檔案」那個數字也不會透露這件事。' +
+            '　改法：把資料夾名加進 audit-privacy.mjs 開頭的 SCAN_DIRS；' +
+            '真的不該掃就在那份清單旁邊寫清楚為什麼。',
+        },
+      });
+    }
   }
 }
 
@@ -1800,6 +1917,7 @@ const STRUCTURAL_IDS = [
   'actions-script-injection',
   'built-third-party-request',
   'unscanned-file-type',
+  'unscanned-dir',
   'deploy-without-gates',
   'deploy-without-cname-check',
   'possible-secret',

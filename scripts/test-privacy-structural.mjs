@@ -367,6 +367,23 @@ const CASES = {
     git: '.env.local',
     files: { '.env.local': 'YOUTUBE_API_KEY=AIzaSyFakeKeyForTesting1234567890abcd\n' },
   },
+  /*
+   * ── 整個資料夾在視野外 ──
+   *
+   * `unscanned-file-type` 的迴圈是 `for (const dir of SCAN_DIRS)`，
+   * 所以它守不到「少一個資料夾」。第 5 輪（第四十三圈）量到的：
+   * `.claude/launch.json` 被 git 追蹤，而 `.claude` 不在 SCAN_DIRS 裡 ——
+   * 把 Google Fonts 網址與看起來像 AWS 金鑰的字串放進去，稽核印
+   * 「必須修正 0」，連「掃了 N 個檔案」都不動。
+   *
+   * 判準是 `git ls-files`：repo 是公開的，所以「在不在 repo 裡」才是
+   * 該問的問題（`node_modules`、`dist` 在硬碟上，但不在 repo 裡）。
+   */
+  'unscanned-dir': {
+    git: 'tools/notes.md',
+    files: { 'tools/notes.md': '一些筆記。\n' },
+  },
+
   'private-file-tracked': {
     git: true,
     files: { 'src/config/identity.local.ts': "export const identity = { realName: { zh: '假名' } };\n" },
@@ -1171,18 +1188,58 @@ const crawlerRow = (/** @type {string} */ text) => `| \`allowAiCrawlers\` | \`fa
  * 所以兩件事都要守：查不了的那兩項要在名單裡（值是 0），
  * 而每一個測得到的檢查都要在名單裡（不然新增一項會沒有人發現它沒被計數）。
  */
+/*
+ * ── 被 git 忽略的檔案不算「沒人看過」──────────────────
+ *
+ * `unscanned-file-type` 的理由是「這個檔案裡放什麼都不會有人看，
+ * 而它在會出貨的目錄裡」。被 `.gitignore` 擋住的檔案進不了這個公開 repo，
+ * 那句話對它不成立。
+ *
+ * 第 5 輪（第四十三圈）把 `.claude/` 納入掃描之後撞到的：那裡有一個
+ * 工具產生的 `scheduled_tasks.lock`，被 `.git/info/exclude` 擋著，
+ * 卻會讓這條規則每一輪都響一次。
+ *
+ * 兩個方向都要：忽略的不報、沒被忽略的照樣要報。
+ */
+{
+  const ignored = await build(
+    { 'public/notes.toml': 'key = "value"\n', '.gitignore': 'notes.toml\n' },
+    'init-only',
+  );
+  const a = await audit(ignored);
+  const okIgnored = !a.out.includes('[unscanned-file-type]');
+  if (!okIgnored) failed++;
+  console.log(`  ${okIgnored ? '✓' : 'X'} 被 git 忽略的副檔名不報`);
+  if (!okIgnored) console.log('        ' + (a.out.split('\n').find((l) => l.includes('unscanned')) ?? ''));
+
+  const notIgnored = await build({ 'public/notes.toml': 'key = "value"\n' }, 'init-only');
+  const b = await audit(notIgnored);
+  const okPlain = b.out.includes('[unscanned-file-type]');
+  if (!okPlain) failed++;
+  console.log(`  ${okPlain ? '✓' : 'X'} 沒被忽略的照樣報（反向案例）`);
+  if (!okPlain) console.log('        ' + b.out.split('\n').filter((l) => l.includes('toml')).join(' | '));
+}
+
 {
   const { out } = await audit(await build({}), {}, ['--verbose']);
   const rows = new Map(
     [...out.matchAll(/^\s*(\d+)\s+([a-z-]+)$/gm)].map((m) => [m[2], Number(m[1])]),
   );
 
+  /*
+   * `unscanned-dir` 也走 git（`git ls-files`），所以它也屬於「查不了的時候
+   * 主體要是 0」那一類。第 5 輪（第四十三圈）的突變掃描抓到的：
+   * 把它改成在 git 失敗時 `saw(…, 99)`，原本沒有一格會紅 ——
+   * 而 99 的意思是「比對過 99 個資料夾」，那是假話。
+   */
   const okZero =
-    rows.get('private-file-tracked') === 0 && rows.get('gitignore-weakened') === 0;
+    rows.get('private-file-tracked') === 0 &&
+    rows.get('gitignore-weakened') === 0 &&
+    rows.get('unscanned-dir') === 0;
   if (!okZero) failed++;
   console.log(
-    `  ${okZero ? '✓' : 'X'} 查不了的那兩項在名單裡，值是 0（不是不見）`,
-    okZero ? '' : `—— 實際：${rows.get('private-file-tracked')} / ${rows.get('gitignore-weakened')}`,
+    `  ${okZero ? '✓' : 'X'} 查不了的那幾項在名單裡，值是 0（不是不見）`,
+    okZero ? '' : `—— 實際：${rows.get('private-file-tracked')} / ${rows.get('gitignore-weakened')} / ${rows.get('unscanned-dir')}`,
   );
 
   const okCounted = (rows.get('csp-missing') ?? 0) > 0 && (rows.get('possible-secret') ?? 0) > 0;
