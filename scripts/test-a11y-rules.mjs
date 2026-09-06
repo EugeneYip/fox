@@ -116,6 +116,8 @@ const SEVERITY = {
   'input-label': 'error',
   landmark: 'error',
   'lang-content-mismatch': 'error',
+  /* 值打錯畫面上什麼都不會變，而那一格從此不再朗讀 —— 擋。 */
+  'live-region-value': 'error',
   'link-name': 'error',
   /* 只在「同一頁有兩個以上 nav」時才響。多個 nav 沒有名字是**難用**，
      不是不能用 —— 螢幕閱讀器仍然進得去，只是地標清單上分不出誰是誰。 */
@@ -498,6 +500,25 @@ const CASES = {
     }),
   },
   'positive-tabindex': { html: page({ body: '<button tabindex="3">插隊</button>' }) },
+  /*
+   * ── live region 的值打錯 ──────────
+   *
+   * 第 1 輪（第三十九圈）：那一圈在逐條驗待辦，而「`aria-live` 沒有規則」
+   * 驗出來是活的、而且有 **46 個主體**（44 個主題狀態列 ＋ 搜尋頁 2 個）。
+   *
+   * 值打錯**畫面上什麼都不會變**，那一格從此不再朗讀 ——
+   * 而唯一會發現的人是正在用螢幕閱讀器的人，
+   * 而這個站的螢幕閱讀器測試「現況：沒有人做過」。
+   */
+  'live-region-value': { html: page({ body: '<p aria-live="true">狀態</p>' }) },
+  /* 反向：三個合法的值都不該報 */
+  'live-region-value（polite／assertive／off 都合法）': {
+    rule: 'live-region-value',
+    quiet: true,
+    html: page({
+      body: '<p aria-live="polite">一</p><p aria-live="assertive">二</p><p aria-live="OFF">三</p>',
+    }),
+  },
   /*
    * 反向：`0` 與 `-1` 是**合法**的 tabindex，不該報。
    *

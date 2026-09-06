@@ -161,6 +161,7 @@ const RULE_IDS = [
   'skip-link',
   'focus-outline-removed',
   'reduced-motion-blanket',
+  'live-region-value',
   'doc-names-real-rule',
 ];
 
@@ -557,6 +558,37 @@ for await (const file of htmlFiles(DIST)) {
       'positive-tabindex',
       'tabindex="' + ti + '" 會把這個元素插到所有自然順序的前面，整頁的 Tab 順序' +
         '就跟畫面對不起來了：' + m[0].slice(0, 70) + '。只用 0 或 -1。',
+    );
+  }
+
+  /*
+   * ── live region 的值打錯，什麼事都不會發生 ────────────
+   *
+   * 第 1 輪（第三十九圈）加的。那一圈在逐條驗待辦還成不成立，
+   * 而「`aria-live`／`role="status"` 沒有規則」那一條驗出來**是活的，
+   * 而且有 46 個主體**：44 個主題切換的狀態列（每一頁都有）
+   * 加上搜尋頁的 2 個。今天全部是 `polite`。
+   *
+   * 為什麼值得擋：`aria-live` 的值打錯（`true`、`yes`、`on`⋯⋯）
+   * **畫面上什麼都不會變**。那一格從此不再朗讀，而唯一會發現的人
+   * 是正在用螢幕閱讀器的人 —— 而這個站的螢幕閱讀器測試
+   * `docs/A11Y.md` 自己寫著「現況：**沒有人做過**」。
+   *
+   * 合法的值只有三個（`polite`／`assertive`／`off`）。
+   */
+  saw('live-region-value', (html.match(/\saria-live\s*=/gi) ?? []).length);
+  for (const m of html.matchAll(/<[a-z][a-z0-9]*\b[^>]*>/gi)) {
+    const live = attr(m[0], 'aria-live');
+    if (live === null) continue;
+    const v = live.trim().toLowerCase();
+    if (v === 'polite' || v === 'assertive' || v === 'off') continue;
+    add(
+      'error',
+      rel,
+      'live-region-value',
+      `aria-live="${live}" 不是合法的值（只有 polite／assertive／off）。` +
+        '畫面上什麼都不會變，而那一格從此不再朗讀 —— ' +
+        '唯一會發現的人是正在用螢幕閱讀器的人：' + m[0].slice(0, 70),
     );
   }
 
