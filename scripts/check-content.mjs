@@ -1005,6 +1005,79 @@ const emptyBlocks = (/** @type {string} */ html) => {
   }
 }
 
+/*
+ * ── 沒有人用的具名匯出 ────────────────────────────
+ *
+ * 第 3 輪（第三十九圈）加的。那一圈在逐條驗待辦，而
+ * 「`PAGE_SIZE` 沒有呼叫者」那一條**驗出來是錯的** ——
+ * 它被 `paginate()` 與 `extraPageNumbers()` 當預設參數用，
+ * 而且有 **8 個頁面**呼叫 `paginate()` 時不帶 `size`，所以它天天在用。
+ *
+ * 那條待辦當初怎麼寫錯的，我在驗它的時候**當場重演了一次**：
+ * 第一版的探針只看「別的檔案有沒有提到這個名字」，於是報出 16 個
+ * ——`PAGE_SIZE` 也在裡面。少看了兩件事：
+ *
+ *   1. **同一個檔案裡的使用**（預設參數就是這樣用的）
+ *   2. **`src/` 以外的消費者**（`UNWIRED_SWITCHES` 是 `audit:privacy` 在讀）
+ *
+ * 補上這兩個之後是 **5 個**，其中 `collections` 是 Astro 依約定去讀的
+ * （不是靠 import），所以真正可疑的是 4 個。
+ *
+ * 這一段就是把那個判準寫下來，免得下一個人再用「別的檔案有沒有提到」
+ * 這種寫法量一次、再寫一條錯的待辦。跟上面「走不到的元件」一樣只說不擋。
+ */
+{
+  /** Astro 依約定去讀的名字 —— 不靠 import，所以「沒有人 import」不代表沒人用 */
+  const BY_CONVENTION = new Set(['collections']);
+  /** @type {Map<string, string>} */
+  const sourceTexts = new Map();
+  /*
+   * `--scripts=` 只給測試用。
+   *
+   * 理由很具體：測試要驗「沒有人用的匯出會被點名」，就得在 fixture 裡寫一個
+   * `export const NOBODY`——**而那個名字同時也出現在測試檔自己裡面**。
+   * 而測試檔在 `scripts/` 底下，也就是這一段的語料裡，
+   * 於是那個符號看起來「別的檔案有提到」，永遠不會被點名。
+   *
+   * 第一版就是這樣：fixture 明明只有一個沒人用的匯出，輸出卻說「每一個都有人用」。
+   */
+  for (const dir of [SRC, arg('scripts') ?? resolve(ROOT, 'scripts')]) {
+    for await (const f of walk(dir)) {
+      if (/\.(ts|mjs|js|astro)$/.test(f)) sourceTexts.set(f, await readFile(f, 'utf8'));
+    }
+  }
+  let exported = 0;
+  /** @type {string[]} */
+  const unused = [];
+  for (const [f, text] of sourceTexts) {
+    if (f.includes('/pages/') || f.endsWith('.astro')) continue;
+    for (const m of text.matchAll(/^export (?:const|function|type|interface|class) (\w+)/gm)) {
+      exported += 1;
+      const name = m[1];
+      if (BY_CONVENTION.has(name)) continue;
+      const re = new RegExp(`\\b${name}\\b`, 'g');
+      const elsewhere = [...sourceTexts.entries()].some(([g, u]) => g !== f && re.test(u));
+      /* 宣告那一次不算 —— 只出現一次就表示自己也沒用它 */
+      const selfUses = (text.match(re) ?? []).length;
+      if (!elsewhere && selfUses <= 1) unused.push(`${relative(ROOT, f)}　${name}`);
+    }
+  }
+  if (unused.length === 0) {
+    notes.push(
+      `${exported} 個具名匯出，**每一個都有人用**（判準：src/ 與 scripts/ 裡` +
+        '別的檔案提到，或自己檔案裡除了宣告以外還用到）。',
+    );
+  } else {
+    notes.push(
+      `${exported} 個具名匯出裡，**${unused.length} 個沒有人用**：\n` +
+        unused.map((u) => `      · ${u}`).join('\n') +
+        '\n    判準：`src/` 與 `scripts/` 裡別的檔案提到，或自己檔案裡除了宣告以外還用到。\n' +
+        '    （Astro 依約定去讀的名字不算 —— 目前只有 `collections`。）\n' +
+        '    只說不擋：刪掉是站主的決定，而型別匯出本來就可能只是為了讓別人標註用。',
+    );
+  }
+}
+
 const RULES = [
   'no-title',
   'poem-title-bracketed',

@@ -1805,6 +1805,61 @@ console.log('─'.repeat(64));
 }
 
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
+/*
+ * ── 沒有人用的具名匯出 ──────────────────────
+ *
+ * 第 3 輪（第三十九圈）：那一圈在逐條驗待辦，而「`PAGE_SIZE` 沒有呼叫者」
+ * **驗出來是錯的** —— 它被 `paginate()` 當預設參數用，8 個頁面天天在走。
+ *
+ * 那條待辦當初怎麼寫錯的，我在驗它的時候當場重演了一次：
+ * 第一版探針只看「別的檔案有沒有提到」，於是把 `PAGE_SIZE` 也報成沒人用。
+ * 少看了**同一個檔案裡的使用**與 **`src/` 以外的消費者**。
+ *
+ * 所以這三格釘的是那個判準本身。
+ */
+{
+  console.log('\n' + '─'.repeat(64));
+  const run3 = async (/** @type {Record<string, string>} */ extra) => {
+    const dir = await build('exports', {
+      content: { 'poems/wu-yi-xiang.md': poem() },
+      dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花') },
+      extra,
+    });
+    /*
+     * `--scripts=` 指到 fixture 自己的（空的）目錄。
+     *
+     * 不指的話語料會包含**這個測試檔**，而 fixture 裡寫的 `NOBODY`
+     * 在這裡也出現一次 —— 於是它看起來「別的檔案有提到」，永遠不會被點名。
+     * 第一版就是這樣綠的。
+     */
+    return check(dir, [`--src=${join(dir, 'src')}`, `--scripts=${join(dir, 'noscripts')}`]);
+  };
+
+  const unusedOut = await run3({ 'src/lib/x.ts': 'export const NOBODY = 1;\n' });
+  const okUnused = /個沒有人用/.test(unusedOut) && /NOBODY/.test(unusedOut);
+  if (!okUnused) failed++;
+  console.log(`  ${okUnused ? '✓' : 'X'} 真的沒人用的匯出會被點名`);
+  if (!okUnused) console.log('        ' + unusedOut.split('\n').filter((l) => /具名匯出|NOBODY/.test(l)).join(' ｜ '));
+
+  /* 同一個檔案裡用到就不算沒人用 —— 預設參數就是這樣（PAGE_SIZE 那一條就是這樣被誤判的） */
+  const selfOut = await run3({
+    'src/lib/y.ts': 'export const SIZE = 30;\nexport function go(n = SIZE) {\n  return n;\n}\n',
+  });
+  /* 比對的是**列出來的那幾行**（`· 路徑　名字`），不是整段文字 —— 說明裡也會提到名字 */
+  const okSelf = !/·\s+\S+\s+SIZE\b/.test(selfOut);
+  if (!okSelf) failed++;
+  console.log(`  ${okSelf ? '✓' : 'X'} 同一個檔案裡當預設參數用，不算沒人用`);
+  if (!okSelf) console.log('        ' + selfOut.split('\n').filter((l) => /具名匯出|SIZE/.test(l)).join(' ｜ '));
+
+  /* Astro 依約定去讀的名字不算 */
+  const convOut = await run3({ 'src/lib/z.ts': 'export const collections = {};\n' });
+  /* 同理：那一段的說明裡就寫著「目前只有 `collections`」，用整段比會被它滿足 */
+  const okConv = !/·\s+\S+\s+collections\b/.test(convOut);
+  if (!okConv) failed++;
+  console.log(`  ${okConv ? '✓' : 'X'} Astro 依約定去讀的 collections 不算沒人用`);
+  if (!okConv) console.log('        ' + convOut.split('\n').filter((l) => /具名匯出|collections/.test(l)).join(' ｜ '));
+}
+
 process.exit(failed > 0 ? 1 : 0);
 
 /**
