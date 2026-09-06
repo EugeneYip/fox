@@ -750,6 +750,66 @@ let staleDocs = 0;
  * 假站只有一頁小 HTML，每一條都會差九成。第 2 輪（第二十四圈）第一版
  * 沒有這道條件，結果 `test-perf-budgets` 一次紅了 18 格。
  */
+/*
+ * ── 四支腳本都把 `inlineStylesheets: 'auto'` 當前提，而沒有人在比 ────
+ *
+ * 第 2 輪（第四十六圈）問「這一段如果拿掉，輸出會差在哪裡」，
+ * 把建置層的設定一個一個換掉再量：
+ *
+ *     never   最大單頁 HTML（gzip）10.5 → 7.9 KB，但 stylesheet 連結 47 → 205
+ *             （平均每頁 4.7 個）—— 單頁請求數那條預算會紅
+ *     always  最大單頁 HTML（gzip）10.5 → 13.9 KB —— 那是上限 14.0 KB 的 **99%**，
+ *             真的預算**沒有紅**，紅的只有「說明裡的數字過期」那一條
+ *
+ * 也就是說換掉它會被發現，但發現它的是一條**講文件的**檢查。
+ * 而更安靜的是另一件事：`audit-privacy`、`check-a11y`、`check-content`、
+ * `check-perf` 四支的註解都寫著「這個站的樣式是內嵌的（`auto`）」，
+ * 而它們的**掃描範圍就是照那句話決定的**（要不要連 HTML 裡的 `<style>`
+ * 一起讀）。設定改掉的話，那四支會安靜地少看或多看一整類東西。
+ *
+ * 判準不寫死 `'auto'` —— 去問那四支腳本自己的註解怎麼寫，
+ * 跟 `astro.config.mjs` 真正的值比。抽不到就說「沒有比對」，不安靜放行。
+ *
+ * 跟旁邊那幾條「說明裡的數字」一樣只在量真的 dist 的時候跑：
+ * 這問的是這個 repo 自己的一致性，拿測試的假 dist 來跑只會多印一行。
+ */
+if (!process.argv.some((a) => a.startsWith('--dir='))) {
+  const cfg = await readFile(resolve(ROOT, 'astro.config.mjs'), 'utf8').catch(() => '');
+  const actual = /inlineStylesheets:\s*'(\w+)'/.exec(cfg)?.[1] ?? null;
+  const names = (await readdir(resolve(ROOT, 'scripts')).catch(() => []))
+    .filter((f) => f.endsWith('.mjs') && !f.startsWith('test-'));
+  /** @type {Map<string, Set<string>>} 腳本 → 它註解裡假設的值 */
+  const assumed = new Map();
+  for (const f of names) {
+    const t = await readFile(resolve(ROOT, 'scripts', f), 'utf8').catch(() => '');
+    const vals = new Set([...t.matchAll(/inlineStylesheets:?\s*[`']?(auto|never|always)[`']?/g)].map((m) => m[1]));
+    if (vals.size > 0) assumed.set(f, vals);
+  }
+  if (actual === null || assumed.size === 0) {
+    console.log(
+      '\n⚠ `inlineStylesheets` 沒有比對：' +
+        (actual === null ? '讀不到 astro.config.mjs 裡的值。' : '沒有任何腳本提到它 —— 抽取的樣式可能壞了。'),
+    );
+    staleDocs += 1;
+  } else {
+    const wrong = [...assumed].filter(([, v]) => !v.has(actual));
+    if (wrong.length === 0) {
+      console.log(
+        `\nastro.config 的 inlineStylesheets 是 '${actual}'，把它當前提的 ${assumed.size} 支腳本都這樣寫 ✓`,
+      );
+    } else {
+      staleDocs += 1;
+      console.log(
+        `\n✗ astro.config 的 inlineStylesheets 是 '${actual}'，但這幾支腳本的註解假設的是別的值：\n` +
+          wrong.map(([f, v]) => `      ${f}：${[...v].join('、')}`).join('\n') +
+          '\n      那不只是註解過期 —— 那幾支的**掃描範圍**就是照那個前提決定的\n' +
+          '      （樣式在 HTML 裡還是在 .css 檔裡，決定它們要讀哪一邊）。\n' +
+          '      改法：設定改了就把那幾支一起看過一遍，不是只改註解。',
+      );
+    }
+  }
+}
+
 if (!process.argv.some((a) => a.startsWith('--dir='))) {
   const selfSrc = await readFile(new URL(import.meta.url), 'utf8');
   /** @type {string[]} */
