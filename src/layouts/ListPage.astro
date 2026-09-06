@@ -103,7 +103,21 @@ const availableLocales =
       ))}
     </div>
   ) : (
-    <EmptyState title={t('list.empty')} body={t('home.emptyBody')}>
+    <EmptyState title={t('list.empty')}>
+      {/*
+      不借 `home.emptyBody`（「第一篇還沒寫。狐狸正在磨爪子。」）——
+      第 6 輪（第四十圈）在**英文頁**上讀出來的：這一頁空的時候，
+      底下緊接著就是「There is 1 in Chinese →」。前一句說「還沒寫」，
+      後一句說「有 1 篇」，兩句話互相打臉。
+
+      而站上五篇已發佈的內容全部是 zh-TW，所以這個組合**只在 /en 那一半算繪得出來**
+      —— 中文頁從來不是空的，沒有人會看到它。
+
+      `elsewhere.emptyBody` 的註解在第 8 輪（第八圈）就記過同一件事
+      （「在這一頁那句話是錯的」），只是那次只修了「各處」那一頁。
+      `tags/index.astro` 本來就只給 title 不給 body，讀起來是對的：
+      「Nothing here yet. There are 5 entries in Chinese →」。這裡跟它對齊。
+      */}
       {otherCount > 0 && (
         <a class="ui" href={localizePath(basePath, otherLocale)}>
           {t('list.otherLang', { n: otherCount })}{' '}

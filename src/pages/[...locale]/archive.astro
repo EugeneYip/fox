@@ -56,7 +56,10 @@ const otherTotal =
       </div>
     ))
   ) : (
-    <EmptyState title={t('list.empty')} body={t('home.emptyBody')}>
+    <EmptyState title={t('list.empty')}>
+      {/*
+      不借 `home.emptyBody` —— 理由見 ListPage.astro 同一處的註解（第 6 輪〔第四十圈〕）。
+      */}
       {otherTotal > 0 && (
         <a class="ui" href={localizePath('/archive', otherLocale)}>
           {t('list.otherLang', { n: otherTotal })}{' '}

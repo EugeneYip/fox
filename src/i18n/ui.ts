@@ -190,8 +190,14 @@ export const ui = {
 
   'elsewhere.visitOn': { 'zh-TW': '前往 {platform}', en: 'Visit {platform}' },
 
-  'list.otherLang': { 'zh-TW': '英文版有 {n} 篇', en: 'There are {n} in Chinese' },
-  'list.otherLang_one': { 'zh-TW': '英文版有 {n} 篇', en: 'There is {n} in Chinese' },
+  /*
+   * 英文原本是「There are {n} in Chinese」—— **少了名詞**。
+   * 第 6 輪（第四十圈）在 /en/archive 上讀出來的：
+   * 隔壁的 `list.count` 是「{n} entries」，這一句卻只有數字。
+   * 中文那一邊一直有「篇」。
+   */
+  'list.otherLang': { 'zh-TW': '英文版有 {n} 篇', en: 'There are {n} entries in Chinese' },
+  'list.otherLang_one': { 'zh-TW': '英文版有 {n} 篇', en: 'There is {n} entry in Chinese' },
   'list.newer': { 'zh-TW': '較新', en: 'Newer' },
   'list.older': { 'zh-TW': '較舊', en: 'Older' },
   // 英文有單複數。zh-TW 不需要 _one，缺的話會自動退回主鍵。

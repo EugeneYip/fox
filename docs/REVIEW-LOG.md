@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 53,500 行、2.7 MB、319 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 53,700 行、2.7 MB、320 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -51757,3 +51757,174 @@ X RSS 失敗 ＋ 沒金鑰：**500** 也要說「不要當成帳號沒了」
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
 **下一輪：6 — 文案與語氣**
+
+### 2026-09-06 — 第 6 輪（第四十圈）：文案與語氣
+
+**第四十圈問：這段東西，站上真的跑過嗎？**
+判準：**找出一個今天真的執行到它的地方。找不到的話，它的正確性是靠什麼保證的？**
+
+#### 1. 這一題 `check:copy` 也早就在答了
+
+```
+這次沒有東西可判斷的規則（1 條）：halfwidth-ellipsis
+· 191 個介面字串裡，**35 個（18%）從來沒有被算繪出來**。
+```
+
+規則那一端、字串那一端都有數字。所以問下一層：
+**那些真的算繪出來的，有沒有人讀過？**
+
+站上五篇已發佈的內容**全部是 zh-TW**。也就是說「空狀態」這一整類文案，
+**只在 `/en` 那一半算繪得出來** —— 中文頁從來不是空的。
+
+#### 2. 三個姊妹頁，三種讀法，其中兩種在說謊
+
+把英文頁的空狀態逐頁讀出來：
+
+| 頁 | 英文讀者看到的 |
+|---|---|
+| `/en/tags` | Nothing here yet. There are 5 in Chinese → |
+| `/en/archive` | Nothing here yet. **Nothing written yet. The fox is sharpening her claws.** There are 5 in Chinese → |
+| `/en/writing` | Nothing here yet. **Nothing written yet. The fox is sharpening her claws.** There is 1 in Chinese → |
+| `/en/notes` | 同上 |
+
+中間那句**跟緊接著的下一句互相打臉**：
+前一句說「還沒寫」，後一句說「有 1 篇」。
+
+而這件事**這個 repo 早就寫下來過**。`elsewhere.emptyBody` 的註解：
+
+> 原本借用 `home.emptyBody`（「第一篇還沒寫。狐狸正在磨爪子。」）——
+> 在這一頁那句話是**錯的**⋯首頁同一個位置只給 title 不給 body，
+> 也就是那裡想過、這裡沒有。
+>
+> 第 8 輪（第八圈）第一次把真正的空站建出來才看見 ——
+> 在那之前這個組合從來沒有被算繪過。
+
+**那一次只修了「各處」那一頁。** `ListPage.astro`（管 `/writing`、`/poems`、
+`/notes`）與 `archive.astro` 是同一個形狀，沒有修到 ——
+而 `tags/index.astro` 本來就只給 title，所以它一直是對的。
+
+#### 3. 還有一句英文少了名詞
+
+```
+There are 5 in Chinese        ← 少了名詞
+{n} entries                   ← 隔壁的 list.count
+英文版有 {n} 篇                ← 中文那一邊一直有「篇」
+```
+
+#### 4. 改完之後，四頁讀起來是同一句話
+
+```
+/en/archive   Nothing here yet. There are 5 entries in Chinese →
+/en/writing   Nothing here yet. There is 1 entry in Chinese →
+/en/tags      Nothing here yet. There are 5 entries in Chinese →
+/en/notes     Nothing here yet. There is 1 entry in Chinese →
+```
+
+#### 5. 順帶量到：四個 `_one` 變體，兩個從來沒算繪過
+
+| 鍵 | 算繪在幾頁 |
+|---|---|
+| `list.otherLang_one` | 3 |
+| `search.resultCount_one` | 1（在搜尋頁的設定物件裡） |
+| `tags.count_one` | **0** |
+| `list.count_one` | **0** |
+
+那兩個要「剛好 1 個標籤」「剛好 1 篇」才會出現，而且是**動態查表**
+（`utils.ts` 的 ``table[`${key}_one`]``）—— 少了就安靜退回主鍵。
+第 6 輪（第三十九圈）已經量過：整組刪掉，六道關卡沒有一道說話。
+今天再加一件：**它們連算繪都沒算繪過。**
+
+| | 之前 | 現在 |
+|---|---|---|
+| 英文空狀態 | 三頁互相矛盾，兩頁在說謊 | 四頁同一句，而且是真的 |
+| 那句缺名詞的英文 | 「There are 5 in Chinese」 | 「There are 5 entries in Chinese」 |
+| 第八圈記下的那一課 | 只修了一頁 | 三個用到的地方都對齊了 |
+
+`verify:all` 六道全綠、`test:tools` 44 步全過。
+
+### 待辦（不屬於這一輪）
+
+- **沒有東西在守「空狀態不要自相矛盾」。** 這一輪是把四頁的可見文字讀出來
+  才看到的，而那是人做的事 —— 換一句話就又會發生（→ 6 文案與語氣）
+- **英文那一半的可見文字沒有人系統地讀過。** `check:copy` 守的是**寫法**
+  （全形標點、空格、引號），不守**讀起來對不對**（→ 6 文案與語氣）
+- **`tags.count_one` 與 `list.count_one` 連算繪都沒有過**，
+  它們的英文單複數今天沒有任何證據（→ 6 文案與語氣）
+- 上一輪與更早的都還在（`csp-frame-src-mismatch` 在站上主體是 0、
+  手動那一次沒有自動化、兩條規則不在 `STRUCTURAL_IDS` 裡、
+  `rss` 與 `bridge` 兩條路一次都沒跑過（→ 站主）、
+  Data API v3 那一半也沒跑過、「不只 404」寫在五個地方沒有東西在比、
+  `FLAKY_ENDPOINT` 與 `flaky` 是兩份判斷、
+  CSP 的 `frame-src` 在全部 44 頁上、
+  `related` 只驗了畫得出來、那六個欄位刪掉之後又回到沒人用過、
+  那段建議裡的 273 KB／94 KB 沒有人在守、
+  其他關卡的「改法」也可能點名不存在的東西、
+  「站上 0 張內容圖」是三條待辦的共同原因、
+  那三條 a11y 的「第一次」是手動做出來的、
+  markdown 裡的原始 HTML 沒有人在擋、另外六支關卡的寫死數字沒比過、
+  `column` 跟外層 `.wrap--*` 是靠人對的、
+  「42 個用了但沒說明」要重寫或刪掉、`--w-prose`／`--w-content` 也是抄進 `sizes` 的、
+  `rule-undocumented` 只看 id 有沒有出現、
+  那張表是手寫的而 `--list-rules` 是機器的、
+  `gate-count-stale` 的判準是「同一行有 `verify:all`」、
+  `EN_COVERAGE.date` 沒有人問多久以前、組數比對只認得變少、
+  其他三支規則測試的空綠沒驗、
+  那 5 條的 `whyWarn` 還是空的（→ 站主）、
+  結構性規則沒有 `whyWarn` 欄位、`email` 是 warn 而 `google-fonts` 是 error、
+  標籤數也是一種近似、`note` 的 0 筆連續五圈、
+  那 4 個沒人用的匯出（→ 站主）、判準看名字不解析 import、
+  `CONTENT.md` 533 行（→ 站主）、判準是檔名不是用途、
+  `role="status"` 本身沒有被檢查、
+  `<details>`／`<summary>`／`<time>` 那 170 個仍然沒有規則、
+  「22 個 `--verbose` 數字」那條的數字過期了、
+  探針還是要人手貼、只跑了首頁、
+  `LOOKS_BAD` 那個正則是猜的、`verify:all` 還是 `&&` 串、
+  `ui.ts` 的 `en` 要不要改必填（→ 站主）、
+  job summary 只有站主會去看、`sync:health` 沒有接進六道關卡、
+  只比 `npm run X`、那段 git 診斷沒有測試、
+  「上界」宣稱要重量得先推（→ 站主）、
+  螢幕閱讀器仍然沒有人做過、重驗是量本機產出不是正式站、
+  `15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、
+  `example-not-real` 只看程式碼框裡的例子、
+  那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  那 9 條「維護者的事」的規則沒有文件、
+  `ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、
+  搜尋結果那 2 個連結沒有規則看過（但關卡會說出來）、
+  `check.yml` 永遠不會自己觸發（→ 站主）、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `SCHEMA_STRUCTURAL` 3 個什麼都沒擋、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  我連續十一次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 14 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  7 條 a11y 規則的邊界沒人守、
+  7 個沒人用的 token（→ 站主）、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、
+  本機 `ahead 137, behind 3`、
+  `inlineStylesheets: always` 只到 98%、
+  圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  `test-content-rules` 的改法檢查只看第一處、
+  `--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：7 — 建置與 CI**
