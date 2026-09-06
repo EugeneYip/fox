@@ -1817,6 +1817,29 @@ const STRUCTURAL_IDS = [
   'privacy-doc-unwired',
   'privacy-doc-crawler-count',
   'csp-frame-src-mismatch',
+  /*
+   * ── 這三條原本不在這份清單裡 ────────────────────────
+   *
+   * 第 5 輪（第四十一圈）發現的。這一圈問「這一課學過了，當時修乾淨了嗎？」，
+   * 而那一課是「**不比對的時候也要登記 0** —— 少了這一步，
+   * 這條規則會整個從計數裡消失」（`check-a11y` 的 `doc-names-real-rule`
+   * 就是為了這件事寫下那段註解的）。
+   *
+   * 這三條靠的是它們所在區塊開頭的 `saw(id, 0)` —— 而那個區塊包在
+   * `if (existsSync(dist))` 裡面。實測把 `dist/` 移走再跑：
+   *
+   *   規則數從 **31 條變成 28 條**
+   *   「這次沒有東西可看的規則」列了 7 條，**這三條一條都不在裡面**
+   *   離開碼 0
+   *
+   * 而那正是 CI 上會發生的事：`verify:all` 是
+   * `check && audit:privacy && ⋯ && build && ⋯` —— **`audit:privacy` 排在
+   * `build` 前面**，乾淨的 runner 上跑到它的時候還沒有 `dist/`。
+   * 也就是說這三條在 CI 上從來沒跑過，而輸出連「沒跑」都沒說。
+   */
+  'cookie-promised-none',
+  'csp-frame-host-unpromised',
+  'external-link-rel-broken-promise',
 ];
 for (const id of [...STRUCTURAL_IDS, ...RULES.map((r) => r.id)]) {
   if (!subjects.has(id)) subjects.set(id, 0);

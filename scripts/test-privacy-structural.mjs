@@ -1351,6 +1351,61 @@ console.log('─'.repeat(64));
 }
 
 /*
+ * ── 沒有 dist 的時候，規則數不能縮水 ────────────────────
+ *
+ * 第 5 輪（第四十一圈）發現的。三條讀 `dist/` 的規則靠的是區塊開頭的
+ * `saw(id, 0)`，而那個區塊包在 `if (existsSync(dist))` 裡 ——
+ * 沒有 `dist/` 的時候它們**整個從計數裡消失**：
+ * 規則數 31 變 28，而「這次沒有東西可看」那份名單裡一條都沒有它們。
+ *
+ * 那正是 CI 上會發生的事：`verify:all` 把 `audit:privacy` 排在 `build`
+ * **前面**，乾淨的 runner 跑到它的時候還沒有 `dist/`。
+ *
+ * 這一格驗的是：有沒有 `dist/`，規則數都一樣。
+ */
+{
+  const withDist = await build({});
+  /*
+   * `build()` 一律先鋪 `CLEAN`，而 `CLEAN` 裡有兩份 `dist/*.html` ——
+   * 所以「不給 dist」這件事**用 overrides 做不到**（第一版就是那樣，
+   * 於是兩邊都有 dist，突變套上去照樣綠）。這裡自己鋪一份沒有 dist 的。
+   */
+  const bare = await mkdtemp(join(tmpdir(), 'privacy-nodist-'));
+  for (const [name, content] of Object.entries(CLEAN)) {
+    if (name.startsWith('dist/')) continue;
+    const q = join(bare, name);
+    await mkdir(dirname(q), { recursive: true });
+    await writeFile(q, content, 'utf8');
+  }
+  const a = await audit(withDist);
+  const b = await audit(bare);
+  const count = (/** @type {string} */ out) => Number(/、(\d+) 條規則/.exec(out)?.[1] ?? -1);
+  const nA = count(a.out);
+  const nB = count(b.out);
+  const okSame = nA > 0 && nA === nB;
+  if (!okSame) failed++;
+  console.log(`  ${okSame ? '✓' : 'X'} 有沒有 dist/，規則數都一樣（${nA} vs ${nB}）`);
+  if (!okSame) {
+    console.log(
+      '        讀 dist 的那幾條沒有登記 0 —— 沒有 dist 的時候它們會整個從計數裡消失，\n' +
+        '        而 CI 上 audit:privacy 正好排在 build 前面。',
+    );
+  }
+
+  /* 而且它們要出現在「沒有東西可看」那份名單裡，不是安靜地不見 */
+  const idle = /這次沒有東西可看的規則：\d+ 條（([^）]*)）/.exec(b.out)?.[1] ?? '';
+  const want = ['cookie-promised-none', 'csp-frame-host-unpromised', 'external-link-rel-broken-promise'];
+  const missing = want.filter((id) => !idle.includes(id));
+  const okNamed = missing.length === 0;
+  if (!okNamed) failed++;
+  console.log(`  ${okNamed ? '✓' : 'X'} 沒有 dist/ 時，那三條會被列進「沒有東西可看」`);
+  if (!okNamed) console.log(`        沒被列出來的：${missing.join('、')}\n        實際那一行：${idle.slice(0, 100)}`);
+
+  await rm(withDist, { recursive: true, force: true });
+  await rm(bare, { recursive: true, force: true });
+}
+
+/*
  * ── 紅燈的時候那份名單不能跟著消失 ──────────────────
  *
  * 這個 repo 記過同一個位置的錯（第 5 輪〔第二十三圈〕）：
