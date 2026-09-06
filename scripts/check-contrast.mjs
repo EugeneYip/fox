@@ -1229,7 +1229,7 @@ console.log(
     '  但這一支不知道畫面上真的畫了哪些組合。加元件、換 class 都可能\n' +
     '  多出一組沒有人算過的。2026-09-06 在瀏覽器裡走過 4 頁實測：\n' +
     '  真的出現 10 種帶 token 名字的組合，當時有 1 種不在表上（已補）。\n' +
-    '  要重量：npm run preview，再對每個有文字的元素取 color ＋ 第一個不透明背景。\n',
+    '  要重量：npm run preview，然後把 scripts/probe-contrast-pairs.js 貼進 console。\n',
 );
 
 process.exit(failures > 0 || staleTokenDocs > 0 ? 1 : 0);

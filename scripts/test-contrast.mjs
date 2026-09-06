@@ -1075,6 +1075,16 @@ console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
 
   /* 有數字才是量過，「可能有漏」誰都會寫 */
   const okNum = /走過 \d+ 頁實測/.test(out) && /出現 \d+ 種/.test(out);
+  /*
+   * 第 8 輪（第三十八圈）：那句「要重量」原本只是**描述**量法
+   * （「對每個有文字的元素取 color ＋ 第一個不透明背景」）——
+   * 照著重寫的人要自己決定選取器與走法，而那正是會出錯的地方。
+   * 現在它指到一支真的檔案，這一格守著那個指向。
+   */
+  const okProbe = /scripts\/probe-contrast-pairs\.js/.test(out);
+  if (!okProbe) failed++;
+  console.log(`  ${okProbe ? '✓' : 'X'} 「要重量」指到一支真的探針，不只是描述量法`);
+  if (!okProbe) console.log('      ' + (out.split('\n').find((l) => /要重量/.test(l)) ?? '（那一行沒印）'));
   if (!okNum) failed++;
   console.log(`  ${okNum ? '✓' : 'X'} 那句話帶著實測的數字（幾頁、幾種）`);
   if (!okNum) console.log('      ' + out.split('\n').filter(Boolean).slice(-4).join(' ｜ '));
