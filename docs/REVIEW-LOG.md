@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 51,000 行、2.7 MB、307 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 51,200 行、2.7 MB、308 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -49758,4 +49758,141 @@ X 停在第 23 步／共 42 步：npm run test:copy-rules
   `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：2 — 效能**
+
+### 2026-09-06 — 第 2 輪（第三十九圈）：效能
+
+**第三十九圈問：這條待辦還活著嗎？**
+判準：**拿今天的 repo 驗一次 —— 還成立嗎？還是已經被別的改動解決了？**
+
+#### 1. 逐條驗
+
+| 待辦 | 今天驗出來 |
+|---|---|
+| 11 條預算的上限沒有文件（5 條是挑的） | 還在：`11 條預算裡，6 條說得出上限是怎麼推導的，5 條是挑的` |
+| 雜湊資源只有 `max-age=600` | 還在（那是 GitHub Pages 的行為，`docs/DEPLOY.md` 有記，改不了） |
+| **那句「全是 favicon」是寫死的描述** | **還在 —— 而且是這幾條裡唯一會說謊的** |
+
+#### 2. 那句話今天是真的，但那是巧合
+
+輸出裡這一句：
+
+> 全是 favicon、PWA 圖示與 og:image（瀏覽器外框與社群爬蟲抓的），不隨內容成長。
+
+逐個看過 `dist` 裡那 7 個圖片檔：
+
+```
+apple-touch-icon.png  favicon.ico  favicon.svg
+icon-192.png  icon-512.png  icon-maskable-512.png  og/default.png
+```
+
+**確實全是。** 但那句話**沒有查過任何東西** ——
+它印出來的條件只有「有圖片檔、而且頁面一個都沒載入」：
+
+```js
+if (images.length > 0 && rendered.length === 0) { … }
+```
+
+#### 3. 而它會說謊的那一刻，正好是最該說話的那一刻
+
+往 `public/` 丟一張**沒有任何頁面引用**的內容圖 ——
+`rendered.length === 0` **仍然成立**，於是它照樣說「全是 favicon」。
+
+那時候它不只是錯的，還**剛好蓋掉唯一值得注意的東西**：
+一個會出貨、卻沒有任何頁面載入的檔案。
+
+#### 4. 改成算的
+
+照檔名分類，**而且把判準印出來**：
+
+```
+7 個全都是 favicon／PWA 圖示／og:image（照檔名認的：favicon.*、
+apple-touch-icon*、icon-N*、icon-maskable*、og/*）——
+```
+
+認不出來的**逐個列名**。實測丟一個 `moon.png` 進去：
+
+```
+其中 1 個**不是** favicon／PWA 圖示／og:image：
+  · moon.png
+它們會出貨，而沒有任何頁面載入它們 —— 那通常是忘了刪的檔案。
+```
+
+兩格測試（全是圖示／有不是圖示的），突變成「認不出來的也當成圖示」會紅。
+
+| | 之前 | 現在 |
+|---|---|---|
+| 那句話 | 寫死的描述 | 照檔名算，判準印出來 |
+| 多一個沒人引用的圖 | 照樣說「全是 favicon」 | 逐個列名，並說那通常是忘了刪的 |
+
+`verify:all` 六道全綠、`test:tools` 43 步全過、`ci:sim` 在 HEAD 上全綠。
+
+### 待辦（不屬於這一輪）
+
+- **判準是檔名，不是用途。** 有人把內容圖取名 `icon-3.png` 就會被當成圖示。
+  用「有沒有被 `<link rel=icon>`／manifest／`og:image` 引用」會更準，
+  但那要多讀一輪產出（→ 2 效能）
+- **這一輪只驗了三條效能待辦。** 「9／11 條預算從來沒響過」、
+  「node 與 python 的 gzip 差 0.9%」、「`inlineStylesheets: always` 只到 98%」、
+  「`CoverImage` 的 `sizes` 用 40rem」這幾條沒有重驗（→ 2 效能）
+- 上一輪與更早的都還在（`role="status"` 本身沒有被檢查、
+  `<details>`／`<summary>`／`<time>` 那 170 個仍然沒有規則、
+  「22 個 `--verbose` 數字」那條的數字過期了、
+  探針還是要人手貼、只跑了首頁、
+  `LOOKS_BAD` 那個正則是猜的、`verify:all` 還是 `&&` 串、
+  `EN_COVERAGE` 的 `pairs` 沒有在比、`ui.ts` 的 `en` 要不要改必填（→ 站主）、
+  `audit:privacy` 的離開碼仍然是 0（→ 站主）、
+  job summary 只有站主會去看、`sync:health` 沒有接進六道關卡、
+  只比 `npm run X`、那段 git 診斷沒有測試、
+  「上界」宣稱要重量得先推（→ 站主）、
+  螢幕閱讀器仍然沒有人做過、重驗是量本機產出不是正式站、
+  `15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `check:workflows` 的 10 條規則文件提到 0 條、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、
+  `example-not-real` 只看程式碼框裡的例子、
+  `VideoFacade` 一次都沒算繪過、那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  `note` 的「合法但 0 筆」連續三圈都在、
+  那 9 條「維護者的事」的規則沒有文件、
+  `ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、
+  搜尋結果那 2 個連結沒有規則看過（但關卡會說出來）、
+  `check.yml` 永遠不會自己觸發（→ 站主）、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  `reveal('email')` 沒有人呼叫、
+  `validate-schema` 只實作 8 個關鍵字、同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `--patterns` 那 11 個平臺的「N 筆」沒驗、
+  `SCHEMA_STRUCTURAL` 與「走不到的是哪一個」還沒驗、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  我連續十次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 13 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  30 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、`CoverImage` 的 `sizes` 用 40rem、
+  4 條閒置豁免、本機 `ahead 122, behind 2`、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、
+  `CONTENT.md` 開始偏長、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：3 — 內容結構**
