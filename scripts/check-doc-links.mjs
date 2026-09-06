@@ -57,7 +57,7 @@ const SCRIPTS = await readFile(resolve(ROOT, 'package.json'), 'utf8')
   .catch(() => null);
 const IGNORE_DIRS = new Set(['node_modules', 'dist', '.git', '.astro']);
 
-const RULE_IDS = ['doc-link-missing', 'doc-anchor-missing', 'doc-command-missing'];
+const RULE_IDS = ['doc-link-missing', 'doc-anchor-missing', 'doc-command-missing', 'advice-target-missing'];
 
 if (process.argv.includes('--list-rules')) {
   console.log(RULE_IDS.join('\n'));
@@ -250,6 +250,94 @@ if (scanned === 0) {
   process.exit(1);
 }
 
+/*
+ * ── 關卡叫人去改的東西，還在嗎 ──────────────────────
+ *
+ * 第 2 輪（第四十一圈）加的。這一圈問「這一課學過了，當時修乾淨了嗎？」。
+ *
+ * 那一課是第 2 輪（第四十圈）撞到的：`check:perf` 的一句改法叫人去改
+ * `CoverImage.astro` 的 `densities` —— **那個 prop 早就不存在了**
+ * （第二十圈就換成 `widths` ＋ `sizes`）。當時修好了那一句，
+ * 也加了一格測試 —— 但那一格是**寫死在那一句上的**。
+ *
+ * 這一輪把九支關卡的建議全掃一次：105 段「改法：」＋ 11 個 `fix:` 區塊，
+ * 其中 **29 段點名了檔案**。今天全部指得到 —— 而沒有東西在守它們。
+ *
+ * 為什麼歸在這一支：它的開頭那句話說的是
+ * 「接手的人是照著文件的連結走的⋯一個斷掉的連結只會讓那個人走到一半
+ * 停下來，然後開始猜」。被紅燈擋下來的人是**照著改法走的** ——
+ * 同一件事，換一個讀者。
+ */
+{
+  const GATES = [
+    'check-a11y', 'check-content', 'check-contrast', 'check-copy',
+    'check-doc-links', 'check-links', 'check-perf', 'check-workflows', 'audit-privacy',
+  ];
+  /*
+   * repo 裡每個檔案的**檔名** —— 建議裡多半只寫檔名或半截路徑。
+   *
+   * 不能借上面那個 `walk()`：它只吐 `.md`（那是它的工作）。
+   * 第一版就是那樣，於是 `ListPage.astro`、`content.ts` 這些**存在的檔案**
+   * 全被報成不存在 —— 26 個誤報。又是拿一個不是為這件事寫的東西去量。
+   */
+  /** @param {string} dir @returns {AsyncGenerator<string>} */
+  async function* allFiles(dir) {
+    for (const e of await readdir(dir, { withFileTypes: true })) {
+      if (e.name.startsWith('.') && e.name !== '.github') continue;
+      if (IGNORE_DIRS.has(e.name)) continue;
+      const p = join(dir, e.name);
+      if (e.isDirectory()) yield* allFiles(p);
+      else yield p;
+    }
+  }
+  const basenames = new Set();
+  for await (const f of allFiles(ROOT)) basenames.add(f.split('/').pop() ?? '');
+  for (const g of GATES) {
+    const rel = `scripts/${g}.mjs`;
+    const src = await readFile(resolve(ROOT, rel), 'utf8').catch(() => null);
+    if (src === null) continue;
+    const lines = src.split('\n');
+    /** 建議有兩種寫法：句子裡的「改法：」，以及 check-perf 的 `fix:` 欄位 */
+    /** @type {{ text: string, line: number }[]} */
+    const advice = [];
+    for (const m of src.matchAll(/改法：[^'`]*/g)) {
+      advice.push({ text: m[0], line: src.slice(0, m.index).split('\n').length });
+    }
+    for (let i = 0; i < lines.length; i++) {
+      if (!/^\s*fix:/.test(lines[i])) continue;
+      const buf = [];
+      for (let j = i; j < lines.length; j++) {
+        if (j > i && /^\s*(value|limit|basis|label|why|id):/.test(lines[j])) break;
+        buf.push(lines[j]);
+      }
+      advice.push({ text: buf.join(' '), line: i + 1 });
+    }
+    for (const a of advice) {
+      for (const m of a.text.matchAll(/[\w.[\]-]+\.(?:mjs|ts|astro|md|json|js|css|yml)/g)) {
+        saw('advice-target-missing', 1);
+        const base = m[0].split('/').pop() ?? '';
+        if (basenames.has(base)) continue;
+        problems.push({
+          file: rel,
+          line: a.line,
+          id: 'advice-target-missing',
+          target: m[0],
+          why:
+            `這句改法叫人去看 ${m[0]}，而 repo 裡沒有這個檔案 —— ` +
+            '被這條規則擋下來的人會照著走，然後找不到東西。\n' +
+            '      改法：改成現在的路徑；那個檔案真的沒了的話，把那一句一起改掉。',
+        });
+      }
+    }
+  }
+}
+
+/*
+ * 這一行要在上面那個區塊**後面** —— 它把每條規則的主體加起來，
+ * 而那個區塊自己會 `saw()`。放在前面的話 `total` 少算 31，
+ * 底下「幾個連結」那一行就會少掉那些（第一版就是這樣，50 變成 19）。
+ * 同一個形狀在這個 repo 犯到第十二次了。
+ */
 const total = [...subjects.values()].reduce((a, b) => a + b, 0);
 /*
  * 連結與指令要分開講。
@@ -259,10 +347,14 @@ const total = [...subjects.values()].reduce((a, b) => a + b, 0);
  * 主體數合起來算沒關係，**說出來的時候要分得開**。
  */
 const cmdSeen = subjects.get('doc-command-missing') ?? 0;
+const adviceSeen = subjects.get('advice-target-missing') ?? 0;
 if (SCRIPTS === null) {
   console.log('  ⚠ 讀不到 package.json —— 文件裡的 npm run 指令這次沒有比對。');
 }
-console.log(`  ${scanned} 份文件、${total - cmdSeen} 個連結、${cmdSeen} 處 npm run 指令`);
+console.log(
+  `  ${scanned} 份文件、${total - cmdSeen - adviceSeen} 個連結、${cmdSeen} 處 npm run 指令、` +
+    `九支關卡的建議裡 ${adviceSeen} 個檔案引用`,
+);
 
 if (skipped.length > 0) {
   console.log(`  跳過 ${skipped.length} 份：${skipped.join('、')}`);

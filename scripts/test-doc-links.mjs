@@ -201,5 +201,38 @@ console.log('\n文件連結檢查的判斷\n' + '─'.repeat(56));
   check('摘要把連結與指令分開數', /1 個連結、1 處 npm run 指令/.test(split.out), split.out);
 }
 
+/*
+ * ── 關卡自己的「改法」點名的檔案 ──────────────────────
+ *
+ * 第 2 輪（第四十一圈）加的。九支關卡的建議裡有 31 個檔案引用，
+ * 而在這之前沒有東西在守它們 —— 第 2 輪（第四十圈）就撞過一次
+ * （`check:perf` 叫人去改一個早就不存在的 prop）。
+ *
+ * 假倉庫裡放一支假的關卡腳本就驗得到：規則掃的是 `scripts/<關卡>.mjs`。
+ */
+{
+  const bad = await inFixture({
+    'README.md': '# 首頁\n',
+    'scripts/check-a11y.mjs': "add('x', '出事了。　改法：去改 NoSuchThing.astro 就好。');\n",
+  });
+  check(
+    '關卡的改法點名不存在的檔案：擋下來',
+    /advice-target-missing/.test(bad.out) && /NoSuchThing\.astro/.test(bad.out) && bad.code === 1,
+    `${bad.out}（exit ${bad.code}）`,
+  );
+
+  /* 反向：點名的檔案真的在，就不要出聲 */
+  const ok = await inFixture({
+    'README.md': '# 首頁\n',
+    'scripts/check-a11y.mjs': "add('x', '出事了。　改法：去改 Real.astro 就好。');\n",
+    'src/components/Real.astro': '<div />\n',
+  });
+  check(
+    '點名的檔案存在：不出聲（反向案例）',
+    !/advice-target-missing/.test(ok.out) && ok.code === 0,
+    `${ok.out}（exit ${ok.code}）`,
+  );
+}
+
 console.log(failed === 0 ? '\n全部通過。\n' : `\n${failed} 項失敗。\n`);
 process.exit(failed === 0 ? 0 : 1);
