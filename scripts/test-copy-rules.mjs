@@ -956,6 +956,34 @@ for (const [name, { hit, miss, expect, coFires }] of Object.entries(CASES)) {
       `（${RULES.reduce((/** @type {number} */ n, /** @type {any} */ r) => n + (r.samples?.length ?? 0), 0)} 個違規樣本）`,
   );
 
+  /*
+   * ── 上面那一格在 `bad` 壞掉的時候是**空的** ──────────
+   *
+   * 第 6 輪（第三十九圈）驗到的。那一格的判斷是
+   * 「`bad` 配得到、而 `subject` 配不到」—— 也就是說 `bad` 一個都配不到的時候，
+   * 迴圈整個跳過，它照樣印綠勾（實測：把 `taiwan-tai` 的 `bad` 改成配不到任何東西，
+   * 那一格與「每條規則都有違規樣本」**兩格都還是綠的**）。
+   *
+   * 整套測試會紅 —— 但紅的是別的格子（CASES 那幾格）。
+   * 這一格自己說的是「subject 比 bad 寬」，而它在最需要說話的時候沒有主體。
+   *
+   * 所以先問一句更基本的：**每個違規樣本，它自己那條規則抓得到嗎。**
+   */
+  const notMatched = [];
+  for (const rule of RULES) {
+    for (const sample of rule.samples ?? []) {
+      rule.bad.lastIndex = 0;
+      if (!rule.bad.test(sample)) notMatched.push(`${rule.id}：「${sample}」`);
+    }
+  }
+  const okSelf = notMatched.length === 0;
+  if (!okSelf) failed++;
+  console.log(`  ${okSelf ? '✓' : 'X'} 每個違規樣本，它自己那條規則都抓得到`);
+  if (!okSelf) {
+    console.log('      抓不到的：' + notMatched.join('、'));
+    console.log('      —— 上面那一格在這種時候是**空的**（bad 配不到就整個跳過）。');
+  }
+
   /* 每條規則都要有樣本 —— 沒有樣本的話上面那一格什麼都沒驗 */
   const noSamples = RULES.filter((/** @type {any} */ r) => (r.samples ?? []).length === 0).map(
     (/** @type {any} */ r) => r.id,
