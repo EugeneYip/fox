@@ -36,9 +36,23 @@
  *   對照組是 `check:a11y`：它的 `SEVERITY` 表每一條 warn 都寫了
  *   （「WCAG 沒有這一條成功準則⋯⋯所以提醒，不擋」）。
  *
- *   **這個欄位刻意留空**：理由要由知道當初怎麼決定的人來寫，
- *   我現在補上去的會是我自己編的。稽核會把「幾條寫了」數出來，
- *   讓那個缺口有數字。
+ *   **那一輪刻意留空**：理由要由知道當初怎麼決定的人來寫，
+ *   當時補上去的會是自己編的。稽核會把「幾條寫了」數出來，讓那個缺口有數字。
+ *
+ *   **第 5 輪（第四十四圈）把五條都補上了，而那不是編的。**
+ *   那一圈問「這件事站主要自己做嗎」，這一條掛在他名下五圈。
+ *   問下去發現：每一條 warn 的旁邊都**有一條 error 在守同一件事的硬保證**，
+ *   而那個對應關係在這個 repo 裡是查得到的（等級與掃的語料都印在輸出上）：
+ *
+ *     email                → identity-value（error，值來自 local／secret，穿得過豁免）
+ *     raw-youtube-embed    → built-third-party-request（error，掃 dist）＋ CSP
+ *     third-party-cdn      → 同上
+ *     target-blank-no-rel  → external-link-rel-broken-promise（error，掃 dist，比對 /privacy 的承諾）
+ *     leftover-placeholder → check:content 的 template-text-left（發佈出去的那一種）
+ *
+ *   所以這五條的共同形狀是：**warn 掃原始碼（早期提醒、寬的網），
+ *   error 掃產出（真的會不會發生）**。把它寫下來不需要問任何人 ——
+ *   需要問他的是「要不要改嚴重度」，而那是另一件事，沒有人在這一輪動它。
  * @property {true} [aboutLoading]  這條守的是「站上會不會去載入它」，
  *   而不是「repo 裡有沒有這個字串」。**散文檔（docs 底下的 .md）不掃** ——
  *   那種檔案永遠不會被瀏覽器載入，寫在裡面的網域只是在講它。
@@ -70,6 +84,13 @@ export const RULES = [
       'Email 直接出現在原始碼裡會被爬蟲收走。' +
       '　改法：確認這是刻意的。要在頁面上留聯絡方式的話，走 privacy.ts 的 showEmail ' +
       '＋ identity.local.ts（那個檔案不會進版控）；只是範例的話換成 example.com 結尾的假信箱。',
+    whyWarn:
+      '**她真的那個信箱**由 `identity-value`（error）守著 —— 那一條的值來自 ' +
+      '`identity.local.ts`／`PRIVACY_NEEDLES`，而且**穿得過豁免名單**' +
+      '（第 5 輪〔第四十三圈〕用假 needle 實測過）。' +
+      '這一條是「任何長得像信箱的字串」的粗網：`test@example.com`、維護者的、' +
+      '文件裡的範例都會中。擋下去等於要求 repo 裡一個信箱都不能出現，' +
+      '而那不是這個專案的約定 —— 約定是「她的個資不能進 repo」。',
   },
 
   // ── 第三方資源 ────────────────────────────────────
@@ -100,6 +121,11 @@ export const RULES = [
     why:
       '直接嵌入 YouTube 會在載入頁面時就送資料給 Google。' +
       '　改法：改用 VideoFacade 元件（`<VideoFacade url={⋯} />`）—— 它按了才載入。',
+    whyWarn:
+      '硬保證那一半由 `built-third-party-request`（error）守著 —— 它掃的是 `dist/`，' +
+      '也就是**真的會不會發出請求**，而且 CSP 會在瀏覽器那一端再擋一次。' +
+      '這一條掃的是原始碼，是同一件事的早期提醒：寫在 `.astro` 裡的 iframe ' +
+      '不一定會進產出（可能在沒人 import 的元件裡，或被條件擋掉）。',
   },
   {
     id: 'third-party-cdn',
@@ -109,6 +135,10 @@ export const RULES = [
     why:
       '執行期從第三方 CDN 取檔案。' +
       '　改法：把那個檔案下載下來放進 public/，再改成用站內路徑引用。',
+    whyWarn:
+      '跟 `raw-youtube-embed` 同一個理由：會不會真的發請求，由 ' +
+      '`built-third-party-request`（error）掃 `dist/` 判定，CSP 再擋一次。' +
+      '這一條是原始碼側的早期提醒。',
   },
 
   // ── 常見疏漏 ─────────────────────────────────────
@@ -158,6 +188,12 @@ export const RULES = [
     why:
       '外連沒有加 rel —— 新分頁拿得到原頁面的參照，也會帶上來源網址。' +
       '　改法：改用 ExternalLink 元件（它會自己補），或在那個標籤上加 rel={externalLinkRel}。',
+    whyWarn:
+      '**對訪客的承諾**由 `external-link-rel-broken-promise`（error）守著 —— ' +
+      '那一條掃 `dist/`，比對的是 `/privacy` 那一頁真的寫給訪客看的那句話。' +
+      '這一條掃原始碼，抓的是「還沒送出去的疏漏」。' +
+      '另外一半是事實問題：現代瀏覽器對 `target="_blank"` 已經隱含 `noopener`，' +
+      '所以缺 `rel` 今天主要是**帶出 Referer**與承諾對不上，不是可被利用的漏洞。',
   },
   {
     id: 'leftover-placeholder',
@@ -192,5 +228,11 @@ export const RULES = [
       '　改法：把它換成真的值。如果這是 sources.mjs 的範本，記得那一整塊本來是註解 —— ' +
       '複製之後要填 handle（她在那個平臺的帳號名）；' +
       '不確定帳號存不存在的話，先跑 `npm run handle <帳號名>` 看看。',
+    whyWarn:
+      '這一條不是隱私問題，是**沒寫完**。而「沒寫完」在這個專案裡是允許的中間狀態：' +
+      '`sync-feeds.mjs` 對 `handle === \'CHANGE_ME\'` 的來源是 `say.warn` 之後略過，' +
+      '連 failures 都不加（那段的註解寫著「算成失敗會讓 --strict 在正常狀態下就紅燈」）。' +
+      '擋在這裡會跟那個設計互相矛盾。真的發佈出去的那一種由 `check:content` 的 ' +
+      '`template-text-left` 擋。',
   },
 ];

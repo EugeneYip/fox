@@ -7,7 +7,7 @@
 > 上線步驟在 [DEPLOY.md](DEPLOY.md)，寫作方式在 [CONTENT.md](CONTENT.md)。
 >
 > 最後更新：2026-09-06（**網站已上線：https://bellafoxy.com**，DNS 與 HTTPS 都好了；
-> **第四十四圈第 4 輪走完了**）
+> **第四十四圈第 5 輪走完了**）
 
 ---
 
@@ -202,31 +202,28 @@ git ls-files | grep -c identity.local    # 必須是 0
 
 ## 週期性檢查（loop）現在跑到哪
 
-**下一輪：第四十四圈第 5 輪 —— 隱私與安全。**
+**下一輪：第四十四圈第 6 輪 —— 文案與語氣。**
 
-第 4 輪（平臺 feed 實測）先照本來的工作打了一次：她的來源 200 Atom 9 筆、
-11 個樣板全過、`sync:health` ✓ —— 沒有平臺改版或下架。
+第 5 輪（隱私與安全）挑了掛在站主名下五圈的那一條：
+`audit:privacy` 的 5 條 warn **一條都沒寫「為什麼是提醒而不是擋」**，
+而那個欄位自己的註解寫著「刻意留空 —— 補上去會是我編的」。
 
-然後問「`rss` 與 `bridge` 兩條路一次都沒跑過（→ 站主）」為什麼是他的事。
-**不是。** 那兩條策略沒被執行過是因為站上只有 YouTube 一個來源，
-但要執行它們**不需要她的帳號** —— 平臺目錄每一筆都帶著 `probeHandle`
-（公開帳號，`--patterns` 每次都在打）。沒有人做，是因為
-`fetchRssSource` 寫在 `sync-feeds.mjs` 裡沒有匯出。**那是五分鐘的事。**
+問下去發現不用編：**每一條 warn 的旁邊都有一條 error 在守同一件事的硬保證**，
+而那個對應關係在 repo 裡查得到 —— `email` → `identity-value`、
+`raw-youtube-embed`／`third-party-cdn` → `built-third-party-request` ＋ CSP、
+`target-blank-no-rel` → `external-link-rel-broken-promise`、
+`leftover-placeholder` → `check:content` 的 `template-text-left`。
+**五條的形狀是同一個：warn 掃原始碼（早期提醒），error 掃產出（真的會不會發生）。**
 
-跑了：wordpress／ghost／github／mastodon／bluesky 五個平臺共 96 筆，
-**每一筆都有網址、有日期、id 不重複**。但 **mastodon 與 bluesky 的項目
-沒有標題**（微網誌本來就沒有），而卡片是拿 `title` 當主要文字的 ——
-這件事只有真的跑過才看得到，樣板那一格全綠也證明不了。
+五條都補上了（0／5 → **5／5**，而那個數字是算出來的），
+**但一條的 `level` 都沒有動** —— 那才是要問他的。
 
-過程中踩到一個 403：直接 import `fetchWithRetry` 卻忘了帶 UA，
-而它的預設值是空字串。帶上 `UA_SYNC` 再打是 200。
-**UA 的問題會偽裝成平臺的問題**（這個 repo 為此付過一次很貴的代價），
-所以預設值改成 `UA_DEFAULT`，兩格測試守著。
-
-`bridge` 仍然沒跑過，但理由不是「站主還沒決定」，是**缺一臺 RSSHub**。
+這一圈到目前四種答案：「不再是他的事」「誰都做不了」「真的是他的」，
+以及這一輪的第四種：**一半是他的，一半不是** ——
+原本那條待辦把兩半綁在一起，於是兩半一起停了五圈。
 
 做法：一次只深入一個面向（八個面向輪流），每一圈換一個**問題**去問全站。
-輪替順序、每一輪的規則、以及全部 350 筆逐輪紀錄都在
+輪替順序、每一輪的規則、以及全部 351 筆逐輪紀錄都在
 [REVIEW-LOG.md](REVIEW-LOG.md) —— 接手某一輪之前先讀那份的最後一筆。
 
 > **這一節刻意只留索引。** 2026-09-04 之前這裡有 200 筆輪次摘要，

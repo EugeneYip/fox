@@ -76,7 +76,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 58,000 行、3.0 MB、350 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 58,200 行、3.0 MB、351 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -57999,4 +57999,204 @@ if (!ENV.rsshubBase) throw new Error('⋯需要設定 RSSHUB_BASE 才能橋接�
   `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：5 — 隱私與安全**
+### 2026-09-06 — 第 5 輪（第四十四圈）：隱私與安全
+
+**第四十四圈問：這件事，站主要自己做嗎？**
+判準：**找一個「→ 站主」的待辦，問它為什麼還在那裡 —— 是真的需要他決定，
+還是只是沒有人把它做完？**
+
+#### 1. 挑的是掛了五圈的那一條
+
+`audit:privacy` 每次都印：
+
+```
+逐行掃語料的 8 條規則裡，5 條是提醒（warn）、3 條會擋（error）。
+  其中 **0／5 條說得出為什麼是提醒而不是擋**（whyWarn）。
+  沒寫的：email、raw-youtube-embed、third-party-cdn、target-blank-no-rel、leftover-placeholder
+```
+
+而那個欄位自己的註解寫著（第 5 輪〔第三十九圈〕加的）：
+
+> **這個欄位刻意留空**：理由要由知道當初怎麼決定的人來寫，
+> 我現在補上去的會是我自己編的。
+
+那是一個**好的**決定 —— 不編理由。但它把整條掛到站主名下之後就停在那裡了。
+
+#### 2. 問下去：那個理由真的只有他知道嗎
+
+不是。逐條看下去，**每一條 warn 的旁邊都有一條 error 在守同一件事的硬保證**，
+而那個對應關係在這個 repo 裡是**查得到的**（等級與掃的語料都印在輸出上）：
+
+| warn（掃原始碼） | 守同一件事的 error（掃產出） |
+|---|---|
+| `email` | `identity-value` —— 值來自 `identity.local.ts`／`PRIVACY_NEEDLES`，而且**穿得過豁免名單**（第 5 輪〔第四十三圈〕用假 needle 實測過） |
+| `raw-youtube-embed` | `built-third-party-request`（掃 `dist/`）＋ CSP 在瀏覽器那一端 |
+| `third-party-cdn` | 同上 |
+| `target-blank-no-rel` | `external-link-rel-broken-promise` —— 掃 `dist/`，比對 `/privacy` 真的寫給訪客看的那句話 |
+| `leftover-placeholder` | `check:content` 的 `template-text-left`（真的發佈出去的那一種） |
+
+**五條的形狀是同一個：warn 掃原始碼（早期提醒、寬的網），
+error 掃產出（真的會不會發生）。**
+
+把這件事寫下來不需要問任何人。需要問他的是「**要不要改嚴重度**」——
+那是另一件事，這一輪沒有動任何一條的 `level`。
+
+#### 3. 有兩條的理由不只是「分工」，是實質的
+
+**`email`**：它抓的是「任何長得像信箱的字串」——`test@example.com`、
+維護者的、文件裡的範例都會中。擋下去等於要求 repo 裡一個信箱都不能出現，
+而這個專案的約定不是那個，是「**她的個資**不能進 repo」——
+那一半由 `identity-value` 用真的值在守。
+
+**`leftover-placeholder`**：這一條根本不是隱私問題，是**沒寫完**。
+而「沒寫完」在這個專案裡是**允許的中間狀態** —— `sync-feeds.mjs` 對
+`handle === 'CHANGE_ME'` 的來源是 `say.warn` 之後略過，
+**連 failures 都不加**，那段註解自己寫著「算成失敗會讓 `--strict`
+在正常狀態下就紅燈」。擋在稽核這裡會跟那個設計互相矛盾。
+
+（`target-blank-no-rel` 另外還有一半是事實問題：現代瀏覽器對
+`target="_blank"` 已經隱含 `noopener`，所以缺 `rel` 今天主要是
+**帶出 Referer** 與承諾對不上，不是可被利用的漏洞。）
+
+#### 4. 五條都補上了，數字自己會說
+
+```
+其中 **5／5 條說得出為什麼是提醒而不是擋**（whyWarn）。
+```
+
+那個「幾條寫了」是**算出來的**（`test:privacy-structural` 有一格在守它會
+跟著程式走），所以哪天有人加第六條 warn 而不寫理由，數字會掉回 5／6。
+
+欄位自己的註解也改了 —— 原本那句「這個欄位刻意留空」現在不成立，
+留著會變成一份說謊的說明。新的版本寫了**為什麼補上去的不是編的**，
+並且把那張對照表放進去。
+
+| | 之前 | 現在 |
+|---|---|---|
+| `whyWarn` | 0／5（掛在站主名下五圈） | **5／5** |
+| 那五條的嚴重度 | warn | **沒有動** —— 那才是要問他的 |
+| 欄位的說明 | 「刻意留空，補上去會是我編的」 | 說明為什麼這一次不是編的 |
+
+#### 5. 這一圈到目前為止的四種答案
+
+第 2 輪找到「不再是他的事」與「誰都做不了」；第 3 輪找到「真的是他的」；
+這一輪是第四種：**「有一部分是他的，有一部分不是」** ——
+寫下理由不是他的事，改嚴重度才是。原本那條待辦把兩半綁在一起，
+於是兩半一起停了五圈。
+
+`verify:all` 六道全綠、`test:tools` 44 步全過。
+
+### 待辦（不屬於這一輪）
+
+- **那五條的嚴重度本身還沒有人決定過**（→ 站主）。這一輪只寫下「今天為什麼
+  是 warn」，沒有動 `level`。真正的問題是：既然產出那一端都有 error 守著，
+  原始碼這一端要不要乾脆也擋？擋了會不會讓正常的中間狀態變紅燈？
+- **`audit:privacy` 沒有 `check:a11y` 那種 `SEVERITY` 表。** a11y 是「規則
+  → 等級」一張表釘住，而這裡的等級寫在每一條規則自己身上 —— 翻面沒有東西會
+  說話（第三十一圈為 a11y 修的就是這個形狀）（→ 5 隱私與安全）
+- 上一輪與更早的都還在（`bridge` 那條路卡在沒有 RSSHub、
+  四個策略都寫在 `sync-feeds.mjs` 裡沒有匯出、
+  微網誌型平臺沒有標題那件事畫面那端沒處理過、
+  `docs/CONTENT.md` 裡的指令沒有任何東西在驗、
+  「71～108 秒」也是一個沒人守的數字、`CONTENT.md` 現在 588 行（→ 站主）、
+  `MEASURED` 的日期沒有東西在守、`probe:served` 只量 5 頁而且寫死、
+  「雜湊資源只有 `max-age=600`」是這個主機做不到（→ 站主）、
+  螢幕閱讀器仍然沒有人做過（→ 站主）、
+  探針的結果沒有東西在比對、「英文頁量不到最壞情況」值得記進探針、
+  `box-shadow` 算不算邊、自訂屬性帶顏色的間接層、
+  `BG_PROPS` 三個裡只有一個被用到、
+  其餘六支關卡也都以 `process.exit()` 收尾、
+  `check-perf.mjs` 還有兩個早退的 `process.exit(1)`、
+  `test:units` 裡還有沒有別的時間相依斷言、
+  還有沒有別的測試會動到版控裡的檔案、同時跑兩份 `test-perf-budgets` 仍會紅、
+  `membersOf` 只展開一層、`check.yml` 在 GitHub 上跑過 0 次（→ 站主）、
+  那 39 組裡有 25 組在 `platforms.data.mjs`、
+  `pick()` 收 `Partial` 型別擋不住（→ 站主）、文字抽取只認單引號、
+  那份「跳過 node_modules⋯」的清單在 `audit-privacy.mjs` 裡有兩份、
+  `unscanned-dir` 只看頂層、那 4 條什麼都沒擋的豁免（→ 站主）、
+  `check:content` 那一半還是只看 `syndication.json`、
+  排程跑的 `sync:health` 沒有 `--strict`、`CHANGE_ME` 那條路連 failures 都不加、
+  `test-contrast` 把 `#faf6ee` 寫死在 fixture 裡、
+  manifest 的 `icons[]` 沒有人確認存在、`start_url`／`scope`／`lang` 還沒人比、
+  schema 欄位抽取的自我檢查只驗得到內容用過的那 25 個、
+  `images` 還是副檔名認的、GitHub Pages 會不會壓 `.atom`／`.rss` 沒有人量過、
+  CSS 那三條沒有被 `sawTags` 涵蓋、另外 5 條的主體不是用正則數的、
+  這份檔案自己的頁首也是個沒人守的數字、
+  同一個判斷寫在四個地方、四格抽名單用的都是正則、
+  `FLAKY_ENDPOINT` 的平臺 id 沒有人比、那五份對照表只驗了單向、
+  只比資料夾名字不比 `loader` 的 `base`、`collections` 的抽取只認一種寫法、
+  那八種只是「不數」不是「不該數」、`url()` 與 `@font-face` 只掃 HTML、
+  `CASES` 的鍵沒有反向檢查、
+  那個掃描分不出元件與動態標籤名、`writing-mode` 只有一個檔案在用、
+  `needs-dist-before-build` 打不開 npm 的 `&&` 串、
+  那份「每條規則都有反例」的報告只說不擋、兩份文件的例子沒有分開數、
+  另外五份文件還是寫「404、500」、`accept` 那些 header 沒被測過、
+  `field()` 假設 frontmatter 是第一個 `---`、
+  只比了檔名沒比路徑、識別字沒有比、`why:` 欄位沒掃、
+  `same-name-different-target` 比 `hasAccessibleName()` 窄、
+  「判斷寫兩份」沒有東西在數、那 59 條「元件沒算繪過」沒有人在守、
+  「要跑起來才有」那 25 條這個方法看不到、分類判準是兩條寫死的正則、
+  同一種「當天就爛」的數字可能還在別的關卡的輸出裡、
+  沒有東西在守「空狀態不要自相矛盾」、英文那一半沒有人系統地讀過、
+  `tags.count_one` 與 `list.count_one` 連算繪都沒有過、
+  `csp-frame-src-mismatch` 在站上主體是 0、
+  Data API v3 那一半也沒跑過、CSP 的 `frame-src` 在全部 44 頁上、
+  `related` 只驗了畫得出來、那六個欄位刪掉之後又回到沒人用過、
+  那段建議裡的 273 KB／94 KB 沒有人在守、
+  「站上 0 張內容圖」是三條待辦的共同原因、
+  markdown 裡的原始 HTML 沒有人在擋、另外六支關卡的寫死數字沒比過、
+  `column` 跟外層 `.wrap--*` 是靠人對的、
+  「42 個用了但沒說明」要重寫或刪掉、`--w-prose`／`--w-content` 也是抄進 `sizes` 的、
+  `rule-undocumented` 只看 id 有沒有出現、
+  那張表是手寫的而 `--list-rules` 是機器的、
+  `gate-count-stale` 的判準是「同一行有 `verify:all`」、
+  `EN_COVERAGE.date` 沒有人問多久以前、組數比對只認得變少、
+  其他三支規則測試的空綠沒驗、
+  結構性規則沒有 `whyWarn` 欄位、`email` 是 warn 而 `google-fonts` 是 error、
+  標籤數也是一種近似、`note` 的 0 筆連續五圈、
+  那 3 個沒人用的匯出（→ 站主）、判準看名字不解析 import、
+  判準是檔名不是用途、`role="status"` 本身沒有被檢查、
+  `<details>`／`<summary>`／`<time>` 那 170 個仍然沒有規則、
+  「22 個 `--verbose` 數字」那條的數字過期了、
+  `LOOKS_BAD` 那個正則是猜的、`verify:all` 還是 `&&` 串、
+  `ui.ts` 的 `en` 要不要改必填（→ 站主）、
+  job summary 只有站主會去看、`sync:health` 沒有接進六道關卡、
+  只比 `npm run X`、那段 git 診斷沒有測試、
+  `15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、
+  `example-not-real` 只看程式碼框裡的例子、
+  那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  那 9 條「維護者的事」的規則沒有文件、
+  `ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、`SCHEMA_STRUCTURAL` 3 個什麼都沒擋、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 15 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  7 條 a11y 規則的邊界沒人守、
+  7 個沒人用的 token（→ 站主）、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、
+  `inlineStylesheets: always` 只到 98%、圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、
+  `test-content-rules` 的改法檢查只看第一處、
+  `--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：6 — 文案與語氣**
