@@ -1512,6 +1512,47 @@ console.log('─'.repeat(64));
           : `沒有記數的：${noSaw.join('、')}　它們會被當成「站上沒有這種東西」`),
     );
   }
+
+  /*
+   * ── `STRUCTURAL_IDS` 這份名單自己對不對 ────────────────
+   *
+   * 第 5 輪（第四十二圈）加的。這一圈問「這份清單是誰維護的？漏一個會怎樣？」
+   *
+   * 上面那一格問的是「有 severity 的規則有沒有 `saw()`」。
+   * 漏掉的是另一個方向：**一個 id 可以有 severity、也有 `saw()`，
+   * 卻不在 `STRUCTURAL_IDS` 裡** —— 那份名單是「補 0」那一行用的，
+   * 不在裡面的規則，只要它所在的區塊沒跑到（例如沒有 `dist/`），
+   * 就會整條從計數裡消失。
+   *
+   * 上一圈第 5 輪就是這樣抓到三條的（規則數 31 變 28，而輸出沒說），
+   * 而那次的比對是**臨時寫的** —— 那一輪自己記著
+   * 「下一條漏掉的一樣不會有人知道」。這一格就是那句話的答案。
+   */
+  const listed = new Set(
+    [...(/const STRUCTURAL_IDS = \[([\s\S]*?)\n\];/.exec(auditSrc)?.[1] ?? '')
+      .matchAll(/'([a-z0-9-]+)'/g)].map((m) => m[1]),
+  );
+  const usedIds = new Set([
+    ...counted,
+    ...[...auditSrc.matchAll(/\bid:\s*'([a-z0-9-]+)'/g)].map((m) => m[1]),
+  ]);
+  const unregistered = [...usedIds].filter((id) => !listed.has(id) && !contentIds.has(id)).sort();
+  const neverUsed = [...listed].filter((id) => !usedIds.has(id)).sort();
+  const okList = listed.size > 0 && unregistered.length === 0 && neverUsed.length === 0;
+  if (!okList) failed++;
+  console.log(`  ${okList ? '✓' : 'X'} STRUCTURAL_IDS 跟這支腳本用到的 id 對得上（${listed.size} 條）`);
+  if (!okList) {
+    if (listed.size === 0) console.log('        抽不到 STRUCTURAL_IDS —— 這一格等於沒驗');
+    if (unregistered.length > 0) {
+      console.log(
+        `        用到卻沒登記的：${unregistered.join('、')}\n` +
+          '        它們靠所在區塊的 saw(id, 0)；那個區塊沒跑到的時候會整條從計數裡消失。',
+      );
+    }
+    if (neverUsed.length > 0) {
+      console.log(`        登記了卻沒有人用的：${neverUsed.join('、')}　（規則刪了就順手拿掉）`);
+    }
+  }
 }
 
 /*
