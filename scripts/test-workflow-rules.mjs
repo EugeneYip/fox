@@ -898,6 +898,22 @@ try {
       ['gate-count-stale', '上面「N 道關卡」那個區塊'],
       ['rule-undocumented', '上面「規則有沒有文件」那個區塊'],
     ]);
+    /*
+     * ── 這份豁免清單自己也要對得上 ──────────────────────
+     *
+     * 第 7 輪（第四十二圈）加的。第 1 輪在 `test-a11y-rules` 上補了同一格，
+     * 並且當場記著「這一支有同一份形狀的 `TESTED_ELSEWHERE`，同樣沒有人守」。
+     *
+     * 那一輪實測過兩種寫錯法：打錯鍵會被**間接**抓到（那條規則因此失去豁免，
+     * 另一格響），而**多加一條**完全沒有人說話 —— 輸出還很有自信地
+     * 說有 N 條「在別處驗過」。
+     */
+    const ghostExempt = [...TESTED_ELSEWHERE.keys()].filter((r) => !ids.includes(r));
+    if (ghostExempt.length > 0) {
+      failed += ghostExempt.length;
+      console.log(`\n  X 豁免清單裡有不存在的規則：${ghostExempt.join('、')}`);
+      console.log('      那會讓「有案例的 ＋ 在別處驗的 ＝ 總數」看起來成立，而其實在數不存在的東西。');
+    }
     if (TESTED_ELSEWHERE.size > 0) {
       console.log(
         `\n  · 不做假 workflow、在別處驗的規則（${TESTED_ELSEWHERE.size} 條）：` +
@@ -1074,6 +1090,48 @@ try {
     }
   } else {
     console.log(`  ✓ ${calls.length} 處 add() 都講了「改法：」（${RULE_IDS_FOR_TEST.length} 條規則）`);
+  }
+}
+
+/*
+ * ── `NEEDS_DIST_WHY` 這份表自己對不對 ────────────────────
+ *
+ * 第 7 輪（第四十二圈）加的。這一圈問「這份清單是誰維護的？漏一個會怎樣？」
+ *
+ * 那份表是上一圈第 7 輪加的，它有兩半，兩半都是手寫的：
+ *
+ *   鍵　　npm script 的名字 —— 打錯的話那一支就不在「需要 dist」的清單裡，
+ *         排在建置之前也不會有人說（那正是上一圈那個 bug 的形狀）
+ *   值　　`fail` 或 `quiet` —— 打錯的話 `=== 'quiet'` 不成立，
+ *         訊息會退回「這一步在 CI 上一定會失敗」，而那句話對 `audit:privacy`
+ *         是**假的**（它不會失敗，它只是少驗 10 條）
+ *
+ * 第二半特別安靜：值寫錯不會有任何徵兆，只是訊息說了一件不對的事。
+ */
+{
+  const src = await readFile(resolve(ROOT, 'scripts/check-workflows.mjs'), 'utf8');
+  const body = /const NEEDS_DIST_WHY = new Map\(\[([\s\S]*?)\]\);/.exec(src)?.[1] ?? '';
+  const pairs = [...body.matchAll(/\['([a-z][\w:-]*)',\s*'([a-z]+)'\]/g)].map((m) => [m[1], m[2]]);
+  const pkg = JSON.parse(await readFile(resolve(ROOT, 'package.json'), 'utf8'));
+  const badScript = pairs.filter(([k]) => !(k in (pkg.scripts ?? {}))).map(([k]) => k);
+  const badWhy = pairs.filter(([, v]) => v !== 'fail' && v !== 'quiet').map(([k, v]) => `${k}=${v}`);
+  const ok = pairs.length > 0 && badScript.length === 0 && badWhy.length === 0;
+  if (!ok) failed++;
+  console.log(`  ${ok ? '✓' : 'X'} NEEDS_DIST_WHY 的鍵是真的 script、值是 fail／quiet（${pairs.length} 條）`);
+  if (!ok) {
+    if (pairs.length === 0) console.log('        一對都抽不到 —— 這一格等於沒驗');
+    if (badScript.length > 0) {
+      console.log(
+        `        package.json 裡沒有的 script：${badScript.join('、')}\n` +
+          '        它不在「需要 dist」的清單裡，排在建置之前也不會有人說。',
+      );
+    }
+    if (badWhy.length > 0) {
+      console.log(
+        `        後果不是 fail／quiet：${badWhy.join('、')}\n` +
+          '        訊息會退回「一定會失敗」，而那句話對不會失敗的那一支是假的。',
+      );
+    }
   }
 }
 

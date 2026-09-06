@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 57,100 行、2.8 MB、336 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 57,300 行、2.8 MB、337 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -54831,3 +54831,157 @@ for (const id of EXTRA_RULE_IDS) { if (!subjects.has(id)) subjects.set(id, 0); }
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
 **下一輪：7 — 建置與 CI**
+
+### 2026-09-06 — 第 7 輪（第四十二圈）：建置與 CI
+
+**第四十二圈問：這份清單是誰維護的？漏一個會怎樣？**
+判準：**找出一份人手維護的清單，問兩件事 —— 它有沒有辦法從真正的來源
+推導出來？推導不出來的話，漏一項的時候誰會說話？**
+
+#### 1. 這一輪的兩份，都是自己記下來的
+
+| 清單 | 誰記的 |
+|---|---|
+| `TESTED_ELSEWHERE`（2 條豁免） | 第 1 輪（第四十二圈）補了 a11y 那一份，當場記著「這一支有同一份形狀的，同樣沒有人守」 |
+| `NEEDS_DIST_WHY`（6 條） | 第 7 輪（第四十一圈）加的，那一輪自己就寫著「這份表是手寫的」 |
+
+今天量：兩份**都是乾淨的**（豁免的 2 條都是真規則；6 個 script 都在 `package.json` 裡）。
+
+#### 2. `NEEDS_DIST_WHY` 有兩半，而值那一半更安靜
+
+```js
+const NEEDS_DIST_WHY = new Map([
+  ['check:content', 'fail'],
+  ⋯
+  ['audit:privacy', 'quiet'],
+]);
+```
+
+| 哪一半 | 打錯會怎樣 |
+|---|---|
+| **鍵**（script 名字） | 那一支就不在「需要 dist」的清單裡 —— 排在建置之前也不會有人說。**那正是上一圈那個 bug 的形狀** |
+| **值**（`fail`／`quiet`） | `=== 'quiet'` 不成立，訊息**退回**「這一步在 CI 上一定會失敗」—— 而那句話對 `audit:privacy` 是**假的**（它不會失敗，它只是少驗 10 條） |
+
+值那一半特別安靜：**沒有任何徵兆，只是訊息說了一件不對的事。**
+
+#### 3. 三格守門，三個突變
+
+```
+✓ NEEDS_DIST_WHY 的鍵是真的 script、值是 fail／quiet（6 條）
+· 不做假 workflow、在別處驗的規則（2 條）：⋯（有人守了）
+```
+
+| 動什麼 | 說了什麼 |
+|---|---|
+| 值改成 `silent` | 後果不是 fail／quiet：`audit:privacy=silent`　訊息會退回「一定會失敗」，而那句話對不會失敗的那一支是假的 |
+| 鍵改成 `check:perfX` | package.json 裡沒有的 script：`check:perfX`　它不在「需要 dist」的清單裡，排在建置之前也不會有人說 |
+| 豁免清單多一條 | 豁免清單裡有不存在的規則：`ghost-wf-rule` |
+
+| | 之前 | 現在 |
+|---|---|---|
+| `TESTED_ELSEWHERE`（workflows） | 多一條完全沒人說話 | 直接點名 |
+| `NEEDS_DIST_WHY` 的鍵 | 打錯就少守一支，沒有徵兆 | 比對 `package.json` |
+| `NEEDS_DIST_WHY` 的值 | 打錯就說一句假話 | 只認 `fail`／`quiet` |
+
+`verify:all` 六道全綠、`test:tools` 44 步全過、`ci:sim` 在 HEAD 上全綠。
+
+### 待辦（不屬於這一輪）
+
+- **同一個判斷現在寫在四個地方了**（a11y、文案、隱私、workflows）——
+  四格的措辭幾乎一樣，而判斷本身是同一件事：「這份名單跟真正的來源對得上嗎」。
+  該抽成一支共用的（→ 7 建置與 CI，但它跨面向）
+- **四格抽名單用的都是正則。** 換個寫法就抽不到 —— 抽到 0 條時都會說
+  「這一格等於沒驗」，但都不會擋（→ 7 建置與 CI）
+- 上一輪與更早的都還在（第三支同形狀的名單、抽名單用的是正則、
+  `STRUCTURAL_IDS` 還是手寫的、
+  `FLAKY_ENDPOINT` 的平臺 id 沒有人比、那五份對照表只驗了單向、
+  只比資料夾名字不比 `loader` 的 `base`、`collections` 的抽取只認一種寫法、
+  那八種只是「不數」不是「不該數」、`url()` 與 `@font-face` 只掃 HTML、
+  `MEASURED` 仍是快照、
+  `CASES` 的鍵沒有反向檢查、
+  那個掃描分不出元件與動態標籤名、`writing-mode` 只有一個檔案在用、
+  `needs-dist-before-build` 打不開 npm 的 `&&` 串、
+  那份「每條規則都有反例」的報告只說不擋、兩份文件的例子沒有分開數、
+  另外五份文件還是寫「404、500」、`accept` 那些 header 沒被測過、
+  `field()` 假設 frontmatter 是第一個 `---`、
+  只比了檔名沒比路徑、識別字沒有比、`why:` 欄位沒掃、
+  `same-name-different-target` 比 `hasAccessibleName()` 窄、
+  「判斷寫兩份」沒有東西在數、
+  那 59 條「元件沒算繪過」沒有人在守、
+  「要跑起來才有」那 25 條這個方法看不到、分類判準是兩條寫死的正則、
+  同一種「當天就爛」的數字可能還在別的關卡的輸出裡、
+  偶發紅燈的共同點是 `test:units`、量離開碼不要把輸出丟掉、
+  沒有東西在守「空狀態不要自相矛盾」、英文那一半沒有人系統地讀過、
+  `tags.count_one` 與 `list.count_one` 連算繪都沒有過、
+  `csp-frame-src-mismatch` 在站上主體是 0、手動那一次沒有自動化、
+  `rss` 與 `bridge` 兩條路一次都沒跑過（→ 站主）、
+  Data API v3 那一半也沒跑過、
+  CSP 的 `frame-src` 在全部 44 頁上、
+  `related` 只驗了畫得出來、那六個欄位刪掉之後又回到沒人用過、
+  那段建議裡的 273 KB／94 KB 沒有人在守、
+  「站上 0 張內容圖」是三條待辦的共同原因、
+  那三條 a11y 的「第一次」是手動做出來的、
+  markdown 裡的原始 HTML 沒有人在擋、另外六支關卡的寫死數字沒比過、
+  `column` 跟外層 `.wrap--*` 是靠人對的、
+  「42 個用了但沒說明」要重寫或刪掉、`--w-prose`／`--w-content` 也是抄進 `sizes` 的、
+  `rule-undocumented` 只看 id 有沒有出現、
+  那張表是手寫的而 `--list-rules` 是機器的、
+  `gate-count-stale` 的判準是「同一行有 `verify:all`」、
+  `EN_COVERAGE.date` 沒有人問多久以前、組數比對只認得變少、
+  其他三支規則測試的空綠沒驗、
+  那 5 條的 `whyWarn` 還是空的（→ 站主）、
+  結構性規則沒有 `whyWarn` 欄位、`email` 是 warn 而 `google-fonts` 是 error、
+  標籤數也是一種近似、`note` 的 0 筆連續五圈、
+  那 4 個沒人用的匯出（→ 站主）、判準看名字不解析 import、
+  `CONTENT.md` 已經超過 550 行（→ 站主）、判準是檔名不是用途、
+  `role="status"` 本身沒有被檢查、
+  `<details>`／`<summary>`／`<time>` 那 170 個仍然沒有規則、
+  「22 個 `--verbose` 數字」那條的數字過期了、
+  探針還是要人手貼、只跑了首頁、
+  `LOOKS_BAD` 那個正則是猜的、`verify:all` 還是 `&&` 串、
+  `ui.ts` 的 `en` 要不要改必填（→ 站主）、
+  job summary 只有站主會去看、`sync:health` 沒有接進六道關卡、
+  只比 `npm run X`、那段 git 診斷沒有測試、
+  「上界」宣稱要重量得先推（→ 站主）、
+  螢幕閱讀器仍然沒有人做過、重驗是量本機產出不是正式站、
+  `15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、
+  `example-not-real` 只看程式碼框裡的例子、
+  那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  那 9 條「維護者的事」的規則沒有文件、
+  `ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、
+  搜尋結果那 2 個連結沒有規則看過（但關卡會說出來）、
+  `check.yml` 永遠不會自己觸發（→ 站主）、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `SCHEMA_STRUCTURAL` 3 個什麼都沒擋、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 14 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  7 條 a11y 規則的邊界沒人守、
+  7 個沒人用的 token（→ 站主）、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、本機 `ahead 154, behind 3`、
+  `inlineStylesheets: always` 只到 98%、圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  `test-content-rules` 的改法檢查只看第一處、
+  `--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：8 — 視覺與版面**
