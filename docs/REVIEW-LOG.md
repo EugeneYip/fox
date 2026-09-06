@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 50,300 行、2.6 MB、304 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 50,500 行、2.6 MB、305 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -49267,4 +49267,148 @@ const EN_COVERAGE = { date: '2026-09-06', pairs: 108, pct: 100 };
   `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：7 — 建置與 CI**
+
+### 2026-09-06 — 第 7 輪（第三十八圈）：建置與 CI
+
+**第三十八圈問：這件事現在靠誰記得？忘了會怎樣？**
+判準：**這一步有沒有自動化？沒有的話，忘記的後果是什麼、多久會被發現？**
+
+#### 1. 那條「偶發紅燈沒有留下證據」的待辦，不是偶發
+
+待辦上躺著第三十七圈記的一條：`test:tools` 失敗時沒有留下任何 `X`。
+這一輪去追，發現那不是偶發，是**結構性的**。
+
+`test:tools` 是 `npm run a && npm run b && …` 串起來的。
+那種串法的紅燈有一個很難看的性質：**輸出的結尾是綠的。**
+
+實測（故意讓 `check:copy` 的一條規則改名）：
+
+| | |
+|---|---|
+| 離開碼 | 1 |
+| 輸出 | **919 行** |
+| 失敗在 | **802–834 行** |
+| 後面還有 | **85 行 `✓`** |
+
+`tail` 看到的**全是勾**。要找到真正的失敗，得往回捲一百多行 ——
+或者你得**先知道要 `grep` 什麼**。
+
+#### 2. 那正是第三十七圈那兩次看不出原因的原因之一
+
+那兩次我用 `tail` 與 `grep` 看輸出，得到「一個 `X` 都沒有」的結論。
+**我看的是結尾，而結尾在說謊。**
+
+（那兩次重跑確實是綠的，所以「不可重現」那句仍然成立 ——
+但「看不出是哪一格」這件事，這一輪解釋清楚了。）
+
+#### 3. `scripts/run-steps.mjs`：最後一行說實話
+
+紅的時候現在結尾是：
+
+```
+X 停在第 23 步／共 42 步：npm run test:copy-rules
+
+  那一步輸出裡長得像失敗的幾行：
+    X taiwan-tai（地名那一支）：該抓的有抓到
+    ⋯⋯
+
+  只跑那一步：npm run test:copy-rules
+```
+
+綠的時候是「**43 步全部通過**」。
+
+**順序沒有抄第二份**：那一支去讀 `package.json` 裡 `test:units` 與
+`test:built` 那兩串 `&&` 並展開（遞迴），所以那兩串仍然是唯一的來源。
+`npm run test:units` 單獨跑也還是原本的行為。
+
+**CI 不受影響**：`deploy.yml` 直接跑 `test:units` 與 `test:built`，
+沒有經過這一支。
+
+#### 4. 測試釘住的兩件事
+
+- **中間紅、後面那一步不會跑**：結尾必須說「停在第 2 步／共 3 步」
+- **展開是遞迴的**：`top → mid → a、b` 要算成 3 步，不是 2 步
+  （不遞迴的話 `test:tools` 會退回「只知道哪一半失敗」）
+
+兩個突變（不說停在哪／展開不遞迴）各讓測試 exit 1。
+
+| | 之前 | 現在 |
+|---|---|---|
+| 紅燈的結尾 | 85 行 `✓` | 停在第幾步、哪一個 script |
+| 找失敗 | 往回捲 120 行，或先知道要 grep 什麼 | 結尾直接給證據 |
+| 重跑那一格 | 自己找名字 | 印在最後一行 |
+
+`verify:all` 六道全綠、`test:tools` 43 步全過、`ci:sim` 在 HEAD 上全綠。
+
+### 待辦（不屬於這一輪）
+
+- **`LOOKS_BAD` 那個正則是猜的。** 它撿的是長得像失敗的行
+  （`X `、`項失敗`、`必須修正 [1-9]`、`Error`⋯⋯）——
+  某一支用別的寫法報錯的話會撿不到，那時它會說
+  「找不到長得像失敗的行 —— 往上看它自己印了什麼」（→ 7 建置與 CI）
+- **`verify:all` 還是 `&&` 串。** 它只有六步而且每一步的輸出短，
+  問題沒有 `test:tools` 那麼嚴重 —— 但性質一樣（→ 7 建置與 CI）
+- 上一輪與更早的都還在（`EN_COVERAGE` 的 `pairs` 沒有在比、
+  `ui.ts` 的 `en` 要不要改必填（→ 站主）、
+  `audit:privacy` 的離開碼仍然是 0（→ 站主）、
+  job summary 只有站主會去看、`sync:health` 沒有接進六道關卡、
+  只比 `npm run X`、那段 git 診斷沒有測試、
+  「上界」宣稱要重量得先推（→ 站主）、
+  螢幕閱讀器仍然沒有人做過、重驗是量本機產出不是正式站、
+  那支探針仍然要人手貼、`15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `check:workflows` 的 10 條規則文件提到 0 條、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、
+  `example-not-real` 只看程式碼框裡的例子、
+  `VideoFacade` 一次都沒算繪過、那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  `note` 的「合法但 0 筆」連續三圈都在、
+  那 9 條「維護者的事」的規則沒有文件、
+  11 條預算的上限沒有文件、`ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、`SEVERITY` 的 WCAG 推理住在測試檔註解裡、
+  30 條裡只有 2 條提到 WCAG、
+  瀏覽器掃描沒有變成工具、只走了 4 頁、
+  `check.yml` 永遠不會自己觸發（→ 站主）、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  `reveal('email')` 沒有人呼叫、沒有 href 的 `<a>` 沒有規則在看、
+  `validate-schema` 只實作 8 個關鍵字、同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  `<details>`／`<summary>` 各 44 個沒有規則在看、`<time>` 82 個沒人看 `datetime`、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `--patterns` 那 11 個平臺的「N 筆」沒驗、
+  `SCHEMA_STRUCTURAL` 與「走不到的是哪一個」還沒驗、
+  node 與 python 的 gzip 差 0.9% 沒人查過為什麼、
+  另外 22 個 a11y `--verbose` 數字還沒驗、搜尋結果的連結沒有任何無障礙檢查看過、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  我連續十次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 13 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `check:perf` 那句「全是 favicon」是寫死的描述、7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  30 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、`CoverImage` 的 `sizes` 用 40rem、
+  4 條閒置豁免、本機 `ahead 116, behind 2`、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `aria-live`／`role="status"` 沒有規則、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  `CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：8 — 視覺與排版**
