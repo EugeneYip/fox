@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 52,900 行、2.7 MB、316 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 53,100 行、2.7 MB、317 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -51206,3 +51206,184 @@ const ok = out.includes('densities') && out.includes('已經是 WebP');
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
 **下一輪：3 — 內容結構**
+
+### 2026-09-06 — 第 3 輪（第四十圈）：內容結構
+
+**第四十圈問：這段東西，站上真的跑過嗎？**
+判準：**找出一個今天真的執行到它的地方。找不到的話，它的正確性是靠什麼保證的？**
+
+#### 1. 這一題 `check:content` 早就在答了
+
+```
+schema 宣告了、但沒有任何一篇內容用過的欄位（8／33）：
+  alsoOn、canonicalUrl、cover、coverAlt、inResponseTo、related、updatedAt、videoUrl
+  畫面上讀這些欄位的程式碼從來沒有跟真資料跑過。不是問題，是還沒有內容。
+```
+
+規則那一端也一樣：21 條裡只有 `external-missing` 主體是 0，而它自己會說。
+
+所以這一輪要做的不是再數一次，是**把那 8 個填起來看會怎樣** ——
+`cover`／`coverAlt` 上一輪做過了（找到 `sizes` 三個部分都不對），這次做另外 6 個。
+
+#### 2. 六個欄位，六個都畫得出來
+
+暫存三篇（詩、文章、短札），量完刪掉：
+
+| 欄位 | 畫出來了嗎 |
+|---|---|
+| `canonicalUrl` | ✓　`<link rel="canonical" href="https://example.com/original">`（一般頁是自己的網址） |
+| `alsoOn` | ✓ |
+| `inResponseTo` | ✓　`↳ 回應 <a …>某篇文章</a>` |
+| `updatedAt` | ✓ |
+| `related` | ✓　「相關的詩」一節，連到〈烏衣巷〉 |
+| `videoUrl` | ✓　`VideoFacade`（「聽朗讀」一節） |
+
+**`VideoFacade` 那一條要特別講** —— 待辦上「一次都沒算繪過」的就是它，
+而它扛的是這個專案的硬性限制（零第三方請求）。真的畫出來之後量：
+
+```
+<iframe> 在載入時：0 個
+preconnect／dns-prefetch／preload：0 個
+外部主機只有三處：CSP 的 frame-src、按下去才建 iframe 的那行 JS、
+                以及 rel="noopener noreferrer" 的備援連結
+audit:privacy：必須修正 0
+```
+
+**facade 是對的。** 這是它第一次跟真資料跑，而它通過了。
+
+#### 3. 找到一個真的錯的：判準錨在縮排上，不是錨在 `poem:` 上
+
+短札那一篇填了 `inResponseTo` 之後，`check:content` 說：
+
+> 這幾篇**詩詞**的 title 讀者看不到：`notes/_probe-note-tmp.md`「量測用暫存短記」→ 顯示「某篇文章」
+
+那是一篇**短札**，根本沒有 `poem:` 這個鍵。而那一頁的 `<h1>` 與 `<title>`
+印的都是「量測用暫存短記」，「某篇文章」是頁面下方的來源連結。
+
+原因在這一行：
+
+```js
+const poemTitle = md.match(/^\s{2,}title:\s*(.+)$/m)?.[1]?.…
+```
+
+**「有縮排的 `title:`」不等於「`poem:` 底下的 title」。** frontmatter 裡
+有巢狀 `title` 的不只 `poem:`：
+
+```yaml
+inResponseTo:
+  title: 某篇文章      ← 這一行也有縮排
+  url: …
+```
+
+順帶還讓 `poem-title-bracketed` 把一個非詩詞算成主體。
+
+**沒有人發現，是因為 `inResponseTo` 在這之前一篇都沒有用過** ——
+而它就寫在 `check:content` 自己那份「宣告了但沒有內容用過」的名單上。
+關卡指出了那個洞，然後自己掉進去。
+
+改成錨在 `poem:` 這個鍵上：先框出它底下那一段，再在那一段裡找 `title`。
+兩格測試，兩個方向：
+
+```
+✓ 短札的 inResponseTo.title 不會被當成 poem.title
+✓ 真的被 poem.title 蓋住的詩還是抓得到（反向案例）
+```
+
+突變驗過（判準改回「有縮排」）：那一格會紅，而且印出被冤枉的檔名。
+
+| | 之前 | 現在 |
+|---|---|---|
+| `poem.title` 的判準 | 「有沒有縮排」 | 「在不在 `poem:` 底下」 |
+| 那份名單 | 混進一篇短札，說它顯示的是別人的字 | 只有真的被蓋住的詩 |
+| 六個沒用過的欄位 | 沒有人知道畫不畫得出來 | **六個都畫得出來，量過了** |
+
+#### 4. 我自己這次也錯了一次
+
+第一次量 `videoUrl` 的時候寫了 `grep -rlE "youtube.com/watch\|VideoFacade"` ——
+`-E` 之下 `\|` 是**字面**的，不是「或」。於是我一度以為 `videoUrl` 沒有畫出來。
+下一個指令就發現了（改成分開數，2 個命中）。
+
+**又是拿自己隨手寫的判準去量。** 這一圈第一次。
+
+`verify:all` 六道全綠、`test:tools` 44 步全過。
+
+### 待辦（不屬於這一輪）
+
+- **CSP 的 `frame-src https://www.youtube-nocookie.com` 在全部 47 頁上，
+  而真的有 frame 的只有 1 頁（那還是暫存頁；真站上是 0 頁）。**
+  要不要收窄成只在有影片的頁上發，是取捨（→ 5 隱私與安全）
+- **`related` 只驗了「畫得出來」，沒有驗它是不是雙向的** ——
+  第三十八圈已經確認 `related` 站上 0 筆，那條待辦當時判定是死的（→ 3 內容結構）
+- **那六個欄位刪掉之後又回到「沒有人用過」。** 跟上一輪的三條 a11y 規則一樣，
+  沒有東西會定期做這件事（→ 3 內容結構）
+- 上一輪與更早的都還在（那段建議裡的 273 KB／94 KB 沒有人在守、
+  其他關卡的「改法」也可能點名不存在的東西、
+  「站上 0 張內容圖」是三條待辦的共同原因、
+  那三條 a11y 的「第一次」是手動做出來的、
+  markdown 裡的原始 HTML 沒有人在擋、另外六支關卡的寫死數字沒比過、
+  `column` 跟外層 `.wrap--*` 是靠人對的、
+  「42 個用了但沒說明」要重寫或刪掉、`--w-prose`／`--w-content` 也是抄進 `sizes` 的、
+  `rule-undocumented` 只看 id 有沒有出現、
+  那張表是手寫的而 `--list-rules` 是機器的、
+  `gate-count-stale` 的判準是「同一行有 `verify:all`」、
+  `EN_COVERAGE.date` 沒有人問多久以前、組數比對只認得變少、
+  其他三支規則測試的空綠沒驗、
+  那 5 條的 `whyWarn` 還是空的（→ 站主）、
+  結構性規則沒有 `whyWarn` 欄位、`email` 是 warn 而 `google-fonts` 是 error、
+  標籤數也是一種近似、`note` 的 0 筆連續四圈、
+  那 4 個沒人用的匯出（→ 站主）、判準看名字不解析 import、
+  `CONTENT.md` 533 行（→ 站主）、判準是檔名不是用途、
+  `role="status"` 本身沒有被檢查、
+  `<details>`／`<summary>`／`<time>` 那 170 個仍然沒有規則、
+  「22 個 `--verbose` 數字」那條的數字過期了、
+  探針還是要人手貼、只跑了首頁、
+  `LOOKS_BAD` 那個正則是猜的、`verify:all` 還是 `&&` 串、
+  `ui.ts` 的 `en` 要不要改必填（→ 站主）、
+  job summary 只有站主會去看、`sync:health` 沒有接進六道關卡、
+  只比 `npm run X`、那段 git 診斷沒有測試、
+  「上界」宣稱要重量得先推（→ 站主）、
+  螢幕閱讀器仍然沒有人做過、重驗是量本機產出不是正式站、
+  `15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、
+  `example-not-real` 只看程式碼框裡的例子、
+  那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  那 9 條「維護者的事」的規則沒有文件、
+  `ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、
+  搜尋結果那 2 個連結沒有規則看過（但關卡會說出來）、
+  `check.yml` 永遠不會自己觸發（→ 站主）、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `SCHEMA_STRUCTURAL` 3 個什麼都沒擋、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  我連續十一次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 13 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  7 條 a11y 規則的邊界沒人守、
+  7 個沒人用的 token（→ 站主）、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、
+  本機 `ahead 134, behind 3`、
+  `inlineStylesheets: always` 只到 98%、
+  圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  `test-content-rules` 的改法檢查只看第一處、
+  `--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：4 — 平臺 feed 實測**

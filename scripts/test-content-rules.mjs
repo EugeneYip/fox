@@ -915,6 +915,49 @@ try {
   }
 
   /*
+   * ── 「poem.title」要錨在 `poem:` 上，不是錨在縮排上 ──────────
+   *
+   * 第 3 輪（第四十圈）：原本用 `/^\s{2,}title:/` 抽 `poem.title`，
+   * 而 frontmatter 裡不只 `poem:` 有巢狀 title —— 短札的 `inResponseTo`
+   * 也有一個。於是一篇根本沒有 `poem:` 的短札被當成詩詞，
+   * 進了「這幾篇詩詞的 title 讀者看不到」那份名單。
+   *
+   * 兩個方向：短札不能被當成詩，真的詩還是要抓得到。
+   */
+  {
+    const dir = await build('poem-title-anchor', {
+      content: {
+        'notes/n.md':
+          '---\ntitle: 一篇短札\nlang: zh-TW\ninResponseTo:\n  title: 某篇文章\n  url: https://example.com/x\n---\nx\n',
+      },
+      dist: { 'notes/n/index.html': page('一篇短札 回應 某篇文章') },
+    });
+    const out = await check(dir);
+    const ok = !out.includes('這幾篇詩詞的 title 讀者看不到');
+    if (!ok) failed++;
+    console.log(`  ${ok ? '✓' : 'X'} 短札的 inResponseTo.title 不會被當成 poem.title`);
+    if (!ok) {
+      console.log(
+        `        ${out.split('\n').find((l) => l.includes('讀者看不到'))?.trim() ?? ''}\n` +
+          '        判準要錨在 `poem:` 這個鍵上，不是「有沒有縮排」。',
+      );
+    }
+
+    const dir2 = await build('poem-title-anchor-real', {
+      content: {
+        'poems/p.md':
+          '---\ntitle: 琵琶行（節錄）\nlang: zh-TW\npoem:\n  title: 琵琶行\n  author: 白居易\n  original: |\n    潯陽江頭夜送客\n---\nx\n',
+      },
+      dist: { 'poems/p/index.html': page('琵琶行 潯陽江頭夜送客') },
+    });
+    const out2 = await check(dir2);
+    const ok2 = out2.includes('這幾篇詩詞的 title 讀者看不到') && out2.includes('琵琶行（節錄）');
+    if (!ok2) failed++;
+    console.log(`  ${ok2 ? '✓' : 'X'} 真的被 poem.title 蓋住的詩還是抓得到（反向案例）`);
+    if (!ok2) console.log(`        ${out2.split('\n').find((l) => l.includes('讀者看不到'))?.trim() ?? '（那一行完全沒印）'}`);
+  }
+
+  /*
    * ── 「沒有任何一篇用過的欄位」這份名單 ──
    *
    * 它是靠正則從 content.config.ts 抽欄位名的，所以必須有兩件事成立：

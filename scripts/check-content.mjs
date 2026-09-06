@@ -175,8 +175,30 @@ for await (const f of walk(CONTENT)) {
     continue;
   }
   const needles = [title];
-  // 詩詞顯示的是 poem.title（縮排在 poem: 底下），不是上面那個 title
-  const poemTitle = md.match(/^\s{2,}title:\s*(.+)$/m)?.[1]?.trim().replace(/^['"]|['"]$/g, '');
+  /*
+   * 詩詞顯示的是 `poem.title`（縮排在 `poem:` 底下），不是上面那個 title。
+   *
+   * ── 判準原本是「有縮排」，而那**不是**「在 poem: 底下」 ──────
+   *
+   * 第 3 輪（第四十圈）發現的。原本寫的是 `/^\s{2,}title:\s*(.+)$/m` ——
+   * 任何一行有縮排的 `title:` 都算。frontmatter 裡不只 `poem:` 有巢狀 title：
+   *
+   *     inResponseTo:
+   *       title: 某篇文章        ← 短札用的，這一行也有縮排
+   *       url: …
+   *
+   * 於是一篇**短札**（根本沒有 `poem:` 這個鍵）被當成詩詞，
+   * 進了「這幾篇詩詞的 title 讀者看不到」那份名單，說它顯示的是「某篇文章」——
+   * 而那一頁的 `<h1>` 與 `<title>` 印的都是它自己的 title。
+   * 順帶還讓 `poem-title-bracketed` 把一個非詩詞算成主體。
+   *
+   * 沒有人發現，是因為 `inResponseTo` **在這之前一篇都沒有用過**
+   * （`check:content` 自己那份「宣告了但沒有內容用過」名單上就有它）。
+   *
+   * 所以改成錨在 `poem:` 這個鍵上 —— 先框出它底下那一段，再在那一段裡找 title。
+   */
+  const poemBlock = /^poem:[ \t]*$\n((?:[ \t]+.*\n?)*)/m.exec(md)?.[1] ?? '';
+  const poemTitle = poemBlock.match(/^\s+title:\s*(.+)$/m)?.[1]?.trim().replace(/^['"]|['"]$/g, '');
   if (poemTitle) {
     saw('poem-title-bracketed', 1);
     needles.push(poemTitle);
