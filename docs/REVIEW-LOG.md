@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 56,500 行、2.8 MB、333 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 56,700 行、2.8 MB、334 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -54339,3 +54339,173 @@ repo 自己的 `rule-not-in-guide` 當場要求了 ——
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
 **下一輪：4 — 平臺 feed 實測**
+
+### 2026-09-06 — 第 4 輪（第四十二圈）：平臺 feed 實測
+
+**第四十二圈問：這份清單是誰維護的？漏一個會怎樣？**
+判準：**找出一份人手維護的清單，問兩件事 —— 它有沒有辦法從真正的來源
+推導出來？推導不出來的話，漏一項的時候誰會說話？**
+
+#### 1. feed 這一塊的清單
+
+| 清單 | 誰維護 |
+|---|---|
+| `platforms.data.mjs`（24 個平臺） | 它就是來源 |
+| `sources.mjs`（1 筆） | 它就是來源 |
+| `FLAKY_STATUSES` | 上一圈第 4 輪改成只寫一次，訊息去讀它 |
+| `ALL_USER_AGENTS` | 上一圈第 4 輪補了「收齊每一個 `UA_*`」 |
+| `FLAKY_ENDPOINT`（1 個平臺 id） | 手寫；今天量過 `youtube` **是真的 id**，但沒有東西在比 |
+| **`gen-platform-docs.mjs` 的五份對照表** | **手寫，而且沒有東西在比** |
+
+#### 2. 那五份表漏一個鍵，`undefined` 會印進她會讀的文件裡
+
+`REGION`／`MEDIA`／`KIND`／`SHAPE`／`CONFIDENCE` 把資料裡的英文值翻成
+`docs/PLATFORMS.md` 表格裡的中文。今天五份都蓋得住：
+
+```
+REGION      5 個鍵 / 資料用到 5 種   ✓
+MEDIA       6 個鍵 / 資料用到 6 種   ✓
+KIND        5 個鍵 / 資料用到 4 種   ✓
+SHAPE       4 個鍵 / 資料用到 4 種   ✓
+CONFIDENCE  3 個鍵 / 資料用到 3 種   ✓
+```
+
+**實測漏一個會怎樣** —— 把某個平臺的 `region` 改成表裡沒有的值：
+
+| | 結果 |
+|---|---|
+| `gen-platform-docs` | 離開碼 **0** |
+| `docs/PLATFORMS.md` | 出現一格 **`| undefined |`** |
+| `check:generated` | **過** |
+| `check:copy` | **過** |
+| `check:doc-links` | **過** |
+
+那份文件是**產生的、而且會進版控** —— 那個 `undefined` 會安靜地
+印在人會讀的表格裡，三道跟文件有關的關卡一句話都沒說。
+
+#### 3. 查不到就停下來
+
+```
+X 對照表少了鍵，文件會寫出 undefined：
+    · medium 的 region 是 `antarctica`，而 REGION 裡沒有這個鍵
+  改法：在 gen-platform-docs.mjs 的那份表裡補上這個鍵（要有中文標籤）。
+```
+
+平臺、欄位、值三個都說出來，而且**不寫檔**（`docs/PLATFORMS.md` 保持乾淨）。
+
+#### 4. 第十三次：我把它放在分岔後面
+
+第一版的守衛寫在**寫檔那一支**裡。於是 `--check`（**CI 跑的就是這個模式**）
+走不到它 —— 它只會說「文件跟資料對不上，重新產生一次」，
+而真正的原因要等人真的去跑產生器才看得到。
+
+搬到 `--check` 分岔**之前**，兩個模式現在都說得出真正的原因。
+**同一個形狀在這個 repo 犯到第十三次了。**
+
+| | 之前 | 現在 |
+|---|---|---|
+| 表裡少一個鍵 | `undefined` 進文件，三道關卡都過 | 兩個模式都停下來並點名 |
+| `--check`（CI） | 只說「對不上，重新產生」 | 說出真正的原因 |
+| 五份表今天 | 沒有人數過 | 每次跑都比一次 |
+
+`verify:all` 六道全綠、`test:tools` 44 步全過。
+
+### 待辦（不屬於這一輪）
+
+- **`FLAKY_ENDPOINT` 的平臺 id 沒有人比。** 今天 `youtube` 是真的，
+  但打錯的話那句「不要當成帳號沒了」就永遠不會出現（→ 4 平臺 feed 實測）
+- **那五份表只驗「資料用到的鍵都在」，沒驗反向。** `KIND` 有 5 個鍵而資料只用 4 種 ——
+  多出來的那個今天什麼都沒翻譯（→ 4 平臺 feed 實測）
+- 上一輪與更早的都還在（只比資料夾名字不比 `loader` 的 `base`、
+  `collections` 的抽取只認一種寫法、
+  那八種只是「不數」不是「不該數」、`url()` 與 `@font-face` 只掃 HTML、
+  `MEASURED` 仍是快照、
+  `test-workflow-rules.mjs` 的 `TESTED_ELSEWHERE` 沒人守、
+  `CASES` 的鍵沒有反向檢查、
+  那個掃描分不出元件與動態標籤名、`writing-mode` 只有一個檔案在用、
+  `needs-dist-before-build` 打不開 npm 的 `&&` 串、`NEEDS_DIST` 是手寫的、
+  那份「每條規則都有反例」的報告只說不擋、兩份文件的例子沒有分開數、
+  `STRUCTURAL_IDS` 是手寫的、
+  另外五份文件還是寫「404、500」、`accept` 那些 header 沒被測過、
+  `field()` 假設 frontmatter 是第一個 `---`、
+  只比了檔名沒比路徑、識別字沒有比、`why:` 欄位沒掃、
+  `same-name-different-target` 比 `hasAccessibleName()` 窄、
+  「判斷寫兩份」沒有東西在數、
+  那 59 條「元件沒算繪過」沒有人在守、
+  「要跑起來才有」那 25 條這個方法看不到、分類判準是兩條寫死的正則、
+  同一種「當天就爛」的數字可能還在別的關卡的輸出裡、
+  偶發紅燈的共同點是 `test:units`、量離開碼不要把輸出丟掉、
+  沒有東西在守「空狀態不要自相矛盾」、英文那一半沒有人系統地讀過、
+  `tags.count_one` 與 `list.count_one` 連算繪都沒有過、
+  `csp-frame-src-mismatch` 在站上主體是 0、手動那一次沒有自動化、
+  `rss` 與 `bridge` 兩條路一次都沒跑過（→ 站主）、
+  Data API v3 那一半也沒跑過、
+  CSP 的 `frame-src` 在全部 44 頁上、
+  `related` 只驗了畫得出來、那六個欄位刪掉之後又回到沒人用過、
+  那段建議裡的 273 KB／94 KB 沒有人在守、
+  「站上 0 張內容圖」是三條待辦的共同原因、
+  那三條 a11y 的「第一次」是手動做出來的、
+  markdown 裡的原始 HTML 沒有人在擋、另外六支關卡的寫死數字沒比過、
+  `column` 跟外層 `.wrap--*` 是靠人對的、
+  「42 個用了但沒說明」要重寫或刪掉、`--w-prose`／`--w-content` 也是抄進 `sizes` 的、
+  `rule-undocumented` 只看 id 有沒有出現、
+  那張表是手寫的而 `--list-rules` 是機器的、
+  `gate-count-stale` 的判準是「同一行有 `verify:all`」、
+  `EN_COVERAGE.date` 沒有人問多久以前、組數比對只認得變少、
+  其他三支規則測試的空綠沒驗、
+  那 5 條的 `whyWarn` 還是空的（→ 站主）、
+  結構性規則沒有 `whyWarn` 欄位、`email` 是 warn 而 `google-fonts` 是 error、
+  標籤數也是一種近似、`note` 的 0 筆連續五圈、
+  那 4 個沒人用的匯出（→ 站主）、判準看名字不解析 import、
+  `CONTENT.md` 已經超過 550 行（→ 站主）、判準是檔名不是用途、
+  `role="status"` 本身沒有被檢查、
+  `<details>`／`<summary>`／`<time>` 那 170 個仍然沒有規則、
+  「22 個 `--verbose` 數字」那條的數字過期了、
+  探針還是要人手貼、只跑了首頁、
+  `LOOKS_BAD` 那個正則是猜的、`verify:all` 還是 `&&` 串、
+  `ui.ts` 的 `en` 要不要改必填（→ 站主）、
+  job summary 只有站主會去看、`sync:health` 沒有接進六道關卡、
+  只比 `npm run X`、那段 git 診斷沒有測試、
+  「上界」宣稱要重量得先推（→ 站主）、
+  螢幕閱讀器仍然沒有人做過、重驗是量本機產出不是正式站、
+  `15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、
+  `example-not-real` 只看程式碼框裡的例子、
+  那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  那 9 條「維護者的事」的規則沒有文件、
+  `ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、
+  搜尋結果那 2 個連結沒有規則看過（但關卡會說出來）、
+  `check.yml` 永遠不會自己觸發（→ 站主）、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `SCHEMA_STRUCTURAL` 3 個什麼都沒擋、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 14 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  7 條 a11y 規則的邊界沒人守、
+  7 個沒人用的 token（→ 站主）、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、本機 `ahead 151, behind 3`、
+  `inlineStylesheets: always` 只到 98%、圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  `test-content-rules` 的改法檢查只看第一處、
+  `--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：5 — 隱私與安全**

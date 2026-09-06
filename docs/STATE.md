@@ -7,7 +7,7 @@
 > 上線步驟在 [DEPLOY.md](DEPLOY.md)，寫作方式在 [CONTENT.md](CONTENT.md)。
 >
 > 最後更新：2026-09-06（**網站已上線：https://bellafoxy.com**，DNS 與 HTTPS 都好了；
-> **第四十二圈第 3 輪走完了**）
+> **第四十二圈第 4 輪走完了**）
 
 ---
 
@@ -191,32 +191,26 @@ git ls-files | grep -c identity.local    # 必須是 0
 
 ## 週期性檢查（loop）現在跑到哪
 
-**下一輪：第四十二圈第 4 輪 —— 平臺 feed 實測。**
+**下一輪：第四十二圈第 5 輪 —— 隱私與安全。**
 
-第四十二圈第 3 輪（內容結構）：這一塊的清單多數有人守
-（`NOT_A_WRITER_RULE` 走 `documentationDuty` 的 `unknown`、
-`SCHEMA_STRUCTURAL` 每次自己說「3 個什麼都沒擋」、schema 的關鍵字有
-`unsupported()`）。**沒有東西在比的是 `content.config.ts` 的 `collections`。**
+第四十二圈第 4 輪（平臺 feed 實測）：這一塊的清單多數有來源或已經補過
+（`platforms.data.mjs`、`sources.mjs` 是來源；`FLAKY_STATUSES` 與
+`ALL_USER_AGENTS` 上一圈第 4 輪剛補）。沒有東西在比的是
+**`gen-platform-docs.mjs` 的五份對照表**（`REGION`／`MEDIA`／`KIND`／
+`SHAPE`／`CONFIDENCE`），它們把資料裡的英文值翻成 `docs/PLATFORMS.md`
+表格裡的中文。
 
-實測漏一個會怎樣 —— 把一篇 md 放進沒註冊的 `src/content/essays/`：
+實測漏一個鍵：產生器**離開碼 0**、文件裡出現一格 **`| undefined |`**，
+而 `check:generated`、`check:copy`、`check:doc-links` **三道全過** ——
+那個 `undefined` 會安靜地印在人會讀的表格裡。
 
-```
-npm run build      成功，而且 44 頁沒有變（那一篇一頁都沒有）
-check:content      「7 篇內容」（它把那一篇算進去了）
-離開碼             0
-```
-
-**她寫了一篇、檢查器數到了、站上沒有它，而六道關卡一句話都沒說。**
-
-加了第 22 條規則 `collection-unregistered`（兩個方向都比，抽不到那一行時
-說「這一格沒有在守」）。它報的是她的檔案，所以 repo 自己的 `rule-not-in-guide`
-當場要求 `docs/CONTENT.md` 也要寫 —— 補了一節「內容只住在這四個資料夾」。
-
-順帶：測試裡那份手抄的假指南（11 個 id）也因此紅了一次 ——
-**這一圈問的問題，在測試裡也成立。**
+改成查不到就停下來，說出平臺、欄位、值，而且不寫檔。
+**第一版我又把守衛放在分岔後面**（寫檔那一支），於是 `--check`
+（CI 跑的就是這個模式）走不到它，只會說「文件跟資料對不上」。
+搬到分岔之前 —— **同一個形狀在這個 repo 犯到第十三次。**
 
 做法：一次只深入一個面向（八個面向輪流），每一圈換一個**問題**去問全站。
-輪替順序、每一輪的規則、以及全部 333 筆逐輪紀錄都在
+輪替順序、每一輪的規則、以及全部 334 筆逐輪紀錄都在
 [REVIEW-LOG.md](REVIEW-LOG.md) —— 接手某一輪之前先讀那份的最後一筆。
 
 > **這一節刻意只留索引。** 2026-09-04 之前這裡有 200 筆輪次摘要，

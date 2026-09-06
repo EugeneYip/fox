@@ -41,11 +41,53 @@ const SHAPE = {
 
 const configured = new Map(sources.map((s) => [s.platform, s]));
 
+/*
+ * ── 這五份對照表漏一個鍵，會直接寫進文件裡 ──────────────
+ *
+ * 第 4 輪（第四十二圈）問「這份清單是誰維護的？漏一個會怎樣？」。
+ *
+ * `REGION`／`MEDIA`／`KIND`／`SHAPE`／`CONFIDENCE` 是五份**人手維護的**
+ * 對照表，把資料裡的英文值翻成表格裡的中文。今天五份都蓋得住
+ * （5／5、6／6、4／5、4／4、3／3）—— 而**沒有東西在比**。
+ *
+ * 實測：把某個平臺的 `region` 改成表裡沒有的值，再跑一次產生器 ——
+ *
+ *   gen-platform-docs   離開碼 **0**
+ *   docs/PLATFORMS.md   出現一格 **`| undefined |`**
+ *   check:generated     過
+ *   check:copy          過
+ *   check:doc-links     過
+ *
+ * 也就是說那個 `undefined` 會安靜地印進**人會讀的那份文件**裡。
+ * 所以查不到就停下來，並且說清楚是哪個平臺、哪個欄位、哪個值。
+ */
+/** @type {string[]} */
+const unmapped = [];
+/**
+ * @param {Record<string, string>} table
+ * @param {string} tableName 出問題時要說得出是哪一份表
+ * @param {string} id 哪一個平臺
+ * @param {string} field 哪一個欄位
+ * @param {string} value
+ */
+const label = (table, tableName, id, field, value) => {
+  const hit = table[value];
+  if (hit === undefined) unmapped.push(`${id} 的 ${field} 是 \`${value}\`，而 ${tableName} 裡沒有這個鍵`);
+  return hit ?? `（${value}？）`;
+};
+
 /** @param {import('../src/config/platforms.data.mjs').Platform} p */
 function row(p) {
   const s = configured.get(p.id);
   const state = !s ? '—' : s.enabled ? '**已啟用**' : '已預留';
-  return `| \`${p.id}\` | ${p.name['zh-TW']} | ${REGION[p.region]} | ${MEDIA[p.media]} | ${KIND[p.feedKind]} | ${SHAPE[p.handleShape ?? 'username']} | ${CONFIDENCE[p.confidence]}${p.verifiedAt ? `（${p.verifiedAt}）` : ''} | ${state} |`;
+  const shape = p.handleShape ?? 'username';
+  return (
+    `| \`${p.id}\` | ${p.name['zh-TW']} | ${label(REGION, 'REGION', p.id, 'region', p.region)} | ` +
+    `${label(MEDIA, 'MEDIA', p.id, 'media', p.media)} | ${label(KIND, 'KIND', p.id, 'feedKind', p.feedKind)} | ` +
+    `${label(SHAPE, 'SHAPE', p.id, 'handleShape', shape)} | ` +
+    `${label(CONFIDENCE, 'CONFIDENCE', p.id, 'confidence', p.confidence)}` +
+    `${p.verifiedAt ? `（${p.verifiedAt}）` : ''} | ${state} |`
+  );
 }
 
 /** @param {string} kind */
@@ -322,6 +364,21 @@ if (datedRows !== verifiedCount) {
 } else if (verifiedCount > 0) {
   console.log(`✓ ${verifiedCount} 個「已實測」都帶著日期（最舊：${PLATFORMS.filter((p) => p.confidence === 'verified').map((p) => p.verifiedAt).sort()[0]}）`);
 }
+
+  /*
+   * 這一段要在「--check 還是重新產生」那個分岔**之前**。
+   *
+   * 第一版放在寫檔那一支裡，於是 `--check`（CI 跑的那個模式）走不到它 ——
+   * 它只會說「文件跟資料對不上，重新產生一次」，而真正的原因
+   *（某份對照表少一個鍵）要等人真的去跑產生器才看得到。
+   * 同一個形狀在這個 repo 犯到第十三次了。
+   */
+  if (unmapped.length > 0) {
+    console.error('\nX 對照表少了鍵，文件會寫出 undefined：');
+    for (const line of unmapped) console.error(`    · ${line}`);
+    console.error('  改法：在 gen-platform-docs.mjs 的那份表裡補上這個鍵（要有中文標籤）。');
+    process.exit(1);
+  }
 
 if (process.argv.includes('--check')) {
   if (claudeDrift || dateDrift) process.exit(1);
