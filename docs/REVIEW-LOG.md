@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 48,600 行、2.5 MB、296 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 48,800 行、2.5 MB、297 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -48005,4 +48005,148 @@ fixture —— 第二次呼叫直接 ENOENT。改成每一格重建一份。
   `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：7 — 建置與 CI**
+
+### 2026-09-06 — 第 7 輪（第三十七圈）：建置與 CI
+
+**第三十七圈問：這一條規則，是誰要求的？寫在哪份文件裡？**
+判準：**這條規則寫在哪份文件裡？那份文件是給誰看的？兩邊還一致嗎？**
+
+#### 1. 先把 `CLAUDE.md` 對建置流程的宣稱逐條對過（沒發現問題）
+
+| 那份文件說 | 實際 |
+|---|---|
+| `verify:all` 是**六道關卡**（型別、隱私、對比、建置、無障礙、效能） | 6 步，而且名稱一一對得上 ✓ |
+| `check:copy` 與 `check:content` 住在 `test:built` 那一半 | ✓ |
+| `check:generated` 在 `test:built` 裡 | ✓ |
+| 兩個 workflow 都會跑它 | ✓（`check.yml`、`deploy.yml`） |
+
+四條全中。**這一格沒有問題。**
+
+#### 2. 問題不在對不對，在**寫了幾次**
+
+`verify:all` 有幾道關卡這件事，人會讀的文件裡寫了**四次**：
+
+```
+CLAUDE.md:223      verify:all 是六道關卡（型別、隱私、對比、建置、無障礙、效能）
+AGENTS.md:141      npm run verify:all   # 六道關卡
+docs/DEPLOY.md:217 部署前會跑完整的六道關卡
+docs/STATE.md:301  六道關卡全綠而產出多出 6 個沒有 href 的 <a>
+```
+
+加一道關卡，**四份同時變成錯的**。
+
+#### 3. 而它已經過期過一次
+
+`CLAUDE.md` 自己留著這一行：
+
+> （原本這裡寫「五道」，那是更早以前的數字。）
+
+也就是說這個數字**真的漂過**，而那次是靠人記得回來改。
+這不是假想的風險，是已經發生過的事。
+
+#### 4. `gate-count-stale`（第 10 條，主體 4）
+
+拿 `package.json` 的 `verify:all` **真的有幾步**去比那四句話 ——
+不判斷「幾道才對」，只比事實來源。
+
+`docs/REVIEW-LOG.md` **不比**：那是歷史紀錄，每一筆寫的是**當時**的數字
+（裡面「六道關卡」出現 141 次，全部是當時的事實）。
+
+一句都抽不到時要說「**這一格沒有在守**」—— 那通常表示那句話換了寫法。
+
+實測：把 `verify:all` 加成 7 步 →
+
+```
+X [gate-count-stale] 這裡寫「六道關卡」，而 package.json 的 verify:all 有 7 步。
+```
+
+**四份文件全部被點名**，exit 1；還原後回到 0。
+
+#### 5. 第十次
+
+第一版又把 `saw()` 放在「補 0」那一行**後面**。
+它明明比了 4 句，`--verbose` 印的卻是 **0** ——
+因為印的是補完的那一份。
+
+這個形狀在這個 repo 我已經犯了**十次**。這一次在那段程式碼上面
+留了一行寫明「這一段要在補 0 之前」，跟前幾支的作法一致。
+
+| | 之前 | 現在 |
+|---|---|---|
+| 「六道關卡」 | 四份文件各寫一次，沒有人比 | 每次 `check:workflows` 都比 |
+| 加一道關卡 | 四份同時錯，沒有人知道 | 四份全部被點名 |
+| 那句話換寫法 | 安靜地什麼都不比 | 「這一格沒有在守」 |
+| 規則數 | 9 | 10 |
+
+`verify:all` 六道全綠、`test:tools` 842 格全綠、`ci:sim` 在 HEAD 上全綠。
+
+### 待辦（不屬於這一輪）
+
+- **那個偶發紅燈這一輪沒有再出現**（這一輪跑了兩次 `test:tools`，
+  加上 `ci:sim` 裡的那一趟，都是綠的 —— 三次，不是我原本想寫的四次）。
+  上一輪記的「`test:tools` 失敗時沒有留下任何 `X`」還是真的 ——
+  但這一輪沒有機會重現它，所以沒有動（→ 7 建置與 CI）
+- **`check:workflows` 的 10 條規則，人會讀的文件仍然提到 0 條。**
+  這一輪加的那條也一樣。它們是給維護者看的，而維護者讀 `CLAUDE.md`
+  —— 要不要比照文案那五條建立文件義務，是站主的判斷（→ 站主）
+- **`CLAUDE.md` 裡還有別的可查宣稱沒有人比**：
+  「`npm run write` 產出的預設是 `draft: true`」、
+  「`base` 必須是 `/`」、「`public/CNAME` 不能刪（`deploy.yml` 有一道檢查擋這個）」
+  —— 最後那一條 `ci:sim` 有在驗，前兩條沒有（→ 7 建置與 CI）
+- 上一輪與更早的都還在（`example-not-real` 只看程式碼框裡的例子、
+  `VideoFacade` 一次都沒算繪過、那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  `note` 的「合法但 0 筆」連續兩圈都在、
+  那 9 條「維護者的事」的規則沒有文件、
+  11 條預算的上限沒有文件、`ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、`SEVERITY` 的 WCAG 推理住在測試檔註解裡、
+  29 條裡只有 2 條提到 WCAG、
+  瀏覽器掃描沒有變成工具、只走了 4 頁、
+  `check.yml` 永遠不會自己觸發（→ 站主）、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  `reveal('email')` 沒有人呼叫、沒有 href 的 `<a>` 沒有規則在看、
+  `validate-schema` 只實作 8 個關鍵字、同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  `<details>`／`<summary>` 各 44 個沒有規則在看、`<time>` 82 個沒人看 `datetime`、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `--patterns` 那 11 個平臺的「N 筆」沒驗、
+  `SCHEMA_STRUCTURAL` 與「走不到的是哪一個」還沒驗、
+  node 與 python 的 gzip 差 0.9% 沒人查過為什麼、
+  另外 22 個 a11y `--verbose` 數字還沒驗、搜尋結果的連結沒有任何無障礙檢查看過、
+  `tokens.css` 註解裡的對比值沒有東西在守、`domain-drift` 只看三份、
+  `rule-not-documented` 只守 id、`strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、`docs/A11Y.md` 那三個瀏覽器量的數字沒人對、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `audit:privacy` 沒有 needles 時本機 exit 0、
+  我連續**十**次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 13 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `check:perf` 那句「全是 favicon」是寫死的描述、7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  30 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、`related` 單向、schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、`CoverImage` 的 `sizes` 用 40rem、
+  `ui.ts` 的 `en` 要不要必填、
+  4 條閒置豁免、本機 `ahead 100, behind 2`、
+  `npm run sync` 來源全失敗仍離開碼 0、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `aria-live`／`role="status"` 沒有規則、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、`probe:served` 沒有自己的測試、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  真的開一次螢幕閱讀器聽、`CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：8 — 視覺與排版**
