@@ -105,6 +105,28 @@ const penName = pick(site.penName, locale) ?? site.penName[DEFAULT_LOCALE];
     color: var(--c-flame-ink);
   }
 
+  /*
+   * 「你在這裡」看得見的那一半。
+   *
+   * 第 1 輪（第三十圈）補了 `aria-current` —— 螢幕閱讀器從此聽得出來，
+   * 但**畫面上五頁完全沒有差別**（頁尾的連結全是 `--c-ink-soft`）。
+   * 第 8 輪（第四十五圈）量到：`/about`、`/notes`、`/writing`、`/poems`、
+   * `/colophon` 五頁的頁尾都印著 `aria-current="page"`，
+   * 而全站只有 `.site-nav`、`.pager__numbers`、`.lang__menu` 三組有樣式。
+   *
+   * 不照抄導覽列那道 2px 的短線：頁尾是 `--t-sm` 的工具連結，
+   * 一道跟主導覽同粗的線會把它讀成第二個主導覽。
+   * 用**顏色 ＋ 底線**兩個線索（只有顏色的話，WCAG 1.4.1 那條就只剩一半），
+   * 底線借導覽列同一個狐火色，所以是同一套語彙的輕量版。
+   */
+  .site-footer nav a[aria-current="page"] {
+    color: var(--c-ink);
+    text-decoration: underline;
+    text-decoration-color: var(--c-flame);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 0.25em;
+  }
+
   .site-footer__legal {
     font-size: var(--t-xs);
   }

@@ -671,14 +671,36 @@ async function* walkSurf(dir) {
  * 的裝飾，真正要讀的播放鈕自己帶背景（而那一組在 PAIRS 裡）。
  */
 {
+  /*
+   * 邊框與外框那 10 個名字**不在這裡** —— 底下的 `BORDERISH` 正則就是
+   * 第 8 輪（第四十二圈）為了取代它們才寫的，而那一輪只加了正則、
+   * 沒有把名字拿掉。第 8 輪（第四十五圈）補上這一半：
+   * `outline-color`、`border-color`、`border-{top,bottom,left,right}-color`、
+   * `border-{inline,block}-{start,end}-color` 十個，`BORDERISH` 全部認得，
+   * 所以留在清單裡只是同一件事寫兩份。拿掉前後輸出一字不差。
+   */
   const FG_PROPS = new Set([
-    'color', 'fill', 'stroke', '-webkit-text-fill-color', 'caret-color',
-    'text-decoration-color', 'outline-color', 'border-color',
-    'border-top-color', 'border-bottom-color', 'border-left-color', 'border-right-color',
-    'border-inline-start-color', 'border-inline-end-color',
-    'border-block-start-color', 'border-block-end-color',
+    'color', 'fill', 'stroke', '-webkit-text-fill-color', 'caret-color', 'text-decoration-color',
   ]);
   const BG_PROPS = new Set(['background', 'background-color', 'background-image']);
+
+  /*
+   * ── 那兩份清單，哪幾個名字什麼都沒配到 ──────────────────
+   *
+   * 第 8 輪（第四十三圈）留的待辦：`BG_PROPS` 三個裡只有 `background`
+   * 真的被用到，`background-color` 與 `background-image` 站上一次都沒出現 ——
+   * 跟 `SCHEMA_STRUCTURAL`、`audit:privacy` 的豁免名單同一個形狀
+   *（列了，但沒擋到東西）。第 8 輪（第四十五圈）逐條驗待辦時補上。
+   *
+   * 不刪 —— 跟那兩處同一個處理：讓它每一輪自己說出來。
+   * 列著沒配到不是錯（那些是合法的 CSS 屬性，只是站上還沒有人這樣寫），
+   * 錯的是「看起來像在守什麼，其實沒有」而沒有人知道。
+   *
+   * 記的是**掃的時候真的配到的屬性名**，不另外寫一份「哪個屬性會出現」——
+   * 那正是這一條在守的東西，寫第二份就會分岔。
+   */
+  /** @type {Set<string>} 這一輪真的配到 `--c-` token 的屬性名 */
+  const propsSeen = new Set();
   /*
    * ── 邊框與外框：用規則認，不要再列一份清單 ────────────────
    *
@@ -775,6 +797,8 @@ async function* walkSurf(dir) {
       const value = decl.slice(colon + 1);
       const tokens = [...value.matchAll(/var\(\s*(--c-[\w-]+)/g)].map((m) => m[1]);
       if (tokens.length === 0) continue;
+      if (FG_PROPS.has(prop)) propsSeen.add(prop);
+      if (BG_PROPS.has(prop)) propsSeen.add(prop);
       const bucket = FG_PROPS.has(prop) || BORDERISH.test(prop)
         ? fgUse
         : BG_PROPS.has(prop) && !/gradient\(/.test(value)
@@ -1105,7 +1129,23 @@ async function* walkSurf(dir) {
      */
     /** @type {string[]} */
     const parts = [];
-    if (unbucketed.size > 0) {
+    {
+    const idleFg = [...FG_PROPS].filter((x) => !propsSeen.has(x)).sort();
+    const idleBg = [...BG_PROPS].filter((x) => !propsSeen.has(x)).sort();
+    const total = FG_PROPS.size + BG_PROPS.size;
+    const used = total - idleFg.length - idleBg.length;
+    if (idleFg.length + idleBg.length > 0) {
+      console.log(`\n· 那兩份屬性清單：${total} 個名字，這一輪配到 ${used} 個。`);
+      if (idleFg.length > 0) console.log(`    FG_PROPS 沒配到：${idleFg.join('、')}`);
+      if (idleBg.length > 0) console.log(`    BG_PROPS 沒配到：${idleBg.join('、')}`);
+      console.log('    不是錯（那些是合法的 CSS 屬性，站上還沒有人這樣寫）——');
+      console.log('    但那幾行看起來像在守什麼，其實沒有，所以每次說一次。');
+    } else {
+      console.log(`\n✓ 那兩份屬性清單 ${total} 個名字每一個都配到東西了。`);
+    }
+  }
+
+  if (unbucketed.size > 0) {
       const rows = [...unbucketed.entries()].sort((a, b) => b[1].size - a[1].size);
       const total = rows.reduce((n, [, ts]) => n + ts.size, 0);
       parts.push(
