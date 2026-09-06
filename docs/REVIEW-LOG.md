@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 55,600 行、2.9 MB、340 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 55,900 行、2.9 MB、341 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -55637,4 +55637,231 @@ X 最大的文字資源（gzip）：說明裡寫「目前 14 筆、gzip 3.8 KB�
   `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：3 — 內容結構**
+### 2026-09-06 — 第 3 輪（第四十三圈）：內容結構
+
+**第四十三圈問：這個綠勾的分母是什麼？誰決定了它？**
+判準：**找一個印出 ✓ 或百分比的地方，問它的分母怎麼來的 —— 是數出來的，
+還是一份人挑的清單決定的？如果是後者，那個 ✓ 涵蓋了多少？**
+
+#### 1. `check:content` 的分母寫在第一行
+
+```
+6 篇內容（草稿 1 篇），讀了產出裡 50 個 html／json／xml／txt，22 條規則。
+```
+
+那 50 是這樣來的：
+
+```js
+if (!/\.(html|json|xml|txt)$/.test(f)) continue;
+```
+
+**又是一份手寫的副檔名清單** —— 跟這一圈第 2 輪在 `check:perf` 抓到的
+`TEXT_EXT` 同一個形狀，只是這一次它決定的不是「用哪一把尺量」，
+而是**這一支到底看得到哪些檔案**。
+
+#### 2. 差的那 11 個裡，有一個不是圖片也不是 CSS
+
+第 3 輪（第三十五圈）追過這個數字，當時的結論是：
+
+> 拿 `find dist -type f` 對照得到 61，跟這裡的 50 差 11，追下去差的就是這個。
+> **50 是對的**，只是沒說是哪 50 個。
+
+這一輪把那 11 個逐個數出來：
+
+| | 幾個 |
+|---|---|
+| 圖片（png ×5、ico、svg） | 7 |
+| CSS | 2 |
+| `CNAME` | 1 |
+| **`site.webmanifest`** | **1** |
+
+**上面那句話只交代了 10 個。** 第 11 個是 `site.webmanifest` ——
+它是 JSON，只是副檔名不同，而 `.json` 在清單上。
+
+`audit:privacy` 為同一件事踩過同一個坑，那支的註解到今天還寫著：
+
+> `public/site.webmanifest` 整個在視野外 —— **不是有人決定不掃它**。
+
+那是第 5 輪（第十圈）修的。`check:content` 到今天。
+
+#### 3. 那個檔案裡有站名、描述與主題色 —— 全部是第二份
+
+`public/site.webmanifest` 是**手寫的靜態檔**，裡面有：
+
+```json
+"name": "狐說八道",
+"description": "朗誦經典詩詞曲，用今天的話說出其中的意思。",
+"theme_color": "#faf6ee",
+"background_color": "#faf6ee",
+```
+
+四樣在 `src/config/site.ts` 都另有一份。顏色那一組最能說明問題：
+`#faf6ee` 寫在**三個地方** —— `tokens.css` 的 `--c-bg`、
+`site.ts` 的 `themeColor.light`、以及這份 manifest。
+**前兩份 `check:contrast` 已經在比**（對不上會紅，改法就寫著
+「把 `site.ts` 的 `themeColor` 改成 `--c-bg` 的值」），第三份誰都沒看。
+
+#### 4. 實測：把前兩份一起改，六道關卡全綠
+
+把 `--c-bg` 與 `themeColor.light` 一起改成 `#faf6ef`（兩份互相對得上）：
+
+| | 改之前 | 加了規則之後 |
+|---|---|---|
+| `verify:all` 六道 | **全綠** | 仍然全綠（`check:content` 不在那六道裡） |
+| `check:content` | 綠、離開碼 0 | **`X [manifest-drift] theme_color 跟 site.ts 的 themeColor.light 對不起來`**、離開碼 1 |
+
+也就是說：安裝成 App 的人看到的啟動畫面會是舊顏色，而在此之前
+**沒有任何一格會出聲**。
+
+#### 5. 改了兩件事
+
+**一、語料加上 `.webmanifest`。** 51 個檔案，其餘 22 條規則沒有一條誤報。
+
+**二、加第 23 條規則 `manifest-drift`。** 比五項：
+`name`、`short_name`（要等於 `site.ts` 的 `name['zh-TW']`）、
+`description`（要是 `site.ts` 那句的**開頭**）、
+`theme_color`、`background_color`（要等於 `themeColor.light`，大小寫不計）。
+
+描述那一項刻意用前綴而不是相等：manifest 現在寫的是 `site.ts` 描述的
+第一句，短版是刻意的（安裝介面空間有限）。要求相等會把今天就擋掉；
+要求是前綴，改了 `site.ts` 的第一句仍然會紅。
+
+讀不到或不是合法 JSON 的時候印「**沒有比對**」而不是安靜放行 ——
+跟 `domain-drift` 的「只比對了 N／3 份」同一個處理。
+
+#### 6. 突變掃描抓到我自己：三個比較裡只有一個真的被守著
+
+第一版的測試只有一格（`CASES` 裡那個 fixture 讓顏色對不上）。
+把另外兩個比較各自改成 `true`（等於停掉那一項）：
+
+| 突變 | 第一版 | 補完之後 |
+|---|---|---|
+| 顏色比較 → `true` | ✗ 紅 | ✗ 紅 |
+| 描述比較 → `true` | **綠** | ✗「描述不是開頭時點名 description」 |
+| 站名比較 → `true` | **綠** | ✗「站名對不上時點名 name」 |
+
+**為什麼會綠：** 那個 fixture 同時只有顏色錯，所以停掉另外兩項之後
+`[manifest-drift]` 照樣出現，測試看的是「這條規則有沒有響」。
+一格證明不了三項 —— 補成每一項各一格。
+
+另外兩個方向也補了：對得上時不能亂報（短版描述、大小寫不同的色碼都算對），
+manifest 壞掉時要說「沒有比對」。
+
+| | 之前 | 現在 |
+|---|---|---|
+| 讀進來的產出 | 50（少一個 manifest） | **51** |
+| 規則 | 22 | **23** |
+| manifest 裡那四樣 | 沒有人比 | 5 項每次比 |
+| `#faf6ee` 的三份 | 比了兩份 | **三份都比** |
+
+`verify:all` 六道全綠、`test:tools` 44 步全過、`ci:sim` 0。
+
+### 待辦（不屬於這一輪）
+
+- **`test-contrast` 把 `#faf6ee` 寫死在 fixture 裡。** 它把真的 `tokens.css`
+  複製進暫存目錄，再配一份寫死顏色的假 `site.ts` —— 於是**改站的背景色**
+  會讓那三格紅，而紅的理由跟顏色對不對無關（→ 7 建置與 CI）
+- **manifest 的 `icons[]` 指到四個檔案，沒有人確認它們存在。** `check:links`
+  也不掃 manifest —— 圖示改名的話安裝時才會發現（→ 3 內容結構）
+- **`start_url`／`scope`／`lang` 還沒有人比。** 前兩個該對 `base`，
+  第三個是 `zh-Hant-TW` 而 `site.ts` 那邊寫 `zh-TW`，要先決定誰是準的（→ 3 內容結構）
+- **schema 欄位抽取的自我檢查只驗得到「內容用過的」那 25 個。**
+  報告講的正好是另外 8 個（宣告了沒人用過的），而那 8 個沒有東西能驗 ——
+  抽漏一個不會有人說話（→ 3 內容結構）
+- 上一輪與更早的都還在（`images` 還是副檔名認的、
+  GitHub Pages 會不會壓 `.atom`／`.rss` 沒有人量過、
+  CSS 那三條沒有被 `sawTags` 涵蓋、另外 5 條的主體不是用正則數的、
+  這份檔案自己的頁首也是個沒人守的數字、
+  `box-shadow` 那兩處不算、`BG_PROPS` 還是列舉的、
+  同一個判斷寫在四個地方、四格抽名單用的都是正則、
+  `FLAKY_ENDPOINT` 的平臺 id 沒有人比、那五份對照表只驗了單向、
+  只比資料夾名字不比 `loader` 的 `base`、`collections` 的抽取只認一種寫法、
+  那八種只是「不數」不是「不該數」、`url()` 與 `@font-face` 只掃 HTML、
+  `MEASURED` 仍是快照、
+  `CASES` 的鍵沒有反向檢查、
+  那個掃描分不出元件與動態標籤名、`writing-mode` 只有一個檔案在用、
+  `needs-dist-before-build` 打不開 npm 的 `&&` 串、
+  那份「每條規則都有反例」的報告只說不擋、兩份文件的例子沒有分開數、
+  另外五份文件還是寫「404、500」、`accept` 那些 header 沒被測過、
+  `field()` 假設 frontmatter 是第一個 `---`、
+  只比了檔名沒比路徑、識別字沒有比、`why:` 欄位沒掃、
+  `same-name-different-target` 比 `hasAccessibleName()` 窄、
+  「判斷寫兩份」沒有東西在數、
+  那 59 條「元件沒算繪過」沒有人在守、
+  「要跑起來才有」那 25 條這個方法看不到、分類判準是兩條寫死的正則、
+  同一種「當天就爛」的數字可能還在別的關卡的輸出裡、
+  偶發紅燈的共同點是 `test:units`、量離開碼不要把輸出丟掉、
+  沒有東西在守「空狀態不要自相矛盾」、英文那一半沒有人系統地讀過、
+  `tags.count_one` 與 `list.count_one` 連算繪都沒有過、
+  `csp-frame-src-mismatch` 在站上主體是 0、手動那一次沒有自動化、
+  `rss` 與 `bridge` 兩條路一次都沒跑過（→ 站主）、
+  Data API v3 那一半也沒跑過、
+  CSP 的 `frame-src` 在全部 44 頁上、
+  `related` 只驗了畫得出來、那六個欄位刪掉之後又回到沒人用過、
+  那段建議裡的 273 KB／94 KB 沒有人在守、
+  「站上 0 張內容圖」是三條待辦的共同原因、
+  那三條 a11y 的「第一次」是手動做出來的、
+  markdown 裡的原始 HTML 沒有人在擋、另外六支關卡的寫死數字沒比過、
+  `column` 跟外層 `.wrap--*` 是靠人對的、
+  「42 個用了但沒說明」要重寫或刪掉、`--w-prose`／`--w-content` 也是抄進 `sizes` 的、
+  `rule-undocumented` 只看 id 有沒有出現、
+  那張表是手寫的而 `--list-rules` 是機器的、
+  `gate-count-stale` 的判準是「同一行有 `verify:all`」、
+  `EN_COVERAGE.date` 沒有人問多久以前、組數比對只認得變少、
+  其他三支規則測試的空綠沒驗、
+  那 5 條的 `whyWarn` 還是空的（→ 站主）、
+  結構性規則沒有 `whyWarn` 欄位、`email` 是 warn 而 `google-fonts` 是 error、
+  標籤數也是一種近似、`note` 的 0 筆連續五圈、
+  那 4 個沒人用的匯出（→ 站主）、判準看名字不解析 import、
+  `CONTENT.md` 已經超過 550 行（→ 站主）、判準是檔名不是用途、
+  `role="status"` 本身沒有被檢查、
+  `<details>`／`<summary>`／`<time>` 那 170 個仍然沒有規則、
+  「22 個 `--verbose` 數字」那條的數字過期了、
+  探針還是要人手貼、只跑了首頁、
+  `LOOKS_BAD` 那個正則是猜的、`verify:all` 還是 `&&` 串、
+  `ui.ts` 的 `en` 要不要改必填（→ 站主）、
+  job summary 只有站主會去看、`sync:health` 沒有接進六道關卡、
+  只比 `npm run X`、那段 git 診斷沒有測試、
+  「上界」宣稱要重量得先推（→ 站主）、
+  螢幕閱讀器仍然沒有人做過、重驗是量本機產出不是正式站、
+  `15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、
+  `example-not-real` 只看程式碼框裡的例子、
+  那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  那 9 條「維護者的事」的規則沒有文件、
+  `ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、
+  搜尋結果那 2 個連結沒有規則看過（現在關卡會逐條說出來）、
+  `check.yml` 永遠不會自己觸發（→ 站主）、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `SCHEMA_STRUCTURAL` 3 個什麼都沒擋、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 14 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  7 條 a11y 規則的邊界沒人守、
+  7 個沒人用的 token（→ 站主）、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、本機 `ahead 158, behind 3`、
+  `inlineStylesheets: always` 只到 98%、圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  `test-content-rules` 的改法檢查只看第一處、
+  `--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：4 — 平臺 feed 實測**

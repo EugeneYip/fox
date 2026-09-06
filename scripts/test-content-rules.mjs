@@ -373,6 +373,40 @@ const CASES = {
     args: (/** @type {string} */ dir) => [`--src=${join(dir, 'src')}`, `--astro=${join(dir, 'astro.config.mjs')}`],
   },
   /*
+   * ── manifest 是第三份，而只有前兩份有人比 ────────────
+   *
+   * `#faf6ee` 寫在 `tokens.css`（`--c-bg`）、`site.ts`（`themeColor.light`）
+   * 與 `public/site.webmanifest` 三個地方。`check:contrast` 在比前兩份，
+   * 第三份到第 3 輪（第四十三圈）之前誰都沒看。
+   *
+   * 實測那一輪：把前兩份一起改成 `#faf6ef`，**六道關卡全綠**，
+   * manifest 還是舊的 —— 安裝成 App 的人看到的就是舊顏色。
+   *
+   * fixture 的位置跟 `domain-drift` 一樣，從 `--astro=` 的目錄推 `public/`。
+   */
+  'manifest-drift': {
+    content: { 'poems/wu-yi-xiang.md': poem() },
+    dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花') },
+    extra: {
+      'src/config/site.ts':
+        "export const site = {\n  name: { 'zh-TW': '狐說八道', en: 'Fox Says' },\n" +
+        "  description: { 'zh-TW': '朗誦經典詩詞曲。', en: 'x' },\n" +
+        "  themeColor: { light: '#faf6ee', dark: '#14120f' },\n} as const;\n",
+      'public/site.webmanifest': JSON.stringify(
+        {
+          name: '狐說八道',
+          short_name: '狐說八道',
+          description: '朗誦經典詩詞曲。',
+          theme_color: '#faf6ef',
+          background_color: '#faf6ef',
+        },
+        null,
+        2,
+      ),
+    },
+    args: (/** @type {string} */ dir) => [`--src=${join(dir, 'src')}`, `--astro=${join(dir, 'astro.config.mjs')}`],
+  },
+  /*
    * ── 少一個必填欄，站上會多出一個沒有 href 的 <a> ────────────
    *
    * 第 4 輪（第三十六圈）實測過那個後果：把第一筆的 `url` 改名，
@@ -1898,6 +1932,86 @@ console.log('─'.repeat(64));
   console.log(`  ${okSome ? '\u2713' : 'X'} 有 min-width 時列得出來（30rem × 1）`);
   if (!okSome) console.log('        ' + (outSome.split('\n').find((l) => l.includes('斷點')) ?? '（沒印）'));
   await rm(some, { recursive: true, force: true });
+}
+
+/*
+ * ── manifest 那條的另外兩個方向 ──────────────────
+ *
+ * 上面 `CASES` 那一格證明「對不上會響」。這裡補兩件事：
+ * 對得上的時候不能亂響，讀不到／壞掉的時候不能安靜過去。
+ *
+ * 描述那一項刻意用前綴：manifest 現在寫的是 `site.ts` 描述的第一句。
+ * 只驗「完全相等」的話，今天這個站就會紅；只驗「有響」的話，
+ * 一條永遠都響的規則也會過。
+ */
+{
+  const base = {
+    content: { 'poems/wu-yi-xiang.md': poem() },
+    dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花') },
+  };
+  const siteTs =
+    "export const site = {\n  name: { 'zh-TW': '狐說八道', en: 'Fox Says' },\n" +
+    "  description: { 'zh-TW': '朗誦經典詩詞曲，用今天的話說出其中的意思。日常的閱讀也收在這裡。', en: 'x' },\n" +
+    "  themeColor: { light: '#faf6ee', dark: '#14120f' },\n} as const;\n";
+  /** @param {string} name @param {Record<string, string>} extra */
+  const run1 = async (name, extra) => {
+    const dir = await build(name, { ...base, extra: { 'src/config/site.ts': siteTs, ...extra } });
+    const out = await check(dir, [`--src=${join(dir, 'src')}`, `--astro=${join(dir, 'astro.config.mjs')}`]);
+    await rm(dir, { recursive: true, force: true });
+    return out;
+  };
+
+  const agreeing = await run1('manifest-agree', {
+    'public/site.webmanifest': JSON.stringify({
+      name: '狐說八道',
+      short_name: '狐說八道',
+      /* 短版：是 site.ts 那句的開頭 */
+      description: '朗誦經典詩詞曲，用今天的話說出其中的意思。',
+      theme_color: '#FAF6EE',
+      background_color: '#faf6ee',
+    }),
+  });
+  const okAgree = !agreeing.includes('[manifest-drift]');
+  if (!okAgree) failed++;
+  console.log(`  ${okAgree ? '\u2713' : 'X'} 對得上時不亂報（短版描述、大小寫不同的色碼都算對）`);
+  if (!okAgree) {
+    console.log('        ' + (agreeing.split('\n').find((l) => l.includes('manifest')) ?? '（沒印）'));
+  }
+
+  /*
+   * 每一項各自要有一格。
+   *
+   * 上面 `CASES` 那一格只讓**顏色**對不上，於是把描述與站名那兩個比較
+   * 各自改成 `true`（等於停掉那一項）之後，測試照樣全綠 ——
+   * 因為顏色那一項還在響，`[manifest-drift]` 照樣出現。
+   * 突變掃描抓到的：三個比較裡只有一個真的被守著。
+   */
+  for (const [label, field, mf, want] of /** @type {[string, string, Record<string, string>, string][]} */ ([
+    [
+      '站名對不上時點名 name',
+      'name',
+      { name: '狐说八道', short_name: '狐說八道', description: '朗誦經典詩詞曲，用今天的話說出其中的意思。', theme_color: '#faf6ee', background_color: '#faf6ee' },
+      "name 跟 site.ts 的 name['zh-TW'] 對不起來",
+    ],
+    [
+      '描述不是開頭時點名 description',
+      'description',
+      { name: '狐說八道', short_name: '狐說八道', description: '朗誦經典詩詞曲，說出別的意思。', theme_color: '#faf6ee', background_color: '#faf6ee' },
+      "description 跟 site.ts 的 description['zh-TW'] 對不起來",
+    ],
+  ])) {
+    const out = await run1(`manifest-${field}`, { 'public/site.webmanifest': JSON.stringify(mf) });
+    const ok = out.includes(want);
+    if (!ok) failed++;
+    console.log(`  ${ok ? '\u2713' : 'X'} ${label}`);
+    if (!ok) console.log('        ' + (out.split('\n').find((l) => l.includes('manifest')) ?? '（沒印）'));
+  }
+
+  const broken = await run1('manifest-broken', { 'public/site.webmanifest': '{ 這不是 JSON' });
+  const okBroken = /site.webmanifest 沒有比對：public\/site\.webmanifest 不是合法的 JSON/.test(broken);
+  if (!okBroken) failed++;
+  console.log(`  ${okBroken ? '\u2713' : 'X'} 壞掉的 manifest 說「沒有比對」，不是安靜過去`);
+  if (!okBroken) console.log('        ' + (broken.split('\n').find((l) => l.includes('manifest')) ?? '（沒印）'));
 }
 
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);

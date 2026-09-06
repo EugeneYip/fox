@@ -368,7 +368,7 @@ const appearsIn = (text, needles) => needles.some((n) => variants(n).some((v) =>
 /** @type {{ path: string, text: string }[]} */
 const built = [];
 for await (const f of walk(DIST)) {
-  if (!/\.(html|json|xml|txt)$/.test(f)) continue;
+  if (!/\.(html|json|xml|txt|webmanifest)$/.test(f)) continue;
   newestBuilt = Math.max(newestBuilt, (await stat(f)).mtimeMs);
   built.push({ path: relative(DIST, f), text: await readFile(f, 'utf8') });
 }
@@ -1150,6 +1150,7 @@ const RULES = [
   'guide-field-unknown',
   'syndication-schema',
   'collection-unregistered',
+  'manifest-drift',
   'rule-not-in-guide',
 ];
 /*
@@ -1463,6 +1464,113 @@ servedCss += dedupedInlineStyles(built.filter((b) => b.path.endsWith('.html')).m
     }
   }
 
+  /*
+   * ── 站名、描述、主題色，manifest 裡還有一份 ──────────
+   *
+   * `public/site.webmanifest` 是**手寫的靜態檔**（不是產生的），裡面有：
+   *
+   *   name / short_name  —— 安裝成 App 之後主畫面顯示的名字
+   *   description        —— 安裝介面上的說明
+   *   theme_color / background_color —— 啟動畫面與網址列的顏色
+   *
+   * 這四樣在 `src/config/site.ts` 都另有一份。**沒有人比過。**
+   *
+   * 顏色那一組最能說明問題：`#faf6ee` 寫在三個地方 ——
+   * `tokens.css` 的 `--c-bg`、`site.ts` 的 `themeColor.light`、
+   * 以及這份 manifest。前兩份 `check:contrast` 已經在比（對不上會紅，
+   * 改法就寫著「把 site.ts 的 themeColor 改成 --c-bg 的值」），
+   * 第三份誰都沒有在看。
+   *
+   * 第 3 輪（第四十三圈）實測：把 `--c-bg` 與 `themeColor.light` 一起改成
+   * `#faf6ef`（兩份互相對得上），**六道關卡全綠**，而 manifest 還是舊的 ——
+   * 安裝成 App 的人看到的啟動畫面就是舊顏色，沒有任何一格會出聲。
+   *
+   * 描述那一項用「開頭要對得上」而不是完全相等：manifest 現在寫的是
+   * `site.ts` 描述的**第一句**（短版是刻意的，安裝介面的空間有限）。
+   * 要求相等會把今天就擋掉，而要求是前綴，改了 `site.ts` 的第一句仍然會紅。
+   */
+  {
+    const manifestAt = resolve(dirname(ASTRO_CONFIG), 'public/site.webmanifest');
+    const rawManifest = await readOr(manifestAt);
+    /** @type {Record<string, unknown>} */
+    let mf = {};
+    let readable = false;
+    if (rawManifest.trim() !== '') {
+      try {
+        mf = JSON.parse(rawManifest);
+        readable = true;
+      } catch {
+        readable = false;
+      }
+    }
+    const str = (/** @type {unknown} */ v) => (typeof v === 'string' ? v : null);
+    const siteName = /name:\s*\{\s*'zh-TW':\s*'([^']+)'/.exec(siteTs)?.[1] ?? null;
+    const siteDesc = /description:\s*\{\s*'zh-TW':\s*'([^']+)'/.exec(siteTs)?.[1] ?? null;
+    const siteTheme = /themeColor:\s*\{\s*light:\s*'([^']+)'/.exec(siteTs)?.[1] ?? null;
+
+    /* 「這一項有沒有真的比到」跟「它對不對」是兩件事 —— 分開數 */
+    const pairs = [
+      { key: 'name', got: str(mf.name), want: siteName, from: "site.ts 的 name['zh-TW']", how: 'equal' },
+      { key: 'short_name', got: str(mf.short_name), want: siteName, from: "site.ts 的 name['zh-TW']", how: 'equal' },
+      {
+        key: 'description',
+        got: str(mf.description),
+        want: siteDesc,
+        from: "site.ts 的 description['zh-TW']",
+        how: 'prefix',
+      },
+      { key: 'theme_color', got: str(mf.theme_color), want: siteTheme, from: 'site.ts 的 themeColor.light', how: 'color' },
+      {
+        key: 'background_color',
+        got: str(mf.background_color),
+        want: siteTheme,
+        from: 'site.ts 的 themeColor.light',
+        how: 'color',
+      },
+    ];
+    const compared = readable ? pairs.filter((p) => p.got !== null && p.want !== null) : [];
+    saw('manifest-drift', compared.length);
+
+    if (!readable) {
+      notes.push(
+        `site.webmanifest 沒有比對：public/site.webmanifest ` +
+          `${rawManifest.trim() === '' ? '讀不到' : '不是合法的 JSON'}。\n` +
+          '    不是「一致」，是**沒有比對到**。',
+      );
+    } else if (compared.length < pairs.length) {
+      notes.push(
+        `site.webmanifest 只比對了 ${compared.length}／${pairs.length} 項 —— 抽不到的：` +
+          pairs.filter((p) => !compared.includes(p)).map((p) => p.key).join('、') +
+          '。\n    不是「一致」，是**沒有比對到**。',
+      );
+    }
+
+    for (const p of compared) {
+      const got = /** @type {string} */ (p.got);
+      const want = /** @type {string} */ (p.want);
+      const ok =
+        p.how === 'color'
+          ? got.toLowerCase() === want.toLowerCase()
+          : p.how === 'prefix'
+            ? want.startsWith(got)
+            : got === want;
+      if (ok) continue;
+      problems.push({
+        file: 'public/site.webmanifest',
+        id: 'manifest-drift',
+        msg:
+          `${p.key} 跟 ${p.from} 對不起來。\n` +
+          `      manifest：${got}\n` +
+          `      ${p.from}：${want}\n` +
+          (p.how === 'prefix'
+            ? '      這一項只要求 manifest 的描述是 site.ts 那句的開頭（短版是刻意的）。\n'
+            : '') +
+          '      這份 manifest 是手寫的靜態檔，安裝成 App 之後顯示的就是它。\n' +
+          '      改法：改 public/site.webmanifest，或改 src/config/site.ts —— 兩份要說同一件事。',
+      });
+    }
+  }
+
   saw('locale-list-drift', found.length);
   if (found.length < sources.length) {
     notes.push(
@@ -1575,13 +1683,21 @@ console.log('\n內容管線檢查\n' + '─'.repeat(56));
  */
 /*
  * 「產出 N 個檔案」是**讀進來的**那些，不是 `dist/` 的全部 ——
- * 這一支只讀 html／json／xml／txt（圖片、CSS、CNAME 不在裡面）。
- * 第 3 輪（第三十五圈）拿 `find dist -type f` 對照得到 61，跟這裡的 50 差 11，
+ * 這一支只讀 html／json／xml／txt／webmanifest（圖片、CSS、CNAME 不在裡面）。
+ * 第 3 輪（第三十五圈）拿 `find dist -type f` 對照得到 61，跟當時的 50 差 11，
  * 追下去差的就是這個。50 是對的，只是沒說是哪 50 個。
+ *
+ * **第 3 輪（第四十三圈）補了 `.webmanifest`。** 那次算清楚差的 11 個是
+ * 誰：圖片 7、CSS 2、CNAME 1 —— 加起來只有 10。第 11 個是
+ * `site.webmanifest`，而上面那句話沒有提到它。它是 JSON，只是副檔名不同，
+ * 裡面有站名與描述（安裝成 App 之後顯示的就是那個名字）。
+ * `audit:privacy` 第 5 輪（第十圈）為同一件事踩過同一個坑，
+ * 那支的註解寫著「`public/site.webmanifest` 整個在視野外 ——
+ * 不是有人決定不掃它」。這一支到今天才補上。
  */
 console.log(
   `${entries.length} 篇內容（草稿 ${entries.filter((e) => e.draft).length} 篇）` +
-    `，讀了產出裡 ${built.length} 個 html／json／xml／txt，${RULES.length} 條規則。`,
+    `，讀了產出裡 ${built.length} 個 html／json／xml／txt／webmanifest，${RULES.length} 條規則。`,
 );
 
 /*
@@ -2155,6 +2271,7 @@ const NOT_A_WRITER_RULE = new Map([
   ['search-crosslang-mute', '報的是產出的搜尋頁，改法在那一頁的程式'],
   ['vertical-lost', '報的是全站 CSS'],
   ['domain-drift', '報的是三份設定檔（site.ts／astro.config／CNAME）'],
+  ['manifest-drift', '報的是 public/site.webmanifest 與 site.ts，不是她寫的內容'],
   ['locale-list-drift', '報的是設定檔裡的語言清單'],
   ['field-undocumented', '它本身就在要求文件跟 schema 對齊，報的是文件'],
   ['guide-field-unknown', '同上，報的是文件'],
