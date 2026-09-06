@@ -1372,6 +1372,40 @@ console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
   if (!okBlind) console.log('        ' + outBlind.split('\n').filter((l) => /英文覆蓋|抽取|對不上/.test(l)).join(' ｜ '));
 }
 
+/*
+ * ── 註解那個數字要分得開「引用」與「散文」──────────────
+ *
+ * 邊界那一段本來只印「命中 N 處」。第 6 輪（第四十四圈）逐處看過一次：
+ * 四成在**解釋或測試這些規則的檔案**裡（那種檔案一定會寫出它禁止的東西），
+ * 其餘幾乎只有一個詞。「N 處要不要改」跟「一個詞要不要統一」是兩個
+ * 難度差很多的問題，而待辦上掛給站主的是前者。
+ *
+ * 判準是推導的：這個檔案有沒有把 `copy-rules.mjs` 讀進來。
+ * 兩個方向都要 —— 不然「全部算成引用」或「一個都不算」都會靜靜通過。
+ */
+{
+  console.log('\n' + '─'.repeat(64));
+  const dir = await build({
+    'dist/index.html': html('<p>乾淨的一頁。</p>'),
+    /* 普通的註解散文：這個「台」該被算進散文那一堆 */
+    'src/thing.ts': '/* 這是一個平台的說明。 */\nexport const x = 1;\n',
+    /* 解釋規則的檔案：同一個字，但它 import 了規則本身 */
+    'scripts/explainer.mjs': "import { RULES } from './lib/copy-rules.mjs';\n/* 例如「平台」會被擋。 */\nexport const y = RULES;\n",
+  });
+  const out = await check(dir);
+  const m = /其中 (\d+) 處在\*\*解釋或測試這些規則的檔案\*\*/.exec(out);
+  const p2 = /其餘 (\d+) 處是普通的註解散文，一共 (\d+) 種不同的字/.exec(out);
+  const okSplit = m !== null && p2 !== null && Number(m[1]) === 1 && Number(p2[1]) === 1;
+  if (!okSplit) failed++;
+  console.log(`  ${okSplit ? '✓' : 'X'} 註解命中分得開「引用」與「散文」（各 1 處）`);
+  if (!okSplit) console.log('        ' + out.split('\n').filter((l) => /處在|散文/.test(l)).join(' ｜ '));
+
+  const okWord = /最多的是「平台」1 處/.test(out);
+  if (!okWord) failed++;
+  console.log(`  ${okWord ? '✓' : 'X'} 說得出最多的是哪個字`);
+  if (!okWord) console.log('        ' + (out.split('\n').find((l) => l.includes('最多的是')) ?? '（沒印）'));
+}
+
 process.exit(failed > 0 ? 1 : 0);
 
 /** @param {Record<string, string>} files */

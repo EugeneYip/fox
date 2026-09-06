@@ -1077,11 +1077,22 @@ if (l10nPairs.length > 0) {
   let commentCjk = 0;
   /** @type {Map<string, number>} */
   const commentHits = new Map();
+  /** 在「解釋或測試這些規則」的檔案裡命中的處數 */
+  let quotingHits = 0;
+  /** @type {Map<string, number>} 其餘那些命中，配到的字串 → 幾處 */
+  const matched = new Map();
   for (const dir of ['src', 'scripts']) {
     for await (const f of codeWalk(resolve(ROOT, dir))) {
       if (!/\.(ts|tsx|mjs|astro|css)$/.test(f)) continue;
+      const src = await readFile(f, 'utf8');
+      /*
+       * 「這個檔案在解釋規則嗎」用**推導**的：它有沒有把 `lib/copy-rules.mjs`
+       * 讀進來（那一份自己也算）。不是一份手寫的名單 —— 手寫的名單漏一個，
+       * 底下那兩個數字就會悄悄變形。
+       */
+      const explains = /copy-rules\.mjs/.test(src);
       let inBlock = false;
-      for (const line of (await readFile(f, 'utf8')).split('\n')) {
+      for (const line of src.split('\n')) {
         const t = line.trim();
         let isComment = false;
         if (inBlock) {
@@ -1096,7 +1107,28 @@ if (l10nPairs.length > 0) {
         for (const r of RULES) {
           r.bad.lastIndex = 0;
           const m = line.match(r.bad);
-          if (m) commentHits.set(r.id, (commentHits.get(r.id) ?? 0) + m.length);
+          if (m) {
+            commentHits.set(r.id, (commentHits.get(r.id) ?? 0) + m.length);
+            /*
+             * ── 「命中 N 處」不分家的話，那個數字沒辦法拿來決定任何事 ──
+             *
+             * 第 6 輪（第四十四圈）逐處看過一次：四成在**解釋或測試這些規則的
+             * 檔案**裡（那種檔案一定會寫出它禁止的東西 —— 跟 `audit:privacy`
+             * 的 ALLOWLIST 同一個道理），其餘**幾乎只有一個詞**。
+             * （幾處、哪個詞由底下那段自己算，不寫死在這裡。）
+             *
+             * 「67 處要不要改」跟「一個詞要不要統一」是兩個難度差很多的問題，
+             * 而待辦上掛給站主的是前者。所以這裡把兩個數字算出來。
+             *
+             * 「哪些檔案在解釋規則」是**推導**的：誰 import 了 lib/copy-rules.mjs
+             * （加上它自己），不是一份手寫的名單。
+             */
+            if (explains) {
+              quotingHits += m.length;
+            } else {
+              for (const hit of m) matched.set(hit, (matched.get(hit) ?? 0) + 1);
+            }
+          }
         }
       }
     }
@@ -1117,6 +1149,8 @@ if (l10nPairs.length > 0) {
 
   const total = [...commentHits.values()].reduce((n, v) => n + v, 0);
   const top = [...commentHits.entries()].sort((a, b) => b[1] - a[1]);
+  const proseTotal = [...matched.values()].reduce((n, v) => n + v, 0);
+  const topWord = [...matched.entries()].sort((a, b) => b[1] - a[1])[0];
   /*
    * ── 0 在這裡是壞消息，不是好消息 ──────────
    *
@@ -1139,8 +1173,10 @@ if (l10nPairs.length > 0) {
       `這一支掃的是 ${scanned.cjkLines} 行，也就是**邊界外面比裡面大 ` +
       `${(commentCjk / Math.max(scanned.cjkLines, 1)).toFixed(1)} 倍**。\n` +
       `      拿同一套規則掃過去命中 ${total} 處（${top.map(([id, n]) => `${id} ${n}`).join('、')}）。\n` +
-      `      這裡不擋也不判斷對錯：約定寫的是「網站上的中文」，而註解不在網站上；\n` +
-      `      而且那些命中裡有一部分是刻意在引用違規本身（規則的反例、測試案例的說明）。\n` +
+      `      其中 ${quotingHits} 處在**解釋或測試這些規則的檔案**裡（那種檔案一定會寫出\n` +
+      `      它禁止的東西）；其餘 ${proseTotal} 處是普通的註解散文，一共 ${matched.size} 種不同的字，\n` +
+      (topWord ? `      最多的是「${topWord[0]}」${topWord[1]} 處。\n` : '') +
+      `      這裡不擋也不判斷對錯：約定寫的是「網站上的中文」，而註解不在網站上。\n` +
       `    · **草稿正文**：${draftFiles} 篇、${draftCjk} 行含漢字。正文不掃的理由是\n` +
       `      「發佈後會進 dist」—— 但**草稿不會進 dist**。寫的時候全綠，\n` +
       `      按下發佈才第一次有人看，而那時候紅的是 CI。`,
