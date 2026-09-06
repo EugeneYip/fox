@@ -60153,7 +60153,12 @@ grep -n "writeFile(resolve(ROOT" scripts/test-*.mjs
 #### 六道關卡
 
 `npm run verify:all` 全綠、`npm run test:tools` 44 步全通過。
-`ci:sim` 也跑了（改到 `test:units` 那條鏈裡的檔案），離開碼 0。
+`ci:sim` 跑了五次：**第一次紅**（就是上面第 2 節那個誤擋），
+修完之後第二次**又紅了一次**，接著連三次綠（0／0／0，一格 X 都沒有）。
+
+第二次那一紅**查不出來**：我把輸出丟進 `/dev/null` 了，只剩一個離開碼。
+這是這個 repo 記過好幾次的「偶發紅燈」形狀，也是我自己第三次犯
+「量了離開碼卻沒留輸出」。記進待辦。
 
 #### 待辦（不屬於這一輪）
 
@@ -60171,6 +60176,9 @@ grep -n "writeFile(resolve(ROOT" scripts/test-*.mjs
   （→ 7 建置與 CI）
 - **同時跑兩份 `test-perf-budgets` 仍然會紅**（副本已經帶 pid，所以不是它）
   —— 這一輪沒查（→ 7 建置與 CI）
+- **這一輪的 `ci:sim` 有一次紅得莫名。** 修完誤擋之後第二次跑紅了，
+  接著連三次綠。輸出被我丟進 `/dev/null`，所以查不出來 ——
+  下次跑關卡一律留檔（→ 7 建置與 CI）
 - **`membersOf` 只展開一層**、**`gate-count-stale` 會把散文讀成宣稱**、
   **為什麼不讓 `check.yml` 直接跑 `verify:all` ＋ `test:tools` 三行了事**
   —— 三條都還在，這一輪沒動（→ 7 建置與 CI）
