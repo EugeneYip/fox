@@ -7,7 +7,7 @@
 > 上線步驟在 [DEPLOY.md](DEPLOY.md)，寫作方式在 [CONTENT.md](CONTENT.md)。
 >
 > 最後更新：2026-09-06（**網站已上線：https://bellafoxy.com**，DNS 與 HTTPS 都好了；
-> **第四十圈第 6 輪走完了**）
+> **第四十圈第 7 輪走完了**）
 
 ---
 
@@ -191,32 +191,26 @@ git ls-files | grep -c identity.local    # 必須是 0
 
 ## 週期性檢查（loop）現在跑到哪
 
-**下一輪：第四十圈第 7 輪 —— 建置與 CI。**
+**下一輪：第四十圈第 8 輪 —— 視覺與版面。**
 
-第四十圈第 6 輪（文案與語氣）：`check:copy` 早就在答這一題了
-（1 條規則沒有主體、191 個介面字串裡 35 個從來沒被算繪）。
-所以問下一層：**那些真的算繪出來的，有沒有人讀過？**
+第四十圈第 7 輪（建置與 CI）：`check.yml` 在 GitHub 上**一次都沒跑過**
+（deploy 9 次、sync-feeds 3 次），而 `ci:sim` 只模擬 `deploy.yml`，
+兩份的步驟序列真的不一樣（3 步 vs 8 步）。
 
-站上五篇已發佈的內容全部是 zh-TW —— 「空狀態」這一整類文案
-**只在 `/en` 那一半算繪得出來**。逐頁讀出來：
+但兩個假設實測下來**都已經有人守了**：`verify:all` 多一步而 `check.yml`
+沒跟上 → `gate-missing-in-check` 抓得到（它會把那一串展開）；
+把需要 `dist/` 的步驟搬到建置前 → `needs-dist-before-build` 也抓得到
+（它掃每一份 workflow，不只 deploy）。**這一格誠實寫「沒發現問題」。**
 
-```
-/en/tags     Nothing here yet. There are 5 in Chinese →
-/en/archive  Nothing here yet. Nothing written yet. The fox is sharpening
-             her claws. There are 5 in Chinese →
-```
-
-中間那句**跟緊接著的下一句互相打臉**：前一句說「還沒寫」，後一句說「有 5 篇」。
-而 `elsewhere.emptyBody` 的註解在第八圈就記過同一件事
-（「在這一頁那句話是錯的」）—— **那次只修了「各處」那一頁**，
-`ListPage.astro` 與 `archive.astro` 是同一個形狀，沒修到。
-
-順帶還有一句英文少了名詞（「There are 5 in Chinese」，
-而隔壁的 `list.count` 是「{n} entries」，中文那邊一直有「篇」）。
-改完四頁讀起來是同一句：**Nothing here yet. There are 5 entries in Chinese →**
+真的找到的是另一件事：`check:workflows` 的綠燈印著
+「2026-09-06 數過：deploy.yml **8** 次、sync-feeds.yml **2** 次」，
+而**同一天**再數是 **9 與 3** —— 那種數字寫下來的那一刻就開始爛。
+`check.yml` 的 0 不一樣（它是 0 因為沒有人開 PR，是結構性的事實），
+所以只留那一半，另外兩個改成「都跑過，要精確的用上面那行 gh 指令」。
+加了一格測試守著，突變驗過。
 
 做法：一次只深入一個面向（八個面向輪流），每一圈換一個**問題**去問全站。
-輪替順序、每一輪的規則、以及全部 320 筆逐輪紀錄都在
+輪替順序、每一輪的規則、以及全部 321 筆逐輪紀錄都在
 [REVIEW-LOG.md](REVIEW-LOG.md) —— 接手某一輪之前先讀那份的最後一筆。
 
 > **這一節刻意只留索引。** 2026-09-04 之前這裡有 200 筆輪次摘要，

@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 53,700 行、2.7 MB、320 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 53,900 行、2.7 MB、321 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -51928,3 +51928,218 @@ There are 5 in Chinese        ← 少了名詞
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
 **下一輪：7 — 建置與 CI**
+
+### 2026-09-06 — 第 7 輪（第四十圈）：建置與 CI
+
+**第四十圈問：這段東西，站上真的跑過嗎？**
+判準：**找出一個今天真的執行到它的地方。找不到的話，它的正確性是靠什麼保證的？**
+
+#### 1. 三份 workflow，一份從來沒跑過
+
+```
+gh run list --repo EugeneYip/fox --workflow <檔名>
+
+  check.yml        0 次
+  deploy.yml       9 次
+  sync-feeds.yml   3 次
+```
+
+`check.yml` **一次都沒有跑過** —— 它只在 `pull_request` 上觸發，
+而這個專案是站主直接推 main。
+
+而 `ci:sim` 明講只模擬 `deploy.yml`。兩份的步驟序列**真的不一樣**：
+
+```
+deploy.yml  (3 步)  test:units → verify:all → test:built
+check.yml   (8 步)  check → audit:privacy → check:contrast → build
+                    → check:a11y → check:perf → test:units → test:built
+```
+
+所以「`check.yml` 對不對」今天完全靠 `check:workflows` 這支**靜態**檢查 ——
+而它自己的綠燈就寫著「判斷不出這份 workflow 在 GitHub 上跑起來會不會過」。
+
+#### 2. 兩個假設，兩個都已經有人守了
+
+**假設一：`verify:all` 加一道關卡，`check.yml` 逐一列的那份會漏掉。**
+`deploy.yml` 只寫 `verify:all` 一個名字，所以「比兩份的清單」不見得展得開。
+實測（把 `check:links` 插進 `verify:all`，`check.yml` 不動）：
+
+```
+X [gate-missing-in-check] 部署路徑上會跑 npm run check:links，但 check.yml 沒有跑它⋯
+```
+
+**抓到了** —— 那條規則會把 `verify:all` 展開。
+
+**假設二：`check.yml` 的順序沒有人守。**
+實測（把 `check:a11y` 搬到 `build` 之前）：
+
+```
+X [needs-dist-before-build] `npm run check:a11y` 需要 dist/，但它排在建置之前⋯
+```
+
+**也抓到了** —— 那條規則掃的是 `.github/workflows/` 底下**每一份**，不只 deploy。
+
+**兩個假設都不成立。誠實寫下來：這一格沒發現問題。**
+
+#### 3. 我自己先錯了一次
+
+第一個突變我搬的是 `test:units`（照第二十六圈那一課的形狀），
+`check:workflows` 一聲不吭，我差點寫成「順序沒有人守」。
+
+去讀規則才發現 `NEEDS_DIST` 裡**沒有 `test:units`** —— 而那是對的：
+第二十六圈那個 bug 後來是**把需要 dist 的那一格搬出 `test:units`** 修掉的，
+不是靠調順序。所以 `test:units` 今天真的不需要 dist，
+`deploy.yml` 也才會一直把它排在最前面而九次都過。
+
+**沉默是對的，錯的是我的假設。** 這一圈第三次：先讀系統自己怎麼定義，再下結論。
+
+#### 4. 真的找到的那一個：一個當天就爛掉的數字
+
+`check:workflows` 的綠燈印著：
+
+```
+（2026-09-06 數過：deploy.yml 8 次、sync-feeds.yml 2 次、check.yml **0 次**）
+```
+
+而**同一天**（今天）真的去數：**9 次、3 次**。
+
+那兩個數字每推一次、每排程跑一次就變 —— **寫下來的那一刻就開始爛**。
+它甚至不用等到下一輪，當天就錯了。
+
+`check.yml` 的 `0` 不一樣：它是 0 **因為沒有人開 PR**，
+不是因為還沒輪到。那是結構性的事實，值得寫死。
+
+改成只留有意義的那一半：
+
+```
+（`check.yml` 到今天 **0 次** —— 它只在 PR 上觸發，而這個專案是直接推 main。
+ 另外兩份都跑過；次數每推一次就變，要看就用上面那個指令。）
+```
+
+加一格測試守著它，突變驗過：
+
+```
+X 輸出裡沒有寫死 deploy／sync-feeds 跑過幾次
+    找到：「deploy.yml 8 次」
+    那種數字每推一次就變。要精確的數字，輸出裡那行 gh 指令就給得出來。
+```
+
+| | 之前 | 現在 |
+|---|---|---|
+| 那句「跑過幾次」 | 當天就錯（8／2 vs 9／3） | 只留 `check.yml` 的 0 與它的理由 |
+| 會不會再發生 | 沒有東西在看 | 有一格在擋 |
+| `check.yml` 的內容 | 以為沒人守 | **實測兩個方向都有人守** |
+
+#### 5. 那個偶發紅燈又出現了一次
+
+收尾跑 `test:tools` 的時候停在 `test:content-rules`。單獨跑那一步：**離開碼 0**。
+再跑兩次 `test:tools`：**兩次都 44 步全過**。
+
+跟第三十七圈記的那兩次同一個形狀（重跑就綠）。
+不同的是這次**它說得出停在哪一步** —— 那是第 7 輪（第三十八圈）
+把 `test:tools` 換成 `run-steps.mjs` 之後才有的。
+在那之前只能在 919 行輸出裡自己找。
+
+**而幾分鐘後 `ci:sim` 在同一個 commit 上也紅了一次**（離開碼 1）。
+接著連跑兩次都是 0，兩份輸出除了秒數以外一字不差。
+（那一次紅的輸出我沒有留下來 —— 是丟到 `/dev/null` 量離開碼的，
+所以不知道它印了什麼。下次要留。）
+
+兩件事湊起來把範圍縮小了一點：`test:tools` 與 `ci:sim` 是兩個不同的外殼，
+**共同點是裡面都跑 `test:units`**。這是第三十七圈以來第一次有東西
+指向同一個地方 —— 還是不知道為什麼，但至少不再是「整套偶爾會紅」。
+
+`verify:all` 六道全綠、`test:tools` 44 步全過、`ci:sim` 在 HEAD 上全綠。
+
+### 待辦（不屬於這一輪）
+
+- **那個偶發紅燈這一輪出現兩次**（`test:tools` 一次、`ci:sim` 一次，同一個 commit）。
+  兩個外殼的共同點是裡面都跑 `test:units`。單獨跑停下來的那一步是綠的，
+  重跑外殼也是綠的 —— 還是不知道為什麼（→ 7 建置與 CI）
+- **量離開碼的時候不要把輸出丟掉。** 這一輪就是這樣錯過一次紅的現場（→ 7 建置與 CI）
+- **`ci:sim` 還是只模擬 `deploy.yml`。** 這一輪驗到 `check.yml` 能靜態檢查的
+  都有人守，但「在乾淨 runner 上跑起來會不會過」仍然沒有人試過 ——
+  而它在 GitHub 上是 0 次（→ 7 建置與 CI）
+- **同一種「當天就爛」的數字可能還在別的關卡的輸出裡。**
+  這一輪只看了 `check:workflows`（→ 7 建置與 CI）
+- 上一輪與更早的都還在（沒有東西在守「空狀態不要自相矛盾」、
+  英文那一半的可見文字沒有人系統地讀過、
+  `tags.count_one` 與 `list.count_one` 連算繪都沒有過、
+  `csp-frame-src-mismatch` 在站上主體是 0、
+  手動那一次沒有自動化、兩條規則不在 `STRUCTURAL_IDS` 裡、
+  `rss` 與 `bridge` 兩條路一次都沒跑過（→ 站主）、
+  Data API v3 那一半也沒跑過、「不只 404」寫在五個地方沒有東西在比、
+  `FLAKY_ENDPOINT` 與 `flaky` 是兩份判斷、
+  CSP 的 `frame-src` 在全部 44 頁上、
+  `related` 只驗了畫得出來、那六個欄位刪掉之後又回到沒人用過、
+  那段建議裡的 273 KB／94 KB 沒有人在守、
+  其他關卡的「改法」也可能點名不存在的東西、
+  「站上 0 張內容圖」是三條待辦的共同原因、
+  那三條 a11y 的「第一次」是手動做出來的、
+  markdown 裡的原始 HTML 沒有人在擋、另外六支關卡的寫死數字沒比過、
+  `column` 跟外層 `.wrap--*` 是靠人對的、
+  「42 個用了但沒說明」要重寫或刪掉、`--w-prose`／`--w-content` 也是抄進 `sizes` 的、
+  `rule-undocumented` 只看 id 有沒有出現、
+  那張表是手寫的而 `--list-rules` 是機器的、
+  `gate-count-stale` 的判準是「同一行有 `verify:all`」、
+  `EN_COVERAGE.date` 沒有人問多久以前、組數比對只認得變少、
+  其他三支規則測試的空綠沒驗、
+  那 5 條的 `whyWarn` 還是空的（→ 站主）、
+  結構性規則沒有 `whyWarn` 欄位、`email` 是 warn 而 `google-fonts` 是 error、
+  標籤數也是一種近似、`note` 的 0 筆連續五圈、
+  那 4 個沒人用的匯出（→ 站主）、判準看名字不解析 import、
+  `CONTENT.md` 533 行（→ 站主）、判準是檔名不是用途、
+  `role="status"` 本身沒有被檢查、
+  `<details>`／`<summary>`／`<time>` 那 170 個仍然沒有規則、
+  「22 個 `--verbose` 數字」那條的數字過期了、
+  探針還是要人手貼、只跑了首頁、
+  `LOOKS_BAD` 那個正則是猜的、`verify:all` 還是 `&&` 串、
+  `ui.ts` 的 `en` 要不要改必填（→ 站主）、
+  job summary 只有站主會去看、`sync:health` 沒有接進六道關卡、
+  只比 `npm run X`、那段 git 診斷沒有測試、
+  「上界」宣稱要重量得先推（→ 站主）、
+  螢幕閱讀器仍然沒有人做過、重驗是量本機產出不是正式站、
+  `15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、
+  `example-not-real` 只看程式碼框裡的例子、
+  那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  那 9 條「維護者的事」的規則沒有文件、
+  `ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、
+  搜尋結果那 2 個連結沒有規則看過（但關卡會說出來）、
+  `check.yml` 永遠不會自己觸發（→ 站主）、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `SCHEMA_STRUCTURAL` 3 個什麼都沒擋、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  我連續十一次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 14 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  7 條 a11y 規則的邊界沒人守、
+  7 個沒人用的 token（→ 站主）、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、
+  本機 `ahead 138, behind 3`、
+  `inlineStylesheets: always` 只到 98%、
+  圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  `test-content-rules` 的改法檢查只看第一處、
+  `--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：8 — 視覺與版面**

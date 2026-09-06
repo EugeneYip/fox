@@ -761,6 +761,27 @@ try {
     console.log(`  ${okCant ? '✓' : 'X'} 綠燈說得出它因此看不到什麼`);
     if (!okCant) console.log('        ' + out.split('\n').filter(Boolean).slice(-4).join(' ｜ '));
 
+    /*
+     * ── 不要在輸出裡寫死「跑過幾次」 ────────────────────
+     *
+     * 第 7 輪（第四十圈）：那一段原本印「2026-09-06 數過：deploy.yml 8 次、
+     * sync-feeds.yml 2 次」。**同一天**再數一次是 9 與 3 ——
+     * 每推一次、每排程跑一次那個數字就變，寫下來的那一刻就開始爛。
+     *
+     * `check.yml` 的 0 不在這一格的範圍內：它是 0 因為沒有人開 PR，
+     * 那是結構性的事實，值得寫死（而且上面那一句就是在講它）。
+     */
+    const counted = out.match(/(deploy|sync-feeds)\.yml[^\n]{0,12}\d+\s*次/);
+    const okNoCount = counted === null;
+    if (!okNoCount) failed++;
+    console.log(`  ${okNoCount ? '✓' : 'X'} 輸出裡沒有寫死 deploy／sync-feeds 跑過幾次`);
+    if (!okNoCount) {
+      console.log(
+        `        找到：「${counted?.[0]}」\n` +
+          '        那種數字每推一次就變。要精確的數字，輸出裡那行 gh 指令就給得出來。',
+      );
+    }
+
     const { stdout: verbose } = await run('node', [resolve(ROOT, 'scripts/check-workflows.mjs'), `--root=${dir}`, '--verbose'])
       .catch((/** @type {any} */ e) => ({ stdout: String(e?.stdout ?? '') }));
     const okQuiet = /每條規則實際判斷過的東西/.test(verbose) && !/要看每條規則判斷過幾個東西/.test(verbose);

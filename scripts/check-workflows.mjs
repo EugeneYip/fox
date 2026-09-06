@@ -90,8 +90,11 @@ if (process.argv.includes('--list-rules')) {
  * 寫這一段的時候三份 workflow 一次都沒在 GitHub 上跑過，所以這支腳本
  * 是它們唯一的守門人。第 7 輪（第三十六圈）用 `gh run list` 實際數過：
  *
- *   deploy.yml       8 次（最近一次 2026-09-05，成功）
- *   sync-feeds.yml   2 次（排程，兩次都成功）
+ *   deploy.yml       跑過（每推一次就多一次）
+ *   sync-feeds.yml   跑過（排程）
+ *
+ * （這裡原本寫「8 次」「2 次」。第 7 輪〔第四十圈〕同一天再數是 9 與 3 ——
+ *   那種數字寫下來的那一刻就開始爛，所以只留「有沒有跑過」。）
  *   check.yml        **0 次**
  *
  * 前兩份現在有真的執行紀錄可以對照了。`check.yml` 沒有 ——
@@ -867,8 +870,17 @@ if (problems.length === 0) {
       '  它看不到的是「這份 workflow 在 GitHub 上跑起來會不會過」——\n' +
       '  中間隔著 runner、Node 版本、快取、secret 與網路。\n' +
       `  真的跑過幾次要問 GitHub：gh run list --repo EugeneYip/fox --workflow <檔名>\n` +
-      '  （2026-09-06 數過：deploy.yml 8 次、sync-feeds.yml 2 次、check.yml **0 次**\n' +
-      '   —— check.yml 只在 PR 上觸發，而這個專案是直接推 main。）\n',
+      /*
+       * 這裡原本印「2026-09-06 數過：deploy.yml 8 次、sync-feeds.yml 2 次」。
+       * 第 7 輪（第四十圈）**同一天**再數一次：9 次與 3 次 ——
+       * 那兩個數字每推一次、每排程跑一次就變，寫下來的那一刻就開始爛。
+       *
+       * `check.yml` 的 0 不一樣：它是 0 **因為沒有人開 PR**，
+       * 不是因為還沒輪到。那是一個結構性的事實，值得寫死。
+       * 另外兩個只要說「有跑過」就夠了，要精確的數字上面那行指令就給得出來。
+       */
+      '  （`check.yml` 到今天 **0 次** —— 它只在 PR 上觸發，而這個專案是直接推 main。\n' +
+      '   另外兩份都跑過；次數每推一次就變，要看就用上面那個指令。）\n',
   );
   process.exit(0);
 }
