@@ -1839,6 +1839,39 @@ console.log(
 );
 
 /*
+ * ── 提醒與擋，各幾條？其中幾條說得出為什麼？ ────────────
+ *
+ * 第 5 輪（第三十九圈）加的。那一圈在逐條驗待辦，而
+ * 「N 條 warn 沒說為什麼」驗出來**是活的，而且數字漂了**：
+ * 待辦上寫 11，今天數是 **13**。
+ *
+ * 而「沒說為什麼」也確認了：`privacy-rules.mjs` 的 5 條 warn
+ * **一條都沒寫過理由** —— 旁邊那些長註解講的是正則怎麼修的，
+ * 不是「為什麼這一條不擋」。對照組是 `check:a11y` 的 `SEVERITY` 表，
+ * 它每一條 warn 都寫了。
+ *
+ * 這裡只數，不判斷對錯：`whyWarn` 該寫什麼，要由知道當初怎麼決定的人寫。
+ * 數出來是為了讓那個缺口有一個會變的數字，而不是待辦上一句過期的話。
+ *
+ * **只涵蓋 `privacy-rules.mjs` 那幾條**（逐行掃語料的那種）——
+ * 結構性的規則是在 audit-privacy.mjs 裡就地建出來的，沒有這個欄位。
+ */
+{
+  const warns = RULES.filter((r) => r.level === 'warn');
+  const said = warns.filter((r) => typeof r.whyWarn === 'string' && r.whyWarn.trim() !== '');
+  console.log(
+    `逐行掃語料的 ${RULES.length} 條規則裡，${warns.length} 條是提醒（warn）、` +
+      `${RULES.length - warns.length} 條會擋（error）。\n` +
+      `  其中 **${said.length}／${warns.length} 條說得出為什麼是提醒而不是擋**（\`whyWarn\`）。` +
+      (said.length < warns.length
+        ? `\n  沒寫的：${warns.filter((r) => !said.includes(r)).map((r) => r.id).join('、')}\n` +
+          '  —— 旁邊的長註解講的多半是正則怎麼修的，不是「為什麼這一條不擋」。\n' +
+          '  對照：check:a11y 的 SEVERITY 表每一條 warn 都寫了理由。'
+        : ''),
+  );
+}
+
+/*
  * ── 產出那一端的邊界，要自己說出口 ──────────────────
  *
  * 第 5 輪（第三十六圈）問「這道檢查的邊界外面是什麼？那裡現在有幾個？」

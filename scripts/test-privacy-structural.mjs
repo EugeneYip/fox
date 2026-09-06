@@ -1462,6 +1462,39 @@ console.log('─'.repeat(64));
 }
 
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
+/*
+ * ── 提醒與擋各幾條，其中幾條說得出為什麼 ──────────────
+ *
+ * 第 5 輪（第三十九圈）：那一輪在逐條驗待辦，而「N 條 warn 沒說為什麼」
+ * 驗出來**是活的，而且數字漂了** —— 待辦上寫 11，今天數是 13。
+ *
+ * 這一格守的是那個數字**會跟著程式走**：`whyWarn` 補上一條，
+ * 「0／5」就要變成「1／5」。不然它會變成待辦上另一句過期的話。
+ */
+{
+  const dir = await build({});
+  const out = (await audit(dir, { PRIVACY_NEEDLES: '某個假名' })).out;
+
+  const m = /(\d+) 條是提醒（warn）、(\d+) 條會擋（error）/.exec(out);
+  const okSplit = m !== null && Number(m[1]) > 0 && Number(m[2]) > 0;
+  if (!okSplit) failed++;
+  console.log(`  ${okSplit ? '✓' : 'X'} 說得出提醒與擋各幾條` + (m ? `（${m[1]}／${m[2]}）` : ''));
+  if (!okSplit) console.log('        ' + (out.split('\n').find((l) => /逐行掃語料的/.test(l)) ?? '（那一行沒印）'));
+
+  const n = /\*\*(\d+)／(\d+) 條說得出為什麼/.exec(out);
+  const okWhy = n !== null;
+  if (!okWhy) failed++;
+  console.log(`  ${okWhy ? '✓' : 'X'} 說得出幾條寫了 whyWarn` + (n ? `（${n[1]}／${n[2]}）` : ''));
+
+  /* 一條都沒寫的時候要把是哪幾條列出來 —— 只有數字的話沒有人知道要去補哪裡 */
+  const okList = Number(n?.[1] ?? -1) !== 0 || /沒寫的：\S/.test(out);
+  if (!okList) failed++;
+  console.log(`  ${okList ? '✓' : 'X'} 沒寫的那幾條會被點名`);
+  if (!okList) console.log('        ' + (out.split('\n').find((l) => /沒寫的/.test(l)) ?? '（沒有那一行）'));
+
+  await rm(dir, { recursive: true, force: true });
+}
+
 process.exit(failed > 0 ? 1 : 0);
 
 /**
