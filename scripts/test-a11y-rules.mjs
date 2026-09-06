@@ -1117,6 +1117,30 @@ try {
  */
 const TESTED_ELSEWHERE = new Map([['doc-names-real-rule', '上面的 --doc= 區塊']]);
 const missing = [...declared].filter((r) => !covered.has(r) && !TESTED_ELSEWHERE.has(r));
+/*
+ * ── 這份豁免清單自己也要對得上 ──────────────────────
+ *
+ * 第 1 輪（第四十二圈）加的。這一圈問「這份清單是誰維護的？漏一個會怎樣？」
+ *
+ * 這是一份**人手維護的豁免清單**，而在這之前沒有東西確認它點名的規則存在。
+ * 實測兩種寫錯的方式：
+ *
+ *   打錯鍵　　　被抓到，但是**間接的** —— 那條規則因此沒有豁免，
+ *              於是「這些規則沒有測試案例」響了；而上面那一行照樣印著
+ *              一個不存在的名字。
+ *   多加一條　　**完全沒有人說話**，離開碼 0，而輸出很有自信地寫著
+ *              「在別處驗的規則（2 條）⋯ghost-rule」。
+ *
+ * 第二種正是 `check:copy` 對它自己那份排除清單警告過的事：
+ * 「那會讓『要寫的 ＋ 不用寫的 ＝ 總數』看起來成立，而其實在數不存在的東西。」
+ * 同一個守法在這個 repo 有兩份（`check:copy`、`check:workflows`），這一份沒有。
+ */
+const ghostExempt = [...TESTED_ELSEWHERE.keys()].filter((r) => !declared.has(r));
+if (ghostExempt.length > 0) {
+  failed += ghostExempt.length;
+  console.log(`\n  X 豁免清單裡有不存在的規則：${ghostExempt.join('、')}`);
+  console.log('      那會讓「有案例的 ＋ 在別處驗的 ＝ 總數」看起來成立，而其實在數不存在的東西。');
+}
 if (TESTED_ELSEWHERE.size > 0) {
   console.log(
     `\n  · 不做假頁面、在別處驗的規則（${TESTED_ELSEWHERE.size} 條）：` +
