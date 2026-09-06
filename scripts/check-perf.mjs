@@ -31,7 +31,7 @@
  */
 import { readdir, readFile } from 'node:fs/promises';
 import { projectDay } from './lib/project-day.mjs';
-import { resolve, dirname, relative, extname } from 'node:path';
+import { resolve, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync, brotliCompressSync, constants } from 'node:zlib';
 import { dedupedInlineStyles } from './lib/site-css.mjs';
@@ -342,16 +342,41 @@ const OWN_BUDGET = new Set(['search-index.json']);
  * 所以改成問這個檔案的性質：**純文字的走 gzip 預算，二進位的走 raw**。
  * （判準本來就寫在上面：「這個檔案的實際下載量是 gzip 後的量嗎？」）
  */
-const TEXT_EXT = new Set(['.xml', '.json', '.txt', '.css', '.js', '.mjs', '.svg', '.webmanifest', '.map']);
-/** @param {string} path */
-const isTextLike = (path) => TEXT_EXT.has(extname(path).toLowerCase());
+/*
+ * **第 2 輪（第四十三圈）：副檔名清單也是一份人挑的清單。**
+ *
+ * 上面那段說「改成問這個檔案的性質」，但實際問的是副檔名 ——
+ * `TEXT_EXT` 有九個，而清單外的純文字檔會被當成二進位資源。
+ * 實測一份 `feed.rss`（104 KB 原始、gzip 約 5 KB，`.rss` 不在清單裡）：
+ *
+ *     X 最大單一檔案　103.9 KB / 上限 60.0 KB　173%
+ *       改法：⋯圖片改 WebP／AVIF，或把解析度降到實際顯示的尺寸
+ *     這次少了 2 條預算：最大的文字資源（gzip）—— dist 裡沒有純文字資源可量
+ *
+ * 那正是這段註解在講的第六、第七次同一個錯，只是換了副檔名
+ * （`.atom`、`.rss`、`.md` 都不在清單裡，而 `.xml`、`.txt` 在）。
+ *
+ * 現在問**檔案的位元組**：沒有 NUL 而且整份解得開 UTF-8 的就是純文字。
+ * 這裡沒有清單可以漏 —— PNG／ICO／字型的位元組本來就不是合法的 UTF-8。
+ */
+const utf8Strict = new TextDecoder('utf-8', { fatal: true });
+/** @param {Buffer} buf */
+const isTextLike = (buf) => {
+  if (buf.includes(0)) return false;
+  try {
+    utf8Strict.decode(buf);
+    return true;
+  } catch {
+    return false;
+  }
+};
 /*
  * 沒有任何非 HTML 資源時，這裡本來會 `reduce of empty array` 直接崩潰 ——
  * 而崩潰跟「檢查通過」在 CI 上長得不一樣，但在**只看有沒有紅字**的人眼裡
  * 很容易混過去（它連預算表都印不出來）。
  * 第 2 輪（第四圈）寫預算的實測時撞到的：假 dist 裡只放了一頁 HTML。
  */
-const assets = files.filter((f) => !f.path.endsWith('.html') && !isTextLike(f.path));
+const assets = files.filter((f) => !f.path.endsWith('.html') && !isTextLike(f.buf));
 const biggestAsset = assets.length
   ? assets.reduce((a, b) => (b.raw > a.raw ? b : a))
   : { path: '（沒有非 HTML 的資源）', raw: 0, gzip: 0 };
@@ -594,7 +619,15 @@ const budgets = [
  * 純文字資源（feed、sitemap、CSS、robots.txt、webmanifest⋯⋯）統一按 gzip 量。
  * 有自己專屬預算的那幾個（搜尋索引）不重複算。
  */
-const textFiles = files.filter((f) => isTextLike(f.path) && !OWN_BUDGET.has(f.path));
+/*
+ * `.html` 要排掉：它自己有兩條預算（最大單頁、首次造訪），而位元組判準
+ * 會把它算成純文字。改成問位元組的那一次就是這樣才被抓到的 ——
+ * 「共 54 個文字檔」、最大的文字資源變成 index.html，
+ * 而說明裡寫的現值對不上，`check:perf` 自己那一格紅了。
+ */
+const textFiles = files.filter(
+  (f) => !f.path.endsWith('.html') && isTextLike(f.buf) && !OWN_BUDGET.has(f.path),
+);
 /*
  * ── 整條不見的預算，跟「全部在預算內」長得一樣 ──────────
  *

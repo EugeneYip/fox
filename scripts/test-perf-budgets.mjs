@@ -46,6 +46,18 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const noise = (/** @type {number} */ n) =>
   randomBytes(Math.ceil((n * 3) / 4)).toString('base64').slice(0, n);
 
+/*
+ * ── 假的二進位檔要真的是二進位 ──────────────────
+ *
+ * `noise()` 回的是 base64 **文字** —— 塞進 HTML／CSS／JSON 裡剛好，
+ * 但拿它當 `big.bin`／`img/*.png` 就是一個「內容是純文字的圖片」。
+ *
+ * 第 2 輪（第四十三圈）把 `check:perf` 的「這是不是純文字」從副檔名清單
+ * 改成**問位元組**之後，那幾份假圖片全部被正確地認成文字，於是四格紅了 ——
+ * 紅的是假資料不是判準。真的 PNG／WebP 帶著 NUL、也不是合法的 UTF-8。
+ */
+const binary = (/** @type {number} */ n) => randomBytes(n);
+
 /** @param {{ head?: string, body?: string }} [o] */
 const page = ({ head = '', body = '' } = {}) =>
   `<!DOCTYPE html><html lang="zh-Hant-TW"><head><meta charset="utf-8"><title>x</title>${head}</head><body>${body}</body></html>`;
@@ -74,7 +86,11 @@ const verdictOk = (/** @type {string} */ out) => /^全部在預算內。$/m.test
  * 值可以是「檔案表」，也可以是 `{ files, expect }` —— `expect` 用來覆寫
  * 要比對的預算標籤，讓同一條預算能有第二個案例（案例名取的是情境）。
  *
- * @type {Record<string, Record<string, string> | { expect?: string, files: Record<string, string>, mustNotBlock?: string, coBlocks?: string[] }>}
+ * 檔案的內容可以是字串，也可以是 `Buffer` —— 假的二進位資源（`big.bin`、
+ * `img/*.png`）必須是真的位元組，見 `binary()` 那段。
+ *
+ * @typedef {Record<string, string | Buffer>} FileMap
+ * @type {Record<string, FileMap | { expect?: string, files: FileMap, mustNotBlock?: string, coBlocks?: string[] }>}
  */
 const CASES = {
   '最大單頁 HTML': {
@@ -166,10 +182,10 @@ const CASES = {
         '">',
     }),
   },
-  '最大單一檔案': { 'index.html': page(), 'big.bin': noise(70_000) },
+  '最大單一檔案': { 'index.html': page(), 'big.bin': binary(70_000) },
   '圖片合計': Object.fromEntries([
     ['index.html', page()],
-    ...Array.from({ length: 8 }, (_, i) => [`img/${i}.png`, noise(45_000)]),
+    ...Array.from({ length: 8 }, (_, i) => [`img/${i}.png`, binary(45_000)]),
   ]),
   '最大的文字資源（gzip）': { 'index.html': page(), 'rss-all.xml': `<rss>${noise(80_000)}</rss>` },
   /*
@@ -215,6 +231,36 @@ console.log('─'.repeat(64));
   if (!ok) {
     console.log(out.split('\n').filter((l) => l.includes('X ')).map((l) => '      ' + l).join('\n'));
   }
+
+  /*
+   * 同一件事，換三個**不在原本那份副檔名清單裡**的名字。
+   *
+   * 第 2 輪（第四十三圈）實測：`.rss` 那一份 104 KB 會被「最大單一檔案」
+   * 擋下來（173%），改法還叫人「圖片改 WebP／AVIF」，而同一次輸出說
+   * 「最大的文字資源（gzip）—— dist 裡沒有純文字資源可量」。
+   * 上面那兩個名字（`.xml`、`.txt`）剛好在清單裡，所以探針一直是綠的。
+   */
+  for (const name of ['poems.atom', 'feed.rss', 'notes.md']) {
+    await writeFile(join(dir, name), repeated, 'utf8');
+  }
+  /* 「共 N 個文字檔」在 detail 裡，只有 --verbose 會印出來 */
+  const unlisted = await check(dir, ['--verbose']);
+  const okUnlisted = verdictOk(unlisted);
+  const counted = /共 5 個文字檔/.test(unlisted);
+  if (!okUnlisted) failed++;
+  if (!counted) failed++;
+  console.log(`  ${okUnlisted ? '✓' : 'X'} 副檔名沒列過的文字檔也不算超標（.atom／.rss／.md）`);
+  console.log(`  ${counted ? '✓' : 'X'} 而且它們真的進了文字預算（共 5 個文字檔）`);
+  if (!okUnlisted || !counted) {
+    console.log(
+      unlisted
+        .split('\n')
+        .filter((l) => /X |文字檔|少了/.test(l))
+        .map((l) => '      ' + l)
+        .join('\n'),
+    );
+  }
+
   await rm(dir, { recursive: true, force: true });
 }
 
@@ -234,7 +280,7 @@ console.log('─'.repeat(64));
   await writeFile(join(iconsOnly, 'index.html'), page({ body: '<p>小</p>' }), 'utf8');
   await mkdir(join(iconsOnly, 'og'), { recursive: true });
   for (const f of ['favicon.ico', 'apple-touch-icon.png', 'icon-192.png', 'og/default.png']) {
-    await writeFile(join(iconsOnly, f), 'x', 'utf8');
+    await writeFile(join(iconsOnly, f), binary(200));
   }
   const clean = await check(iconsOnly);
   const okClean = /4 個全都是 favicon／PWA 圖示／og:image/.test(clean) && /照檔名認的/.test(clean);
@@ -245,8 +291,8 @@ console.log('─'.repeat(64));
 
   const withStray = await mkdtemp(join(tmpdir(), 'perf-stray-'));
   await writeFile(join(withStray, 'index.html'), page({ body: '<p>小</p>' }), 'utf8');
-  await writeFile(join(withStray, 'favicon.ico'), 'x', 'utf8');
-  await writeFile(join(withStray, 'moon.png'), 'x', 'utf8');
+  await writeFile(join(withStray, 'favicon.ico'), binary(200));
+  await writeFile(join(withStray, 'moon.png'), binary(200));
   const stray = await check(withStray);
   const okStray = /其中 1 個\*\*不是\*\* favicon／PWA 圖示／og:image/.test(stray) && /· moon\.png/.test(stray);
   if (!okStray) failed++;
@@ -387,7 +433,7 @@ console.log('─'.repeat(64));
   const gen = await mkdtemp(join(tmpdir(), 'perf-astroimg-'));
   await mkdir(join(gen, '_astro'), { recursive: true });
   await writeFile(join(gen, 'index.html'), page(), 'utf8');
-  await writeFile(join(gen, '_astro', 'cover.abc123_x.webp'), noise(70_000));
+  await writeFile(join(gen, '_astro', 'cover.abc123_x.webp'), binary(70_000));
   const out = await check(gen);
   const ok = out.includes('widths') && out.includes('已經是 WebP');
   if (!ok) failed++;
@@ -422,7 +468,7 @@ console.log('─'.repeat(64));
 
   const plain = await mkdtemp(join(tmpdir(), 'perf-plainfile-'));
   await writeFile(join(plain, 'index.html'), page(), 'utf8');
-  await writeFile(join(plain, 'big.bin'), noise(70_000));
+  await writeFile(join(plain, 'big.bin'), binary(70_000));
   const out2 = await check(plain);
   const ok2 = out2.includes('先問它能不能壓') && !out2.includes('已經是 WebP');
   if (!ok2) failed++;
@@ -797,7 +843,7 @@ console.log('─'.repeat(64));
  * 是綠的卻什麼都沒在守。要讓那行話可信，它得會因為有沒有 `<img>` 而改變。
  */
 {
-  const png = 'x'.repeat(200);
+  const png = binary(200);
   for (const [name, body, css, wantNote] of /** @type {[string, string, string, boolean][]} */ ([
     ['沒有 <img> 時說得出「0 個」', '<p>小</p>', '', true],
     ['有 <img src> 時就不說了', '<img src="/og/default.png" alt="">', '', false],
@@ -807,7 +853,7 @@ console.log('─'.repeat(64));
   ])) {
     const dir = await mkdtemp(join(tmpdir(), 'perf-rendered-'));
     await mkdir(join(dir, 'og'), { recursive: true });
-    await writeFile(join(dir, 'og', 'default.png'), png, 'utf8');
+    await writeFile(join(dir, 'og', 'default.png'), png);
     await writeFile(
       join(dir, 'index.html'),
       page({ head: css ? '<link rel="stylesheet" href="/a.css">' : '', body }),
