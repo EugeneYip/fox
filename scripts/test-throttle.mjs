@@ -63,10 +63,33 @@ const hdr = (v) => ({
 });
 ok(retryAfterMs(hdr('5')) === 5000, 'Retry-After 秒數', '5 → 5000ms');
 
-// 5. Retry-After：HTTP 日期。只認秒數的話這裡會拿到 NaN 然後靜悄悄退回自己的 backoff
-const future = new Date(Date.now() + 8000).toUTCString();
+/*
+ * 5. Retry-After：HTTP 日期。只認秒數的話這裡會拿到 NaN 然後靜悄悄退回自己的 backoff。
+ *
+ * ── 下限要跟著「這幾行之間真的過了多久」算 ──────────
+ *
+ * 原本寫死 `> 6000`。兩個東西會把數字往下拉：
+ *   · `toUTCString()` 只到**秒**，所以目標時間最多被截掉 999ms
+ *   · 這幾行之間真的過了多久（機器忙的時候不只幾毫秒）
+ *
+ * 第 7 輪（第四十三圈）終於抓到那個偶發紅燈的輸出：`5907ms`，
+ * 也就是這幾行之間過了一秒多 —— 那台機器當時同時在跑別的東西。
+ * 這一格記了好幾圈的「偶發紅燈」就是它，而它一直被讀成「不知道為什麼」。
+ *
+ * 改成拿同一個 `t0` 推下限，斷言反而更緊：容忍的是**量得到的**耗時，
+ * 不是一個猜出來的緩衝。
+ */
+const RETRY_OFFSET = 8000;
+const t0 = Date.now();
+const future = new Date(t0 + RETRY_OFFSET).toUTCString();
 const dateMs = retryAfterMs(hdr(future));
-ok(dateMs !== null && dateMs > 6000 && dateMs <= 9000, 'Retry-After HTTP 日期', `${dateMs}ms`);
+const elapsed = Date.now() - t0;
+const lowerBound = RETRY_OFFSET - 1000 - elapsed;
+ok(
+  dateMs !== null && dateMs >= lowerBound && dateMs <= RETRY_OFFSET,
+  'Retry-After HTTP 日期',
+  `${dateMs}ms（下限 ${lowerBound}ms，這幾行之間過了 ${elapsed}ms）`,
+);
 
 // 6. 上限 30 秒 —— 對方要求等一小時的話，那是明天再跑的事
 ok(retryAfterMs(hdr('3600')) === 30_000, 'Retry-After 超過 30 秒時封頂', '3600s → 30000ms');

@@ -244,6 +244,41 @@ const CASES = {
       engines: { node: '>=22.19.0' },
     }),
   },
+  /*
+   * ── `test:tools` 走 `run-steps.mjs`，一個 `npm run` 都沒有 ──
+   *
+   * 這是**真的 repo 現在的寫法**：
+   * `"test:tools": "node scripts/run-steps.mjs test:units test:built"`。
+   * 展開的那一段本來只認 `npm run X`，於是 `toolMembers` 是空的，
+   * 必跑清單從 3 條縮成 1 條（只剩 `verify:all`）。
+   *
+   * 第 7 輪（第四十三圈）實測：deploy.yml 拿掉 `npm run test:built`，
+   * 舊版**離開碼 0、一條規則都沒響**（只印一句混在 ⚠ 裡的「沒有比對到」）。
+   *
+   * 上面那幾格一直是綠的，因為 **fixture 寫的是舊寫法** ——
+   * 假語料跟真的 repo 分岔的時候，規則會在假語料上活得好好的。
+   */
+  'gate-not-on-deploy-path（test:tools 走 run-steps.mjs）': {
+    expect: 'gate-not-on-deploy-path',
+    'package.json': JSON.stringify({
+      scripts: {
+        'verify:all': 'npm run build && npm run check:a11y',
+        'test:units': 'x', 'test:built': 'x', build: 'x', 'check:a11y': 'x',
+        'test:tools': 'node scripts/run-steps.mjs test:units test:built',
+      },
+      engines: { node: '>=22.19.0' },
+    }),
+    '.github/workflows/deploy.yml': [
+      'name: Deploy',
+      'jobs:',
+      '  build:',
+      '    steps:',
+      '      - run: npm run test:units',
+      '      - run: npm run build',
+      '      - run: npm run verify:all',
+      '',
+    ].join('\n'),
+  },
   'gate-not-on-deploy-path（只出現在註解裡）': {
     expect: 'gate-not-on-deploy-path',
     '.github/workflows/deploy.yml': [
@@ -598,6 +633,41 @@ try {
     const ok = !out.includes('[gate-not-on-deploy-path]');
     if (!ok) failed++;
     console.log(`  ${ok ? '✓' : 'X'} deploy 跑複合的 test:tools 也算數（反向案例）`);
+    if (!ok) console.log('        ' + (out.split('\n').find((l) => l.includes('gate-not-on-deploy-path')) ?? ''));
+  }
+
+  {
+    /*
+     * 反向：`run-steps.mjs` 後面若有旗標，那不是 script 名。
+     * 收進去的話這條規則會去要求 deploy.yml 跑 `npm run --bail` —— 假紅燈。
+     * 突變掃描抓到的：第一版的過濾只寫了字元類，而 `--bail` 整串都在那個類裡。
+     */
+    const withFlag = {
+      ...base(),
+      'package.json': JSON.stringify({
+        scripts: {
+          'verify:all': 'npm run build && npm run check:a11y',
+          'test:units': 'x', 'test:built': 'x', build: 'x', 'check:a11y': 'x',
+          'test:tools': 'node scripts/run-steps.mjs --bail test:units test:built',
+        },
+        engines: { node: '>=22.19.0' },
+      }),
+      '.github/workflows/deploy.yml': [
+        'name: Deploy',
+        'jobs:',
+        '  build:',
+        '    steps:',
+        '      - run: npm run test:units',
+        '      - run: npm run build',
+        '      - run: npm run verify:all',
+        '      - run: npm run test:built',
+        '',
+      ].join('\n'),
+    };
+    const out = await check(await build('case-runner-flag', withFlag));
+    const ok = !out.includes('[gate-not-on-deploy-path]');
+    if (!ok) failed++;
+    console.log(`  ${ok ? '✓' : 'X'} run-steps.mjs 後面的旗標不當成 script 名（反向案例）`);
     if (!ok) console.log('        ' + (out.split('\n').find((l) => l.includes('gate-not-on-deploy-path')) ?? ''));
   }
 

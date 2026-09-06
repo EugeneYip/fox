@@ -37,3 +37,9 @@ npm-debug.log*
 
 # Claude Code 的本機設定（launch.json 會 commit，個人設定不會）
 .claude/settings.local.json
+
+# `npm run mutate` 的備份檔（`<檔案>.orig`）。
+# 突變掃描是每一輪的固定動作，而備份留在工作樹裡 —— 第 5 輪（第四十三圈）
+# 差一點就把一個 .orig 用 `git add -A` 收進 commit（第 2 輪那次是真的做了，
+# 事後才發現）。它是暫時的東西，不該進版控。
+*.orig

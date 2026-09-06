@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 56,700 行、2.9 MB、344 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 57,000 行、2.9 MB、345 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -56527,4 +56527,290 @@ import 看得到，文字上的 `'zh-TW':` 看不到。那正是「抽取方式�
   `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：7 — 建置與 CI**
+### 2026-09-06 — 第 7 輪（第四十三圈）：建置與 CI
+
+**第四十三圈問：這個綠勾的分母是什麼？誰決定了它？**
+判準：**找一個印出 ✓ 或百分比的地方，問它的分母怎麼來的 —— 是數出來的，
+還是一份人挑的清單決定的？如果是後者，那個 ✓ 涵蓋了多少？**
+
+#### 1. 先把幾個分母數過一遍 —— 這一區大致是健康的
+
+| 印出來的 | 分母怎麼來的 | 有沒有洞 |
+|---|---|---|
+| `ci:sim`「照 deploy.yml 的順序跑完」 | 從 deploy.yml 讀，抽完自我驗證，還會說「共 N 步、真的跑 M 步」 | 沒有 |
+| `npm run check`「Result (160 files)」 | `tsconfig.json` 是 `**/*` 扣掉 dist／node_modules | 沒有（src ＋ scripts 實際 158 個檔案） |
+| `test:tools`「44 步全部通過」 | 從 package.json 的鏈展開 | 沒有 —— 49 支 `test-`／`check-` 腳本**每一支都有 npm script**，鏈外只有兩支刻意手動的（`handle`、`check:history`） |
+
+#### 2. 有洞的是「部署路徑上該跑哪幾道」
+
+`check:workflows --verbose` 自己印著這一句：
+
+```
+⚠ 部署路徑的必跑清單推不出來：package.json 沒有 `test:tools`，
+  或者它沒有呼叫任何 npm script。這一條退回只要求 `verify:all` ——
+  **那不是「都有跑」，是沒有比對到。**
+```
+
+`package.json` 當然有 `test:tools`。問題在展開的方式：
+
+```js
+const membersOf = (name) =>
+  [...String(pkgJson.scripts?.[name] ?? '').matchAll(/npm run ([a-z0-9:@-]+)/g)].map((m) => m[1]);
+```
+
+而 `test:tools` 現在是 `node scripts/run-steps.mjs test:units test:built` ——
+**一個 `npm run` 都沒有**。於是必跑清單從 3 條縮成 1 條。
+
+那條規則的註解寫得很清楚它為什麼存在
+（「**一條沒有人選過的清單，安靜地決定了整條部署路徑蓋到哪裡**」），
+第 7 輪（第三十一圈）還為它做過實測。**它自己後來變成了那句話。**
+
+#### 3. 實測：舊版讓 deploy.yml 少跑一道也沒人說話
+
+把 `deploy.yml` 的 `run: npm run test:built` 換成 `echo skip`：
+
+| | 舊的展開方式 | 現在 |
+|---|---|---|
+| 必跑清單 | 1 條（只有 `verify:all`） | **3 條** |
+| 判決 | **離開碼 0、一條規則都沒響** | 離開碼 **1**、`X [gate-not-on-deploy-path] deploy.yml 沒有跑 npm run test:built` |
+
+#### 4. 測試為什麼沒抓到：假語料寫的是舊寫法
+
+`test-workflow-rules.mjs` 那幾格自己寫 `package.json`，而它們寫的是
+`'test:tools': 'npm run test:units && npm run test:built && …'` ——
+**舊的寫法**。所以那條規則在假語料上一直是活的，在真的 repo 上是退化的。
+
+補了一格用真的寫法（`node scripts/run-steps.mjs test:units test:built`）。
+
+#### 5. 突變抓到我自己：那個過濾根本沒在過濾
+
+`run-steps.mjs` 後面的 token 我用 `/^[a-z0-9:@-]+$/` 過濾，想擋掉旗標。
+突變掃描（「把 -flag 也當成 script 名」）**沒有一格紅** —— 因為
+`--bail` 的每一個字元都在那個字元類裡，那個過濾從來沒擋過任何東西。
+改成 `!t.startsWith('-') && …`，並補一格反向案例
+（`run-steps.mjs --bail test:units test:built` 不該要求 deploy.yml 跑
+`npm run --bail`）。
+
+| 突變 | 結果 |
+|---|---|
+| `viaRunner` 回空陣列（＝舊行為） | ✗ 紅 |
+| 只取第一個 token | ✗ 紅 |
+| 不過濾旗標 | 第一版**綠**（過濾本來就沒作用）→ 修好之後 ✗ 紅 |
+
+#### 6. 順手：`*.orig` 進 `.gitignore`
+
+`npm run mutate` 的備份留在工作樹裡，而突變掃描是每一輪的固定動作。
+這一圈第 2 輪**真的把一個 `.orig` commit 進去過**（事後才發現），
+第 5 輪又差一點。加進 `.gitignore` 之後實測跑一次突變：
+`git status` 乾淨，`audit:privacy` 也不再為它多印一個 warn。
+
+#### 7. 更正第 4 輪的一句話 —— 然後把那個偶發紅燈抓到了
+
+第 4 輪那筆寫著：「`test:tools` 第一次跑離開碼 1，而輸出最後一行是
+『44 步全部通過』—— 也就是沒有任何一步報失敗」。
+
+**那是兩次不同的執行。** 我第一次跑的時候把輸出丟到 `/dev/null`
+只留離開碼，第二次才把輸出印出來 —— 而第二次是綠的。
+所以「失敗的是收尾那一段」那句話**要收回**。
+
+這一輪改成把輸出寫進檔案、跑完再看。第三次跑就紅了，而這次留著證據：
+
+```
+  X Retry-After HTTP 日期  5907ms
+  1 項失敗。
+X 停在第 1 步／共 44 步：npm run test:throttle
+```
+
+**記了好幾圈的「偶發紅燈」就是這一格。** 那一行原本是：
+
+```js
+const future = new Date(Date.now() + 8000).toUTCString();
+const dateMs = retryAfterMs(hdr(future));
+ok(dateMs !== null && dateMs > 6000 && dateMs <= 9000, …);
+```
+
+兩個東西會把數字往下拉：`toUTCString()` **只到秒**（最多截掉 999ms），
+以及這幾行之間真的過了多久。下限寫死 `6000`，等於只容忍約 1 秒的漂移 ——
+機器同時在跑別的東西時就不夠。那天它過了一秒多，於是 5907。
+
+改成拿同一個 `t0` 推下限（`8000 - 1000 - elapsed`），
+**斷言反而更緊**：容忍的是量得到的耗時，不是猜出來的緩衝。
+現在會印「7642ms（下限 6991ms，這幾行之間過了 9ms）」。
+
+突變兩個：讓 `retryAfterMs` 不認 HTTP 日期 → 紅；讓它回一個固定值 → 紅。
+**它仍然守得住它本來要守的東西。**
+
+（「量離開碼不要把輸出丟掉」是待辦上記了好幾圈的那一條。
+我這一天犯了兩次，第三次才照做 —— 而照做的那一次就抓到了。）
+
+#### 8. 再跑一次又紅一次 —— 這次是**測試把版控裡的檔案改壞了**
+
+修好上面那一格之後再跑，停在第 6 步 `test:perf-budgets`：
+
+```
+X 每一條預算都說得出上限是怎麼來的
+      10 條預算，只有 9 條有 basis
+X 結尾那句的兩個數字跟實際條數對得上
+```
+
+跑完 `git status` 的時候看到這一行：
+
+```
+ M scripts/check-perf.mjs
+```
+
+diff 是 `現在約 10.4 KB` → `現在約 3.2 KB`。那正是那支測試自己寫進去的字。
+
+原本的寫法是：
+
+```js
+await writeFile(perfPath, original.replace(from, '現在約 3.2 KB'), 'utf8');
+const { out, code } = await runPerf();
+await writeFile(perfPath, original, 'utf8');   // ← 中間那一步一失敗就回不來
+```
+
+**它改的是版控裡那一份 `scripts/check-perf.mjs`。** 中間那一步出任何事
+（或兩個測試同時跑），檔案就留在改壞的狀態，而底下那格反向案例
+（「說明裡的數字沒過期時不報」）從此每一次都紅 —— 看起來像偶發，
+其實是**上一次跑留下來的**。
+
+量到的：修之前連續跑五次紅一次、同時跑三份紅兩份；
+修之後連續跑六次全綠。
+
+改法：改的是**副本**（放同一個資料夾，因為 `check-perf.mjs` 從自己的路徑
+推 ROOT），檔名帶 pid，跑完 `finally` 刪掉。
+另外加一格斷言：**跑完之後版控裡那一份必須一個字都沒變** ——
+那才是這件事真正的保證，而不是「記得寫回去」。
+
+（同時跑三份仍然會紅，但那不是這個 repo 的跑法 ——
+`run-steps.mjs` 一步一步跑。剩下那個交互作用記進待辦。）
+
+| | 之前 | 現在 |
+|---|---|---|
+| 部署路徑必跑清單 | 1 條 | **3 條** |
+| deploy.yml 少跑 `test:built` | 離開碼 0，沒有人說 | 離開碼 1，點名 |
+| 旗標過濾 | 寫了但沒作用 | 有作用，而且有反向案例 |
+| `.orig` 備份 | 會被 `git add -A` 收進去 | 被忽略 |
+| `test:throttle` 那一格 | 下限寫死，機器一忙就紅 | 下限跟量得到的耗時綁在一起 |
+| `test:perf-budgets` 那一格 | **改版控裡的 `check-perf.mjs`**，回不來就一直紅 | 改副本、`finally` 刪、並斷言原檔沒被動過 |
+
+`verify:all` 六道全綠、`test:tools` 44 步全過、`ci:sim` 0。
+
+### 待辦（不屬於這一輪）
+
+- **`test:units` 裡還有沒有別的時間相依斷言？** 這一輪只修了 `test:throttle`
+  那一格（下限寫死）。同一種寫法在別的測試裡可能還有 —— 判準是
+  「斷言的邊界有沒有跟量得到的耗時綁在一起」（→ 7 建置與 CI）
+- **還有沒有別的測試會動到版控裡的檔案？** 這一輪修的是
+  `test-perf-budgets` 那一處。判準很好查：測試裡出現
+  `writeFile(resolve(ROOT, …))` 而路徑不在暫存目錄底下（→ 7 建置與 CI）
+- **同時跑兩份 `test-perf-budgets` 仍然會紅。** 副本已經帶 pid，所以不是
+  它；剩下那個交互作用還沒查出來。這個 repo 是一步一步跑的，所以不影響
+  CI，但那是個沒解釋的東西（→ 7 建置與 CI）
+- **`membersOf` 只展開一層。** `test:units` 底下那 40 個成員沒有被要求
+  各自出現在部署路徑上 —— 那是對的（跑複合的就夠），但判準沒有寫下來（→ 7 建置與 CI）
+- **`check.yml` 在 GitHub 上到今天跑過 0 次**（只在 PR 觸發，而這個專案直接推 main）。
+  這一支自己會說出來，但那是站主的決定（→ 站主）
+- 上一輪與更早的都還在（那 39 組裡有 25 組在 `platforms.data.mjs`、
+  `pick()` 收 `Partial` 型別擋不住（→ 站主）、文字抽取只認單引號、
+  那份「跳過 node_modules⋯」的清單在 `audit-privacy.mjs` 裡有兩份、
+  `unscanned-dir` 只看頂層、那 4 條什麼都沒擋的豁免（→ 站主）、
+  `check:content` 那一半還是只看 `syndication.json`、
+  排程跑的 `sync:health` 沒有 `--strict`、`CHANGE_ME` 那條路連 failures 都不加、
+  `test-contrast` 把 `#faf6ee` 寫死在 fixture 裡、
+  manifest 的 `icons[]` 沒有人確認存在、`start_url`／`scope`／`lang` 還沒人比、
+  schema 欄位抽取的自我檢查只驗得到內容用過的那 25 個、
+  `images` 還是副檔名認的、GitHub Pages 會不會壓 `.atom`／`.rss` 沒有人量過、
+  CSS 那三條沒有被 `sawTags` 涵蓋、另外 5 條的主體不是用正則數的、
+  這份檔案自己的頁首也是個沒人守的數字、
+  `box-shadow` 那兩處不算、`BG_PROPS` 還是列舉的、
+  同一個判斷寫在四個地方、四格抽名單用的都是正則、
+  `FLAKY_ENDPOINT` 的平臺 id 沒有人比、那五份對照表只驗了單向、
+  只比資料夾名字不比 `loader` 的 `base`、`collections` 的抽取只認一種寫法、
+  那八種只是「不數」不是「不該數」、`url()` 與 `@font-face` 只掃 HTML、
+  `MEASURED` 仍是快照、
+  `CASES` 的鍵沒有反向檢查、
+  那個掃描分不出元件與動態標籤名、`writing-mode` 只有一個檔案在用、
+  `needs-dist-before-build` 打不開 npm 的 `&&` 串、
+  那份「每條規則都有反例」的報告只說不擋、兩份文件的例子沒有分開數、
+  另外五份文件還是寫「404、500」、`accept` 那些 header 沒被測過、
+  `field()` 假設 frontmatter 是第一個 `---`、
+  只比了檔名沒比路徑、識別字沒有比、`why:` 欄位沒掃、
+  `same-name-different-target` 比 `hasAccessibleName()` 窄、
+  「判斷寫兩份」沒有東西在數、
+  那 59 條「元件沒算繪過」沒有人在守、
+  「要跑起來才有」那 25 條這個方法看不到、分類判準是兩條寫死的正則、
+  同一種「當天就爛」的數字可能還在別的關卡的輸出裡、
+  沒有東西在守「空狀態不要自相矛盾」、英文那一半沒有人系統地讀過、
+  `tags.count_one` 與 `list.count_one` 連算繪都沒有過、
+  `csp-frame-src-mismatch` 在站上主體是 0、手動那一次沒有自動化、
+  `rss` 與 `bridge` 兩條路一次都沒跑過（→ 站主）、
+  Data API v3 那一半也沒跑過、
+  CSP 的 `frame-src` 在全部 44 頁上、
+  `related` 只驗了畫得出來、那六個欄位刪掉之後又回到沒人用過、
+  那段建議裡的 273 KB／94 KB 沒有人在守、
+  「站上 0 張內容圖」是三條待辦的共同原因、
+  那三條 a11y 的「第一次」是手動做出來的、
+  markdown 裡的原始 HTML 沒有人在擋、另外六支關卡的寫死數字沒比過、
+  `column` 跟外層 `.wrap--*` 是靠人對的、
+  「42 個用了但沒說明」要重寫或刪掉、`--w-prose`／`--w-content` 也是抄進 `sizes` 的、
+  `rule-undocumented` 只看 id 有沒有出現、
+  那張表是手寫的而 `--list-rules` 是機器的、
+  `gate-count-stale` 的判準是「同一行有 `verify:all`」、
+  `EN_COVERAGE.date` 沒有人問多久以前、組數比對只認得變少、
+  其他三支規則測試的空綠沒驗、
+  那 5 條的 `whyWarn` 還是空的（→ 站主）、
+  結構性規則沒有 `whyWarn` 欄位、`email` 是 warn 而 `google-fonts` 是 error、
+  標籤數也是一種近似、`note` 的 0 筆連續五圈、
+  那 3 個沒人用的匯出（→ 站主）、判準看名字不解析 import、
+  `CONTENT.md` 已經超過 550 行（→ 站主）、判準是檔名不是用途、
+  `role="status"` 本身沒有被檢查、
+  `<details>`／`<summary>`／`<time>` 那 170 個仍然沒有規則、
+  「22 個 `--verbose` 數字」那條的數字過期了、
+  探針還是要人手貼、只跑了首頁、
+  `LOOKS_BAD` 那個正則是猜的、`verify:all` 還是 `&&` 串、
+  `ui.ts` 的 `en` 要不要改必填（→ 站主）、
+  job summary 只有站主會去看、`sync:health` 沒有接進六道關卡、
+  只比 `npm run X`（這一輪修的就是它）、那段 git 診斷沒有測試、
+  「上界」宣稱要重量得先推（→ 站主）、
+  螢幕閱讀器仍然沒有人做過、重驗是量本機產出不是正式站、
+  `15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、
+  `example-not-real` 只看程式碼框裡的例子、
+  那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  那 9 條「維護者的事」的規則沒有文件、
+  `ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、
+  搜尋結果那 2 個連結沒有規則看過（現在關卡會逐條說出來）、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `SCHEMA_STRUCTURAL` 3 個什麼都沒擋、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 15 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  7 條 a11y 規則的邊界沒人守、
+  7 個沒人用的 token（→ 站主）、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、本機 `ahead 162, behind 3`、
+  `inlineStylesheets: always` 只到 98%、圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  `test-content-rules` 的改法檢查只看第一處、
+  `--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：8 — 視覺與版面**

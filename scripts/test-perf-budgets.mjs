@@ -1023,10 +1023,10 @@ for (const [key, value] of Object.entries(CASES)) {
    * 這一組**要跑真的 dist**（不給 `--dir=`）—— 那些數字說的是這個站現在多大，
    * 拿去跟假站比沒有意義。第一版用假站跑，一次紅了 18 格。
    */
-  /** @param {string[]} args */
-  const runPerf = async (args = []) => {
+  /** @param {string[]} args @param {string} [script] 要跑哪一份腳本（過期那一格跑副本） */
+  const runPerf = async (args = [], script = resolve(ROOT, 'scripts/check-perf.mjs')) => {
     try {
-      const r = await run('node', [resolve(ROOT, 'scripts/check-perf.mjs'), ...args]);
+      const r = await run('node', [script, ...args]);
       return { out: r.stdout, code: 0 };
     } catch (err) {
       const e = /** @type {{ stdout?: string, code?: number }} */ (err);
@@ -1176,14 +1176,42 @@ for (const [key, value] of Object.entries(CASES)) {
   console.log(`  ${okHasAnchor ? '✓' : 'X'} 找得到那句要改的說明（找不到的話下一格什麼都沒測）`);
 
   if (okHasAnchor) {
-    await writeFile(perfPath, original.replace(from, '現在約 3.2 KB'), 'utf8');
-    const { out, code } = await runPerf();
-    await writeFile(perfPath, original, 'utf8');
+    /*
+     * ── 改的是**副本**，不是版控裡那一份 ──────────────
+     *
+     * 原本的寫法是：把 `scripts/check-perf.mjs` 本人改掉、跑一次、再寫回去。
+     * 中間那一步一失敗（或兩個測試同時跑），**版控裡的檔案就留在改壞的狀態**，
+     * 而底下那格反向案例會從此紅。
+     *
+     * 第 7 輪（第四十三圈）抓到的偶發紅燈之一就是它：連續跑五次紅一次，
+     * 同時跑三份紅兩份，而且事後 `git status` 真的看得到
+     * `scripts/check-perf.mjs` 被改成「現在約 3.2 KB」留在工作樹裡。
+     *
+     * 副本放在**同一個資料夾**：`check-perf.mjs` 從自己的路徑推 ROOT，
+     * 放到暫存目錄會推錯。跑完一定刪掉（`finally`）。
+     */
+    /* 檔名帶 pid：同時跑兩份的時候不會互相蓋掉對方的副本 */
+    const copyPath = resolve(ROOT, `scripts/check-perf.stale-probe.${process.pid}.mjs`);
+    /** @type {{ out: string, code: number }} */
+    let r = { out: '', code: -1 };
+    try {
+      await writeFile(copyPath, original.replace(from, '現在約 3.2 KB'), 'utf8');
+      r = await runPerf([], copyPath);
+    } finally {
+      await rm(copyPath, { force: true });
+    }
+    const { out, code } = r;
 
     const okCatch = /說明裡的數字過期/.test(out) && code === 1;
     if (!okCatch) failed++;
     console.log(`  ${okCatch ? '✓' : 'X'} 數字過期時抓得到而且擋得住（exit ${code}）`);
     if (!okCatch) console.log('        ' + out.split('\n').filter((l) => /過期|預算內/.test(l)).join(' ｜ '));
+
+    /* 跑完之後版控裡那一份必須一個字都沒變 —— 這才是上面那段的真正保證 */
+    const after = await readFile(perfPath, 'utf8');
+    const okUntouched = after === original;
+    if (!okUntouched) failed++;
+    console.log(`  ${okUntouched ? '✓' : 'X'} 跑完之後 scripts/check-perf.mjs 沒有被動過`);
   }
   }
 }

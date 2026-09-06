@@ -395,9 +395,39 @@ const deploySteps = deployStepsFrom(deploy);
  * 隔壁的 `gate-missing-in-check` 第 7 輪（第十五圈）就已經改成推導了，
  * 這一條是那次沒跟上的那一半。
  */
+/*
+ * ── 展開的時候要認得這個 repo 自己的跑法 ──────────
+ *
+ * 這裡本來只認 `npm run X`。而 `test:tools` 後來改成
+ * `node scripts/run-steps.mjs test:units test:built`（那支跑完會印
+ * 「44 步全部通過」），**一個 `npm run` 都沒有** —— 於是 `toolMembers`
+ * 是空的，這條規則退回只要求 `verify:all`。
+ *
+ * 它有把話說出口（「那不是『都有跑』，是沒有比對到」），但那句話混在
+ * 一堆 ⚠ 裡，而底下印的仍然是「沒有發現問題」。
+ * 第 7 輪（第四十三圈）量到的：必跑清單從 3 條縮成 1 條，
+ * 也就是 deploy.yml 拿掉 `test:built` 不會有人說話。
+ *
+ * 測試沒抓到是因為**假語料寫的是舊寫法**（`test:tools` 在 fixture 裡
+ * 仍然是 `npm run …`），所以那條規則在假的 repo 上一直是活的。
+ */
 /** @param {string} name 把複合 script 展開成它呼叫的那幾個 */
-const membersOf = (name) =>
-  [...String(pkgJson.scripts?.[name] ?? '').matchAll(/npm run ([a-z0-9:@-]+)/g)].map((m) => m[1]);
+const membersOf = (name) => {
+  const body = String(pkgJson.scripts?.[name] ?? '');
+  const viaNpm = [...body.matchAll(/npm run ([a-z0-9:@-]+)/g)].map((m) => m[1]);
+  /* `run-steps.mjs a b c` —— 後面那幾個 token 就是要一步一步跑的 script 名 */
+  const runner = /run-steps\.mjs\s+([^&|;]+)/.exec(body);
+  const viaRunner = runner
+    ? runner[1]
+        .trim()
+        .split(/\s+/)
+        /* 開頭是 `-` 的是旗標不是 script 名 —— 收進去的話這條規則會去要求
+           deploy.yml 跑一個不存在的 `npm run --something`（假紅燈）。
+           突變掃描抓到的：第一版只寫了字元類，而 `--quiet` 整串都在那個類裡。 */
+        .filter((t) => !t.startsWith('-') && /^[a-z0-9:@-]+$/.test(t))
+    : [];
+  return [...new Set([...viaNpm, ...viaRunner])];
+};
 const toolMembers = membersOf('test:tools');
 const DEPLOY_MUST_RUN = ['verify:all', ...toolMembers];
 if (toolMembers.length === 0) {
