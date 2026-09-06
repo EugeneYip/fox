@@ -1275,4 +1275,21 @@ console.log(
     '  要重量：npm run preview，然後把 scripts/probe-contrast-pairs.js 貼進 console。\n',
 );
 
+/*
+ * ── 另一個同樣要瀏覽器才量得到的數字 ──────────────────
+ *
+ * 第 8 輪（第四十圈）：上面那份「未使用」數的是 **token**，
+ * 而沒有人數過**選擇器** —— 哪幾條 CSS 規則一個元素都沒配到。
+ *
+ * 那要真的 DOM（`querySelector`）才判斷得出來，所以跟對比組合一樣
+ * 做成貼進 console 的探針。當時量的是 335 條裡 106 條（32%）沒配到，
+ * 分成三種：還沒有內容 22、要跑起來才有 25、元件沒算繪過 59。
+ *
+ * 這裡不印數字（會過期），只指路 —— 數字寫在 REVIEW-LOG 那一輪裡。
+ */
+console.log(
+  '\n哪幾條 CSS 規則一個元素都沒配到，這一支也看不到（它讀的是 tokens.css，不是畫面）。\n' +
+    '  要量：npm run preview，然後把 scripts/probe-css-coverage.js 貼進 console。\n',
+);
+
 process.exit(failures > 0 || staleTokenDocs > 0 ? 1 : 0);
