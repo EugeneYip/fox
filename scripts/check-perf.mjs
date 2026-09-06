@@ -358,6 +358,23 @@ const OWN_BUDGET = new Set(['search-index.json']);
  *
  * 現在問**檔案的位元組**：沒有 NUL 而且整份解得開 UTF-8 的就是純文字。
  * 這裡沒有清單可以漏 —— PNG／ICO／字型的位元組本來就不是合法的 UTF-8。
+ *
+ * ── 第 2 輪（第四十五圈）去線上量了那個前提 ──────────
+ *
+ * 這個判準假設「是純文字 → 伺服器會壓 → 用 gzip 尺量才對」。
+ * 那一輪那條待辦寫的是「GitHub Pages 會不會壓 `.atom`／`.rss` 沒有人量過」，
+ * 所以把站上**每一種**出貨的文字型別都打了一次（帶 `accept-encoding: gzip`）：
+ *
+ *   .xml  .txt  .json  .webmanifest  .svg  .css   → 全部 `content-encoding: gzip` ✓
+ *   CNAME（沒有副檔名）                            → **沒有壓**，14 bytes 原樣送
+ *
+ * 差別不在「是不是文字」，在 **content-type**：`CNAME` 沒有副檔名，
+ * GitHub Pages 送的是 `application/octet-stream`，而它不壓那個型別。
+ *
+ * 也就是說位元組判準答的是「這個檔案是不是文字」，而伺服器問的是
+ * 「它的副檔名對到哪個型別」。**今天唯一對不上的是 `CNAME`，14 bytes** ——
+ * 它永遠不會是「最大的文字資源」，所以不影響任何一條預算。
+ * （`.atom`／`.rss` 仍然沒量到 —— 站上沒有那兩種檔案。）
  */
 const utf8Strict = new TextDecoder('utf-8', { fatal: true });
 /** @param {Buffer} buf */

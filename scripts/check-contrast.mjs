@@ -1046,6 +1046,49 @@ async function* walkSurf(dir) {
     }
   }
 
+  /*
+   * ── `column` 的預設值也是抄的 ────────────────────────
+   *
+   * 第 2 輪（第四十五圈）逐條驗待辦時量到的：上面那一格守住了 `--gutter`
+   * 的複本，而**同一個 `sizes` 字串裡還有第二份複本** ——
+   *
+   *     const { …, column = '46rem', … } = Astro.props;
+   *     const sizes = `min(100vw - 2 * ${GUTTER}, ${column})`;
+   *
+   * 那個 `46rem` 就是 `--w-content`。理由跟 `--gutter` 完全一樣
+   * （`sizes` 不能用 `var()`），漂掉的後果也一樣：畫面不會壞，
+   * 錯的是**瀏覽器挑檔案時心裡想的寬度**。
+   *
+   * 待辦上這一條寫著「`--w-prose`／`--w-content` 也是抄進 `sizes` 的」，
+   * 被抄了好幾圈 —— 而它旁邊那一半早就有人守了。
+   */
+  {
+    const coverPath = resolve(ROOT, 'src/components/content/CoverImage.astro');
+    const cover = await readFile(coverPath, 'utf8').catch(() => null);
+    const declared = /^\s*--w-content\s*:\s*([^;]+);/m.exec(css)?.[1]?.trim() ?? null;
+    const copied = cover === null ? null : /column = '([^']+)'/.exec(cover)?.[1]?.trim() ?? null;
+    console.log('\n' + '─'.repeat(78));
+    if (cover === null || declared === null || copied === null) {
+      console.log(
+        'column 複本：抽不到其中一邊' +
+          `（tokens.css ${declared === null ? '✗' : '✓'}、CoverImage ${copied === null ? '✗' : '✓'}）` +
+          ' —— **這一格沒有在守**。',
+      );
+    } else if (declared === copied) {
+      console.log(`column 複本：CoverImage 的 column 預設值跟 --w-content 一致 ✓（${declared}）`);
+    } else {
+      console.log(
+        'column 複本：**兩邊不一樣** —\n' +
+          `  tokens.css　　--w-content: ${declared}\n` +
+          `  CoverImage　　column = '${copied}'\n` +
+          '  跟上面那一格同一個理由：`sizes` 不能用 var()，所以那是手抄的。\n' +
+          '  畫面不會壞，錯的是瀏覽器挑檔案時心裡想的寬度。\n' +
+          '  改法：把 CoverImage 那個預設值改成 tokens.css 的值。',
+      );
+      failures += 1;
+    }
+  }
+
   const pairFg = new Set(PAIRS.map((p) => p.fg));
   const pairAny = new Set([...PAIRS.map((p) => p.fg), ...PAIRS.map((p) => p.bg)]);
 

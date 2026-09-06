@@ -83,7 +83,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 59,100 行、3.0 MB、355 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 59,300 行、3.0 MB、356 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -59131,4 +59131,207 @@ aria-ref、blank-rel、lang-content-mismatch、doc-names-real-rule
   `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：2 — 效能**
+### 2026-09-06 — 第 2 輪（第四十五圈）：效能
+
+**第四十五圈問：這條待辦還在那裡，是因為它還成立嗎？**
+判準：**挑幾條被抄了很多圈的待辦，回去對照現在的程式 ——
+它描述的那件事今天還是真的嗎？**
+
+#### 1. 「GitHub Pages 會不會壓 `.atom`／`.rss` 沒有人量過」—— 量了
+
+這一條是第 2 輪（第四十三圈）留下的：那一輪把「這個檔案該用 gzip 尺還是
+raw 尺」從副檔名清單改成**問位元組**（沒有 NUL 且解得開 UTF-8 就是純文字），
+而那個判準有一個前提 —— **純文字的東西伺服器會壓**。
+
+站已經上線，所以那個前提量得到。把站上**每一種**出貨的文字型別都打一次
+（帶 `accept-encoding: gzip`）：
+
+| 網址 | content-type | 有沒有壓 |
+|---|---|---|
+| `/rss.xml` | `application/xml` | **gzip** |
+| `/sitemap-0.xml` | `application/xml` | **gzip** |
+| `/robots.txt` | `text/plain` | **gzip** |
+| `/search-index.json` | `application/json` | **gzip** |
+| `/site.webmanifest` | `application/manifest+json` | **gzip** |
+| `/favicon.svg` | `image/svg+xml` | **gzip** |
+| `/_astro/*.css` | `text/css` | **gzip** |
+| **`/CNAME`** | **`application/octet-stream`** | **沒有壓** |
+
+#### 2. 而那個例外正好是第四十三圈搬過去的那一個
+
+那一輪的紀錄寫著：
+
+> 站上分類因此改了一個：文字檔 9 → 10、資產 7 → 6，
+> `dist/CNAME` 從「量圖片的尺」換到 gzip 那把。
+
+**量出來的是：伺服器不壓它。** 差別不在「是不是文字」，在 **content-type** ——
+`CNAME` 沒有副檔名，GitHub Pages 送 `application/octet-stream`，而它不壓那個型別。
+
+也就是說：**位元組判準答的是「這個檔案是不是文字」，而伺服器問的是
+「它的副檔名對到哪個型別」。** 兩個問題大部分時候答案一樣，`CNAME` 是不一樣的那個。
+
+**影響：沒有。** 它 14 bytes，永遠不會是「最大的文字資源」。
+所以不改判準（改回副檔名清單是往回走），把量到的東西寫進那段註解。
+
+`.atom`／`.rss` **仍然沒量到** —— 站上沒有那兩種檔案，要量得先發佈一個。
+待辦的措辭因此改掉：不是「沒有人量過」，是「**已出貨的八種都量了，那兩種站上沒有**」。
+
+#### 3. 「`--w-prose`／`--w-content` 也是抄進 `sizes` 的」—— 還成立，而且旁邊那一半早就有人守
+
+`CoverImage.astro` 的 `sizes` 不能用 `var()`（預載掃描器在 CSS 變數解析之前
+就要讀它），所以那裡有**兩份**手抄值：
+
+```js
+const { …, column = '46rem', … } = Astro.props;   // ← --w-content
+const GUTTER = 'clamp(1.25rem, 5vw, 3rem)';        // ← --gutter
+const sizes = `min(100vw - 2 * ${GUTTER}, ${column})`;
+```
+
+`--gutter` 那一份第 8 輪（第三十九圈）就加了守衛（`check:contrast` 每次印
+「gutter 複本：⋯一致 ✓」）。**同一個字串裡的第二份沒有人守**，而待辦上那一條
+被抄了好幾圈。
+
+補了一格同樣形狀的：
+
+```
+column 複本：CoverImage 的 column 預設值跟 --w-content 一致 ✓（46rem）
+```
+
+把 `column` 改成 `44rem` 實測：**離開碼 1**，兩邊的值都印出來。
+
+#### 4. 順手補上那一格從第三十九圈起就沒有的測試
+
+查的時候發現：**`gutter` 那一格自己也沒有測試**（`test-contrast.mjs` 裡
+一個字都沒提到它）。也就是說它守著複本，而沒有東西守著它。
+
+一起補三格：兩份都一致時各說一句、`column` 漂掉時擋得住、`gutter` 漂掉時擋得住。
+突變兩個都紅（不比了、比了但不擋）。
+
+| | 之前 | 現在 |
+|---|---|---|
+| `sizes` 裡的手抄值 | 2 份，1 份有守衛 | **2 份都有** |
+| 那兩格守衛本身 | 沒有測試 | 3 格測試，兩個方向 |
+| 「伺服器會壓純文字」這個前提 | 沒有人量過 | 八種出貨型別全量了，一個例外（`CNAME`，無影響） |
+
+`verify:all` 六道全綠、`test:tools` 44 步全過。
+
+### 待辦（不屬於這一輪）
+
+- **`.atom`／`.rss` 這兩種副檔名 GitHub Pages 壓不壓，仍然沒量到** ——
+  站上沒有那兩種檔案。要量得先真的發佈一個（→ 2 效能）
+- **`check-perf` 的「是不是純文字」與伺服器的「壓不壓」是兩個判準。**
+  今天只有 `CNAME` 對不上而且無影響，但沒有東西在盯這件事 ——
+  要盯得打網路，而六道關卡不能打網路（→ 2 效能）
+- **那段建議裡的 273 KB／94 KB 還是沒有人在守。** 那兩個數字寫在 `fix:` 欄位裡，
+  而「說明裡的現值」那一格只比 `why:`（→ 2 效能）
+- 上一輪與更早的都還在（`<details>`／`<summary>`／`<time>` 那 170 個仍然沒有規則、
+  CSS 那三條沒有被 `sawTags` 涵蓋、有幾條的主體不是用正則數的、
+  有幾條規則的邊界沒有人守（條數見 `test:a11y-rules`）、
+  搜尋結果那 2 個連結沒有東西每次都在看、
+  頁尾的 `aria-current` 沒有看得見的對應、
+  螢幕閱讀器仍然沒有人做過（→ 站主）、
+  探針的結果沒有東西在比對、「英文頁量不到最壞情況」值得記進探針、
+  `--lh-loose` 要不要接上去（→ 站主）、那個查法只看得到「值一字不差」的複本、
+  要不要改用 PR 流程（→ 站主）、為什麼不讓 `check.yml` 直接跑三行、
+  要不要把約定延伸到註解（→ 站主）、`halfwidth-punct` 那種行內程式碼片段、
+  那五條的嚴重度本身還沒有人決定過（→ 站主）、
+  `audit:privacy` 沒有 `SEVERITY` 表、
+  `bridge` 那條路卡在沒有 RSSHub、
+  四個策略都寫在 `sync-feeds.mjs` 裡沒有匯出、
+  微網誌型平臺沒有標題那件事畫面那端沒處理過、
+  `docs/CONTENT.md` 裡的指令沒有任何東西在驗、
+  「71～108 秒」也是一個沒人守的數字、`CONTENT.md` 現在 588 行（→ 站主）、
+  `MEASURED` 的日期沒有東西在守、`probe:served` 只量 5 頁而且寫死、
+  「雜湊資源只有 `max-age=600`」是這個主機做不到（→ 站主）、
+  `box-shadow` 算不算邊、自訂屬性帶顏色的間接層、
+  `BG_PROPS` 三個裡只有一個被用到、
+  其餘六支關卡也都以 `process.exit()` 收尾、
+  `check-perf.mjs` 還有兩個早退的 `process.exit(1)`、
+  `test:units` 裡還有沒有別的時間相依斷言、
+  還有沒有別的測試會動到版控裡的檔案、同時跑兩份 `test-perf-budgets` 仍會紅、
+  `membersOf` 只展開一層、
+  那 39 組裡有 25 組在 `platforms.data.mjs`、
+  `pick()` 收 `Partial` 型別擋不住（→ 站主）、文字抽取只認單引號、
+  那份「跳過 node_modules⋯」的清單在 `audit-privacy.mjs` 裡有兩份、
+  `unscanned-dir` 只看頂層、那 4 條什麼都沒擋的豁免（→ 站主）、
+  `check:content` 那一半還是只看 `syndication.json`、
+  排程跑的 `sync:health` 沒有 `--strict`、`CHANGE_ME` 那條路連 failures 都不加、
+  `test-contrast` 把 `#faf6ee` 寫死在 fixture 裡、
+  manifest 的 `icons[]` 沒有人確認存在、`start_url`／`scope`／`lang` 還沒人比、
+  schema 欄位抽取的自我檢查只驗得到內容用過的那 25 個、
+  `images` 還是副檔名認的、
+  這份檔案自己的頁首也是個沒人守的數字、
+  同一個判斷寫在四個地方、四格抽名單用的都是正則、
+  `FLAKY_ENDPOINT` 的平臺 id 沒有人比、那五份對照表只驗了單向、
+  只比資料夾名字不比 `loader` 的 `base`、`collections` 的抽取只認一種寫法、
+  那八種只是「不數」不是「不該數」、`url()` 與 `@font-face` 只掃 HTML、
+  `CASES` 的鍵沒有反向檢查、
+  那個掃描分不出元件與動態標籤名、`writing-mode` 只有一個檔案在用、
+  `needs-dist-before-build` 打不開 npm 的 `&&` 串、
+  那份「每條規則都有反例」的報告只說不擋、兩份文件的例子沒有分開數、
+  另外五份文件還是寫「404、500」、`accept` 那些 header 沒被測過、
+  `field()` 假設 frontmatter 是第一個 `---`、
+  只比了檔名沒比路徑、識別字沒有比、`why:` 欄位沒掃、
+  `same-name-different-target` 比 `hasAccessibleName()` 窄、
+  「判斷寫兩份」沒有東西在數、那 59 條「元件沒算繪過」沒有人在守、
+  「要跑起來才有」那 25 條這個方法看不到、分類判準是兩條寫死的正則、
+  同一種「當天就爛」的數字可能還在別的關卡的輸出裡、
+  沒有東西在守「空狀態不要自相矛盾」、英文那一半沒有人系統地讀過、
+  `tags.count_one` 與 `list.count_one` 連算繪都沒有過、
+  `csp-frame-src-mismatch` 在站上主體是 0、
+  Data API v3 那一半也沒跑過、CSP 的 `frame-src` 在全部 44 頁上、
+  `related` 只驗了畫得出來、那六個欄位刪掉之後又回到沒人用過、
+  「站上 0 張內容圖」是三條待辦的共同原因、
+  markdown 裡的原始 HTML 沒有人在擋、另外六支關卡的寫死數字沒比過、
+  `column` 跟外層 `.wrap--*` 是靠人對的、
+  「42 個用了但沒說明」要重寫或刪掉、
+  `rule-undocumented` 只看 id 有沒有出現、
+  那張表是手寫的而 `--list-rules` 是機器的、
+  `gate-count-stale` 的判準是「同一行有 `verify:all`」、
+  `EN_COVERAGE.date` 沒有人問多久以前、組數比對只認得變少、
+  其他三支規則測試的空綠沒驗、
+  結構性規則沒有 `whyWarn` 欄位、`email` 是 warn 而 `google-fonts` 是 error、
+  標籤數也是一種近似、`note` 的 0 筆連續五圈、
+  那 3 個沒人用的匯出（→ 站主）、判準看名字不解析 import、
+  判準是檔名不是用途、
+  「22 個 `--verbose` 數字」那條的數字過期了、
+  `LOOKS_BAD` 那個正則是猜的、`verify:all` 還是 `&&` 串、
+  `ui.ts` 的 `en` 要不要改必填（→ 站主）、
+  job summary 只有站主會去看、`sync:health` 沒有接進六道關卡、
+  只比 `npm run X`、那段 git 診斷沒有測試、
+  `15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、
+  `example-not-real` 只看程式碼框裡的例子、
+  那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  那 9 條「維護者的事」的規則沒有文件、
+  `ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、
+  `taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、`SCHEMA_STRUCTURAL` 3 個什麼都沒擋、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  `.foxfire` 的動畫在非合成分頁裡量不到、
+  `check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、
+  `inlineStylesheets: always` 只到 98%、圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、
+  `test-content-rules` 的改法檢查只看第一處、
+  `--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：3 — 內容結構**

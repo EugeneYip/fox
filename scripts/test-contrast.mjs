@@ -1280,4 +1280,64 @@ console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
   );
 }
 
+/*
+ * ── `sizes` 裡那兩份手抄的複本 ──────────────────────
+ *
+ * `CoverImage.astro` 的 `sizes` 不能用 `var()`（預載掃描器在 CSS 變數解析
+ * 之前就要讀它），所以那裡有兩份手抄值：`--gutter` 與 `--w-content`。
+ * 漂掉的話畫面不會壞 —— 錯的是**瀏覽器挑檔案時心裡想的寬度**。
+ *
+ * `--gutter` 那一格第八輪（第三十九圈）就加了，**但一直沒有測試**；
+ * `column`（`--w-content`）那一份是第 2 輪（第四十五圈）逐條驗待辦時
+ * 才發現同一個字串裡還有第二份。兩份一起補上兩個方向。
+ */
+{
+  console.log('\n' + '─'.repeat(64));
+  /** @param {string} gutter @param {string} column */
+  const withCover = async (gutter, column) => {
+    const dir = await mkdtemp(join(tmpdir(), 'contrast-copy-'));
+    await mkdir(join(dir, 'src/styles'), { recursive: true });
+    await mkdir(join(dir, 'src/components/content'), { recursive: true });
+    await writeFile(join(dir, 'src/styles/tokens.css'), realTokens, 'utf8');
+    await writeFile(join(dir, 'src/styles/global.css'), realGlobal, 'utf8');
+    await writeFile(
+      join(dir, 'src/components/content/CoverImage.astro'),
+      `---\nconst { column = '${column}' } = Astro.props;\nconst GUTTER = '${gutter}';\n` +
+        'const sizes = `min(100vw - 2 * ${GUTTER}, ${column})`;\n---\n<img sizes={sizes} />\n',
+      'utf8',
+    );
+    let out = '';
+    let code = 0;
+    try {
+      ({ stdout: out } = await run('node', [resolve(ROOT, 'scripts/check-contrast.mjs'), `--root=${dir}`]));
+    } catch (err) {
+      const e = /** @type {{ stdout?: string, code?: number }} */ (err);
+      out = String(e?.stdout ?? '');
+      code = typeof e?.code === 'number' ? e.code : -1;
+    }
+    await rm(dir, { recursive: true, force: true });
+    return { out, code };
+  };
+
+  const same = await withCover('clamp(1.25rem, 5vw, 3rem)', '46rem');
+  const okSame =
+    /gutter 複本：CoverImage 的 sizes 跟 --gutter 一致 ✓/.test(same.out) &&
+    /column 複本：CoverImage 的 column 預設值跟 --w-content 一致 ✓/.test(same.out);
+  if (!okSame) failed++;
+  console.log(`  ${okSame ? '✓' : 'X'} 兩份都一致時各說一句 ✓（反向案例）`);
+  if (!okSame) console.log('        ' + same.out.split('\n').filter((l) => /複本/.test(l)).join(' ｜ '));
+
+  const drifted = await withCover('clamp(1.25rem, 5vw, 3rem)', '44rem');
+  const okDrift = /column 複本：\*\*兩邊不一樣\*\*/.test(drifted.out) && drifted.code === 1;
+  if (!okDrift) failed++;
+  console.log(`  ${okDrift ? '✓' : 'X'} column 漂掉時點名，而且擋得住（exit ${drifted.code}）`);
+  if (!okDrift) console.log('        ' + drifted.out.split('\n').filter((l) => /複本/.test(l)).join(' ｜ '));
+
+  const gutterDrift = await withCover('1rem', '46rem');
+  const okGutter = /gutter 複本：\*\*兩邊不一樣\*\*/.test(gutterDrift.out) && gutterDrift.code === 1;
+  if (!okGutter) failed++;
+  console.log(`  ${okGutter ? '✓' : 'X'} gutter 漂掉時點名，而且擋得住（那一格從第三十九圈起沒有測試）`);
+  if (!okGutter) console.log('        ' + gutterDrift.out.split('\n').filter((l) => /複本/.test(l)).join(' ｜ '));
+}
+
 process.exit(failed > 0 ? 1 : 0);
