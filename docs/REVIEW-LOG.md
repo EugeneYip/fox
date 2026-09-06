@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 49,700 行、2.6 MB、301 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 49,900 行、2.6 MB、302 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -48838,4 +48838,141 @@ X [doc-command-missing] docs/CONTENT.md:23　npm run write
   `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：4 — 平臺 feed 實測**
+
+### 2026-09-06 — 第 4 輪（第三十八圈）：平臺 feed 實測
+
+**第三十八圈問：這件事現在靠誰記得？忘了會怎樣？**
+判準：**這一步有沒有自動化？沒有的話，忘記的後果是什麼、多久會被發現？**
+
+#### 1. 先照規矩打一次（沒發現問題）
+
+11 個平臺全部 200，`note` 一樣是「合法但 0 筆」，
+最舊的 `verifiedAt` 是 **0 天前**（上一圈剛更新過）。
+
+#### 2. 然後追出一條鏈子
+
+問「來源死掉的話，多久會被發現」，答案不是「靠人記得」——
+是**系統結構上告訴不了你**：
+
+```
+來源全部失敗
+  → sync-feeds.mjs 沿用快取、離開碼 0（workflow 沒加 --strict，那是刻意的）
+  → syndication.json 沒有變動
+  → 「有變動就 commit」那一步 changed=false
+  → 「觸發部署」那一步的 if: 不成立
+  → deploy.yml 不跑
+  → check:content 不跑
+  → 「來源已經 N 天沒成功」那個鬧鐘不會響
+```
+
+**來源死掉的時候，正好是那個鬧鐘走不到的時候。**
+
+而那個鬧鐘是第三十圈特地加的 —— 當時的紀錄寫著
+「`generatedAt` 每跑一次就更新，不管來源成不成功，所以那個鬧鐘從今天起
+**永遠不會響**」，於是改成看 `lastSuccessAt`。判斷是對的，
+**位置**卻讓它在最需要的那一刻不執行。
+
+排程那一次是**綠的、而且安靜的** —— 在 Actions 上跟「今天沒有新影片」
+長得一模一樣。多久會被發現？**等到站主下次自己推東西為止。**
+
+#### 3. 判斷搬到共用的地方，讓排程自己也能問
+
+- `scripts/lib/sync-health.mjs`：`sourceHealth()` 與那個 3 天門檻。
+  `check:content` 改用它 —— **同一個數字只有一份**（行為不變，既有三格照樣綠）
+- `npm run sync:health`：給排程用的 CLI
+- `sync-feeds.yml` 加一步呼叫它，而且**刻意不加 `if:`** —— 那正是重點
+
+#### 4. 預設不擋，因為這個 repo 早就表過態
+
+`sync-feeds.yml` 自己的註解寫著「某個平臺掛掉不該讓整個流程變紅燈」，
+`check:content` 那一段也寫著「一樣只說話、不擋」。
+
+所以這一支照同一個立場：**只說**。要擋的話加 `--strict`
+（跟 `sync-feeds.mjs` 同一個旗標名）。
+
+在 Actions 裡它會多寫一份到 **job summary** ——
+那是排程跑完之後真的會被看到的地方，不是埋在 log 裡的一行。
+
+#### 5. 測試釘住的兩個邊界
+
+- **剛好 3 天不算冷**：`>` 改成 `>=` 會紅。那種改動平常沒有人會發現
+- **一個來源都沒有 → 說「沒有東西可看」，不是「都正常」**
+  （這個 repo 的老規矩：空的綠燈要說出自己是空的）
+
+| | 之前 | 現在 |
+|---|---|---|
+| 來源全掛時 | 排程綠、安靜、鬧鐘走不到 | 排程自己問一次，寫進 job summary |
+| 那個 3 天門檻 | 只在 `check:content` 裡 | 一份，兩個消費者共用 |
+| 要擋的話 | ——（沒有這個選項） | `--strict` |
+
+`verify:all` 六道全綠、`test:tools` 865 格全綠、`ci:sim` 在 HEAD 上全綠。
+
+### 待辦（不屬於這一輪）
+
+- **job summary 只有站主會去看。** 這一輪把訊息放到看得到的地方，
+  但沒有人會**主動**收到通知 —— 真的要的話得發 issue 或通知，
+  那是站主的判斷（→ 站主）
+- **`sync:health` 沒有接進六道關卡。** 它是給排程用的；
+  本機跑 `check:content` 仍然會看到同一句（→ 沒有要改）
+- 上一輪與更早的都還在（只比 `npm run X` 不比 `node scripts/⋯`、
+  那段 git 診斷沒有測試、「上界」宣稱要重量得先推（→ 站主）、
+  螢幕閱讀器仍然沒有人做過、重驗是量本機產出不是正式站、
+  那支探針仍然要人手貼、`15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `check:workflows` 的 10 條規則文件提到 0 條、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、那個偶發紅燈沒有留下證據、
+  `example-not-real` 只看程式碼框裡的例子、
+  `VideoFacade` 一次都沒算繪過、那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  `note` 的「合法但 0 筆」連續三圈都在、
+  那 9 條「維護者的事」的規則沒有文件、
+  11 條預算的上限沒有文件、`ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、`SEVERITY` 的 WCAG 推理住在測試檔註解裡、
+  30 條裡只有 2 條提到 WCAG、
+  瀏覽器掃描沒有變成工具、只走了 4 頁、
+  `check.yml` 永遠不會自己觸發（→ 站主）、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  `reveal('email')` 沒有人呼叫、沒有 href 的 `<a>` 沒有規則在看、
+  `validate-schema` 只實作 8 個關鍵字、同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  `<details>`／`<summary>` 各 44 個沒有規則在看、`<time>` 82 個沒人看 `datetime`、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `--patterns` 那 11 個平臺的「N 筆」沒驗、
+  `SCHEMA_STRUCTURAL` 與「走不到的是哪一個」還沒驗、
+  node 與 python 的 gzip 差 0.9% 沒人查過為什麼、
+  另外 22 個 a11y `--verbose` 數字還沒驗、搜尋結果的連結沒有任何無障礙檢查看過、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `audit:privacy` 沒有 needles 時本機 exit 0、
+  我連續十次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 13 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `check:perf` 那句「全是 favicon」是寫死的描述、7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  30 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、`CoverImage` 的 `sizes` 用 40rem、
+  `ui.ts` 的 `en` 要不要必填、
+  4 條閒置豁免、本機 `ahead 110, behind 2`、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `aria-live`／`role="status"` 沒有規則、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  `CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：5 — 隱私與安全**
