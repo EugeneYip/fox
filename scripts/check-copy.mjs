@@ -661,8 +661,15 @@ for (const rel of ['src/i18n/ui.ts', 'src/config/site.ts']) {
     const body = await readFile(resolve(ROOT, d), 'utf8').catch(() => '');
     if (body) docTexts.set(d, body);
   }
+  /*
+   * 提到外層，因為底下「每條規則都要有反例」也要用同一份決定 ——
+   * 那一課（第十四圈）就是「兩份清單」造成的，不要在這裡再開一份。
+   */
+  /** @type {string[]} */
+  let writingRules = [];
   if (docTexts.size > 0) {
-    const { required: writingRules, excluded, unknown } = documentationDuty(ALL_RULE_IDS, NOT_A_WRITING_RULE);
+    const { required, excluded, unknown } = documentationDuty(ALL_RULE_IDS, NOT_A_WRITING_RULE);
+    writingRules = required;
     /* 主體是「規則 × 讀得到的文件」—— 一份都讀不到的話是 0，那也是實話 */
     saw('rule-not-documented', writingRules.length * docTexts.size);
     /*
@@ -727,6 +734,9 @@ for (const rel of ['src/i18n/ui.ts', 'src/config/site.ts']) {
    */
   const EXAMPLE = /^([✗✓])\s+(.+)$/;
   let examples = 0;
+  /** 文件裡標成反例的那些字串 —— 底下「每條規則都要有反例」要用 */
+  /** @type {string[]} */
+  const badExamples = [];
   for (const [docName, body] of docTexts) {
     for (const fence of body.matchAll(/```[a-z]*\n([\s\S]*?)```/g)) {
       const lines = fence[1].split('\n');
@@ -734,6 +744,7 @@ for (const rel of ['src/i18n/ui.ts', 'src/config/site.ts']) {
         const m = EXAMPLE.exec(lines[i].trim());
         if (!m) continue;
         examples += 1;
+        if (m[1] === '✗') badExamples.push(m[2]);
         const hits = RULES.filter((r) => {
           r.bad.lastIndex = 0;
           return r.bad.test(m[2]);
@@ -755,6 +766,56 @@ for (const rel of ['src/i18n/ui.ts', 'src/config/site.ts']) {
       }
     }
   }
+
+  /*
+   * ── 每一條規則都要有一個反例 ──────────────────────
+   *
+   * 第 6 輪（第四十一圈）加的。這一圈問「這一課學過了，當時修乾淨了嗎？」，
+   * 而那一課（第十四圈）是：
+   *
+   *   > 那兩條只存在於 `check:copy` 裡，沒有寫在文件裡。
+   *   > **照文件寫的人會在 CI 上被擋下來卻不知道為什麼** ——
+   *   > 同一個約定有兩個地方在管，而兩邊的清單不一樣。
+   *
+   * 那一課的修法是 `rule-not-documented`：每條規則的 **id** 要出現在兩份文件裡。
+   * 上面那一段（第三十七圈）又補了：**寫出來的例子要跟規則對得上**。
+   *
+   * 少的是中間那一塊：**id 在、例子也對，但那條規則可能一個例子都沒有。**
+   * 光有 id 教不會人任何事 —— 而那一課要修的正是「不知道為什麼」。
+   *
+   * 今天量過：5 條寫作規則各有 1～2 個反例，**5／5 都有**。
+   * 所以這是把現況釘住，不是修一個現行的錯。
+   *
+   * 豁免的那 4 條沿用 `rule-not-documented` 的同一份決定（`writingRules`），
+   * 不另外寫一份清單 —— 兩份清單就是那一課本身。
+   */
+  const noExample = writingRules.filter((id) => {
+    const rule = RULES.find((r) => r.id === id);
+    if (!rule) return false;
+    return !badExamples.some((text) => {
+      rule.bad.lastIndex = 0;
+      return rule.bad.test(text);
+    });
+  });
+  /*
+   * ── 為什麼這裡只說不擋 ──────────────────────────
+   *
+   * 第一版是 `problems.push()`。結果 `test-copy-rules` 有**三格**當場紅了 ——
+   * 那三格的假文件為了讓 `rule-not-documented` 閉嘴而列出五個 id，
+   * 但它們只放**一個**跟自己那一格有關的例子。
+   *
+   * 也就是說「擋」會讓**每一份提到那五個 id 的文件**都得帶五個例子。
+   * 那個代價換來的是一個今天 0 件的問題（5 條規則各有 1～2 個反例，量過）。
+   * 所以只說不擋 —— 數字看得見就夠了，真的少掉一個例子的時候它會自己講。
+   */
+  notes.push(
+    noExample.length === 0
+      ? `每條寫作規則都有反例：${writingRules.length} 條規則、${badExamples.length} 個反例，一條不漏。`
+      : `**${noExample.length} 條規則的 id 寫進文件了，但沒有任何一個反例是它抓得到的**：` +
+          `${noExample.join('、')}\n` +
+          '    讀文件的人知道有這條規則，不知道它長什麼樣子。\n' +
+          '    改法：在「用字的幾個約定」加一組 `✗`／`✓`（反例放程式碼框裡，那種框不會被掃）。',
+  );
   saw('example-not-real', examples);
   if (examples === 0) {
     notes.push(
