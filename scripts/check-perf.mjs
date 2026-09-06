@@ -30,6 +30,7 @@
  * 卻沒有換到任何保障。輸出裡會同時印 brotli 的數字，讓人知道實際值。
  */
 import { readdir, readFile } from 'node:fs/promises';
+import { projectDay } from './lib/project-day.mjs';
 import { resolve, dirname, relative, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync, brotliCompressSync, constants } from 'node:zlib';
@@ -935,8 +936,25 @@ console.log(
  * 上一版把一個從別人的站推論出來的等級寫成事實，而且方向還是反的。
  */
 const MEASURED = { date: '2026-09-04', lo: -1.7, hi: -0.4, pages: 4, cmd: 'npm run probe:served' };
+/*
+ * ── 那個日期要說出「多久以前」──────────────────
+ *
+ * 第 2 輪（第三十八圈）加的。這一圈問「這件事現在靠誰記得？忘了會怎樣？」
+ *
+ * 這一行本來就已經做對了大半：它說得出**什麼時候量的**、**怎麼重量**。
+ * 缺的是最後一步 —— **那是多久以前**。
+ * 「2026-09-04 實測」讀起來永遠像剛量過，而它會一直是那個日期，
+ * 直到有人想起來去跑 `probe:served`。
+ *
+ * 那一輪跑了一次，結果是 **0 頁量到** ——
+ * 本機領先 origin 105 個 commit（12 個動到 src/），線上那一份根本比本機舊。
+ * 也就是說這個宣稱現在**重量不出來**，而在這之前輸出不會透露這件事。
+ */
+const measuredDays = Math.round(
+  (Date.parse(`${projectDay()}T00:00:00Z`) - Date.parse(`${MEASURED.date}T00:00:00Z`)) / 86_400_000,
+);
 console.log(
-  `  　　　　　這個 gzip 數字是**上界**：${MEASURED.date} 實測 GitHub Pages 對這個站送出的，` +
+  `  　　　　　這個 gzip 數字是**上界**：${MEASURED.date}（${measuredDays} 天前）實測 GitHub Pages 對這個站送出的，` +
     `比它少 ${Math.abs(MEASURED.hi)}%～${Math.abs(MEASURED.lo)}%（${MEASURED.pages} 頁，內容 md5 逐頁核對）` +
     `　—— 要重量：${MEASURED.cmd}`,
 );

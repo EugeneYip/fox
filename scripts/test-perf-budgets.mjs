@@ -219,6 +219,28 @@ console.log('─'.repeat(64));
 }
 
 /*
+ * ── 那個「實測」的日期要說出多久以前 ──────────────
+ *
+ * 第 2 輪（第三十八圈）：這一行本來就說得出什麼時候量的、怎麼重量，
+ * 缺的是**那是多久以前** ——「2026-09-04 實測」讀起來永遠像剛量過。
+ *
+ * 那一輪跑了一次 `probe:served`，結果是 **0 頁量到**（本機領先 origin
+ * 105 個 commit，線上那一份比本機舊），也就是說這個宣稱現在重量不出來 ——
+ * 而在這之前輸出不會透露這件事。
+ */
+{
+  const dir = await mkdtemp(join(tmpdir(), 'perf-days-'));
+  await writeFile(join(dir, 'index.html'), page({ body: '<p>小</p>' }), 'utf8');
+  const out = await check(dir);
+  const m = /(\d{4}-\d{2}-\d{2})（(-?\d+) 天前）實測/.exec(out);
+  const ok = m !== null && Number(m[2]) >= 0;
+  if (!ok) failed++;
+  console.log(`  ${ok ? '✓' : 'X'} 那句「實測」帶著日期與天數` + (m ? `（${m[1]}，${m[2]} 天前）` : ''));
+  if (!ok) console.log('        ' + (out.split('\n').find((l) => /實測 GitHub Pages/.test(l)) ?? '（那一行沒印）'));
+  await rm(dir, { recursive: true, force: true });
+}
+
+/*
  * ── 架構文件說 JavaScript 有幾段，要跟產出對得上 ──────────────
  *
  * 第 2 輪（第三十七圈）：`docs/ARCHITECTURE.md` 在「決定性的因素是

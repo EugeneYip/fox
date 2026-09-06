@@ -156,13 +156,49 @@ for (const [path, file] of PAGES) {
 
 console.log('-'.repeat(78));
 
+/*
+ * ── 「全部都不一樣」的時候，直接去問 git ────────────────
+ *
+ * 第 2 輪（第三十八圈）加的。這一圈問「這件事現在靠誰記得？忘了會怎樣？」
+ *
+ * 原本這裡只給兩個候選（identity.local ／ 部署還沒跑完）就把判斷丟回去，
+ * 而那一句「**全部**都不一樣的話才要懷疑是部署還沒跑完」**自己查得到** ——
+ * 本機領先 origin 幾個 commit、其中幾個動到 `src/`，`git` 一行就回答了。
+ *
+ * 那一輪實測：5 頁全部對不上，而本機領先 **105 個 commit、其中 12 個動到 src/**。
+ * 也就是說線上那一份本來就比本機舊 —— 不是壞掉，是還沒推。
+ * 而在這之前，讀的人只能在兩個候選之間猜。
+ *
+ * 查不到 git（沒有 origin、或不是 git 工作樹）就只印原本那兩句，不要當成錯。
+ */
 if (mismatched.length > 0) {
+  let ahead = null;
+  try {
+    const { execFileSync } = await import('node:child_process');
+    const run = (/** @type {string[]} */ args) =>
+      execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    ahead = { all: Number(run(['rev-list', '--count', 'origin/main..HEAD'])), src: Number(run(['rev-list', '--count', 'origin/main..HEAD', '--', 'src/'])) };
+  } catch {
+    ahead = null;
+  }
   console.log(
     `\n  有 ${mismatched.length} 頁線上跟本機不一樣：${mismatched.join('、')}\n` +
       `  有 src/config/identity.local.ts 的話這是正常的 —— 那些值只在你的機器上，\n` +
-      `  CI 拿不到，所以線上那一份少了它們（見 docs/PRIVACY.md）。\n` +
-      `  **全部**都不一樣的話才要懷疑是部署還沒跑完。`,
+      `  CI 拿不到，所以線上那一份少了它們（見 docs/PRIVACY.md）。`,
   );
+  if (ahead === null) {
+    console.log('  **全部**都不一樣的話才要懷疑是部署還沒跑完（這裡問不到 git，沒辦法替你查）。');
+  } else if (ahead.src > 0) {
+    console.log(
+      `  而本機**領先 origin/main ${ahead.all} 個 commit，其中 ${ahead.src} 個動到 src/** ——\n` +
+        `  線上那一份本來就比這裡舊，對不上是正常的。不是壞掉，是還沒推。`,
+    );
+  } else {
+    console.log(
+      `  本機領先 origin/main ${ahead.all} 個 commit，但**沒有一個動到 src/** ——\n` +
+        `  所以產出應該要一樣。全部都對不上的話，才真的要懷疑部署沒跑完。`,
+    );
+  }
 }
 
 if (checked === 0) {
