@@ -119,6 +119,46 @@ console.log('\nYouTube 降級層（零網路）\n' + '─'.repeat(64));
 }
 
 /*
+ * ── 訊息裡要點名每一個算數的狀態碼 ────────────────────
+ *
+ * 第 4 輪（第四十一圈）：判斷是 `404|500|502|503`，而那句話原本寫死
+ * 「不只 404，**500** 也算」—— 也就是程式比它自己的說明寬兩個碼，
+ * 而同一句話還被抄進另外五個地方。
+ *
+ * 現在訊息是從清單生出來的。這一格守的是「以後也維持這樣」：
+ * 每一個會走進那條路的狀態碼，都要在使用者看得到的那句話裡出現。
+ */
+{
+  /** @type {string[]} */
+  const missing = [];
+  for (const code of [404, 500, 502, 503]) {
+    const s = spies({ rssFails: true });
+    s.fetchRss = async () => {
+      throw new Error(`HTTP ${code}（試了 7 次）`);
+    };
+    /** @type {any} */
+    let err = null;
+    try {
+      await fetchYouTubeSource(SOURCE, s);
+    } catch (e) { err = e; }
+    /*
+     * 只看「改法：」後面那一段。整句話的前半是
+     * `RSS 失敗（HTTP 502（試了 7 次)）` —— **狀態碼本來就在裡面**，
+     * 拿整句話去 `includes` 的話這一格永遠是綠的
+     * （第一版就是這樣，突變套上去照樣通過）。
+     */
+    const msg = String(err?.message ?? '');
+    const advice = msg.split('改法：')[1] ?? '';
+    if (!/不要當成帳號沒了/.test(advice) || !advice.includes(String(code))) missing.push(String(code));
+  }
+  check(
+    '每一個算數的狀態碼都在訊息裡點名（404、500、502、503）',
+    missing.length === 0,
+    missing.length > 0 ? `沒被點名的：${missing.join('、')}` : '',
+  );
+}
+
+/*
  * ── 500 也要走同一條路 ──────────────────────────
  *
  * 第 4 輪（第四十圈）：判斷原本是 `/404/.test(why)`，只認 404。
