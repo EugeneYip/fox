@@ -1004,10 +1004,33 @@ const reqTotals = pageStats.reduce(
 /** @type {string[]} */
 const empty = [];
 if (images.length > 0 && rendered.length === 0) {
+  /*
+   * ── 「全是 favicon」原本是寫死的一句話 ────────────────
+   *
+   * 第 2 輪（第三十九圈）改的。那一圈在逐條驗待辦，
+   * 而「那句『全是 favicon』是寫死的描述」驗出來**是活的**：
+   * 今天那 7 個檔案確實全是 favicon／PWA 圖示／og:image，
+   * 但那是**巧合**，不是那句話查過的結果。
+   *
+   * 有人往 `public/` 丟一張沒有任何頁面引用的內容圖，
+   * `rendered.length === 0` **仍然成立**，於是這一段照樣說「全是 favicon」
+   * —— 而那時候它是錯的，還剛好蓋掉唯一值得注意的東西
+   * （一個會出貨、卻沒有任何頁面載入的檔案）。
+   *
+   * 改成照檔名分類，認不出來的**逐個列出來**。
+   */
+  const ICONISH = /^(favicon\.|apple-touch-icon|icon-\d|icon-maskable|og\/)/;
+  const stray = images.map((f) => f.path).filter((p2) => !ICONISH.test(p2));
   empty.push(
     `圖片合計／最大單一檔案 —— ${images.length} 個圖片檔，頁面真的會載入的 0 個。\n` +
-      '      全是 favicon、PWA 圖示與 og:image（瀏覽器外框與社群爬蟲抓的），\n' +
-      '      不隨內容成長。綠是因為還沒有內容圖，不是因為內容圖有節制。',
+      (stray.length === 0
+        ? `      ${images.length} 個全都是 favicon／PWA 圖示／og:image（照檔名認的：` +
+          'favicon.*、apple-touch-icon*、icon-N*、icon-maskable*、og/*）——\n' +
+          '      瀏覽器外框與社群爬蟲抓的，不隨內容成長。'
+        : `      其中 ${stray.length} 個**不是** favicon／PWA 圖示／og:image：\n` +
+          stray.map((p2) => `        · ${p2}`).join('\n') + '\n' +
+          '      它們會出貨，而沒有任何頁面載入它們 —— 那通常是忘了刪的檔案。') +
+      '\n      綠是因為還沒有內容圖，不是因為內容圖有節制。',
   );
 }
 /*

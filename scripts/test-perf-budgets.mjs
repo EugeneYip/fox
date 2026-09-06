@@ -219,6 +219,43 @@ console.log('─'.repeat(64));
 }
 
 /*
+ * ── 「全是 favicon」那句話要照檔名算，不是寫死的 ──────────────
+ *
+ * 第 2 輪（第三十九圈）：那一圈在逐條驗待辦，而
+ * 「那句『全是 favicon』是寫死的描述」驗出來是活的 ——
+ * 今天那 7 個檔案確實全是圖示，但那是**巧合**，不是那句話查過的結果。
+ *
+ * 往 `public/` 丟一張沒有任何頁面引用的內容圖，`rendered.length === 0`
+ * 仍然成立，於是那一段照樣說「全是 favicon」—— 而那時它是錯的，
+ * 還剛好蓋掉唯一值得注意的東西（會出貨、卻沒有頁面載入的檔案）。
+ */
+{
+  const iconsOnly = await mkdtemp(join(tmpdir(), 'perf-icons-'));
+  await writeFile(join(iconsOnly, 'index.html'), page({ body: '<p>小</p>' }), 'utf8');
+  await mkdir(join(iconsOnly, 'og'), { recursive: true });
+  for (const f of ['favicon.ico', 'apple-touch-icon.png', 'icon-192.png', 'og/default.png']) {
+    await writeFile(join(iconsOnly, f), 'x', 'utf8');
+  }
+  const clean = await check(iconsOnly);
+  const okClean = /4 個全都是 favicon／PWA 圖示／og:image/.test(clean) && /照檔名認的/.test(clean);
+  if (!okClean) failed++;
+  console.log(`  ${okClean ? '✓' : 'X'} 全是圖示時說得出「照檔名認的」是哪幾種`);
+  if (!okClean) console.log('        ' + clean.split('\n').filter((l) => /圖片合計|favicon/.test(l)).join(' ｜ '));
+  await rm(iconsOnly, { recursive: true, force: true });
+
+  const withStray = await mkdtemp(join(tmpdir(), 'perf-stray-'));
+  await writeFile(join(withStray, 'index.html'), page({ body: '<p>小</p>' }), 'utf8');
+  await writeFile(join(withStray, 'favicon.ico'), 'x', 'utf8');
+  await writeFile(join(withStray, 'moon.png'), 'x', 'utf8');
+  const stray = await check(withStray);
+  const okStray = /其中 1 個\*\*不是\*\* favicon／PWA 圖示／og:image/.test(stray) && /· moon\.png/.test(stray);
+  if (!okStray) failed++;
+  console.log(`  ${okStray ? '✓' : 'X'} 有不是圖示的檔案時逐個列出來（moon.png）`);
+  if (!okStray) console.log('        ' + stray.split('\n').filter((l) => /圖片合計|不是|moon/.test(l)).join(' ｜ '));
+  await rm(withStray, { recursive: true, force: true });
+}
+
+/*
  * ── 那個「實測」的日期要說出多久以前 ──────────────
  *
  * 第 2 輪（第三十八圈）：這一行本來就說得出什麼時候量的、怎麼重量，
