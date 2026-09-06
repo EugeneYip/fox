@@ -389,17 +389,42 @@ console.log('─'.repeat(64));
   await writeFile(join(gen, 'index.html'), page(), 'utf8');
   await writeFile(join(gen, '_astro', 'cover.abc123_x.webp'), noise(70_000));
   const out = await check(gen);
-  const ok = out.includes('densities') && out.includes('已經是 WebP');
+  const ok = out.includes('widths') && out.includes('已經是 WebP');
   if (!ok) failed++;
-  console.log(`  ${ok ? '✓' : 'X'} 觸發的是 Astro 產的圖：改法講來源圖與 densities`);
+  console.log(`  ${ok ? '✓' : 'X'} 觸發的是 Astro 產的圖：改法講來源圖與 widths`);
   if (!ok) console.log(`        實際：${out.split('\n').find((l) => l.includes('改法：'))?.trim() ?? '（沒有改法那一行）'}`);
+
+  /*
+   * ── 那句建議點名的 prop，元件裡真的有嗎 ────────────────
+   *
+   * 第 2 輪（第四十圈）加的。上面那一格原本斷言訊息裡有 `densities`，
+   * 而 `CoverImage` 從第二十圈起就改用 `widths` ＋ `sizes` 了 ——
+   * **那一格把過期的說法鎖住了**，而且沒有人會發現：
+   * 這句話要「最大單一檔案」超標且觸發的是 `_astro/*.webp` 才印，
+   * 而站上到今天 0 張內容圖，所以它在真的站上一次都沒印過。
+   *
+   * 所以這一格不比字面，比的是**訊息點名的東西在元件裡存在**。
+   * 改了元件而忘了改訊息（或反過來）都會在這裡停下來。
+   */
+  const cover = await readFile(resolve(ROOT, 'src/components/content/CoverImage.astro'), 'utf8').catch(() => '');
+  /** 訊息裡點名的 Astro `<Image>` prop */
+  const named = /改 CoverImage\.astro 的 ([a-z]+)/.exec(out)?.[1] ?? null;
+  const usesIt = named !== null && new RegExp(`\\n\\s*${named}=`).test(cover);
+  if (!usesIt) failed++;
+  console.log(`  ${usesIt ? '✓' : 'X'} 改法點名的 prop，CoverImage 真的在用（${named ?? '抽不到'}）`);
+  if (!usesIt) {
+    console.log(
+      `        訊息說去改 \`${named ?? '（抽不到）'}\`，但 CoverImage.astro 裡沒有那個 prop。\n` +
+        '        叫人去改一個不存在的東西，比不給建議更糟。',
+    );
+  }
   await rm(gen, { recursive: true, force: true });
 
   const plain = await mkdtemp(join(tmpdir(), 'perf-plainfile-'));
   await writeFile(join(plain, 'index.html'), page(), 'utf8');
   await writeFile(join(plain, 'big.bin'), noise(70_000));
   const out2 = await check(plain);
-  const ok2 = out2.includes('先問它能不能壓') && !out2.includes('densities');
+  const ok2 = out2.includes('先問它能不能壓') && !out2.includes('已經是 WebP');
   if (!ok2) failed++;
   console.log(`  ${ok2 ? '✓' : 'X'} 觸發的不是 Astro 產的圖：維持原本的改法（反向案例）`);
   await rm(plain, { recursive: true, force: true });
