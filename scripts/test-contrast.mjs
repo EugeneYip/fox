@@ -1153,4 +1153,58 @@ console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
   if (!okNone) console.log('        ' + none.out.split('\n').filter((l) => /抽不到|tokens.css/.test(l)).join(' ｜ '));
 }
 
+/*
+ * ── 歸不到桶的那些，涵蓋率要說出來 ──────────────────
+ *
+ * 第 8 輪（第四十三圈）：那一段本來是 `if (!bucket) continue;` ——
+ * 歸不到前景也歸不到背景的宣告**直接消失**，而「涵蓋率⋯都在 PAIRS 裡 ✓」
+ * 照樣印。站上真的有兩種：`box-shadow: 0 0 0 1px var(--c-rule-strong)`，
+ * 以及 `--border-thin: 1px solid var(--c-rule)`（自訂屬性帶著顏色，
+ * 再由 `border-top: var(--border-thin)` 用出去）。
+ *
+ * 三個方向：有的時候要說、沒有的時候不能亂說、gradient 背景不算在裡面
+ * （判準那一行本來就寫著不含 gradient，混進來會讀起來像壞了）。
+ */
+{
+  console.log('\n' + '─'.repeat(64));
+  /* 把 `--border-thin` 那個自訂屬性的顏色拿掉，這樣「乾淨」才是真的乾淨 */
+  const cleanTokens = realTokens.replace(
+    '--border-thin: 1px solid var(--c-rule);',
+    '--border-thin: 1px solid #8a837b;',
+  );
+  /** @param {string} extraCss */
+  const runWith = async (extraCss) => {
+    const dir = await mkdtemp(join(tmpdir(), 'contrast-bucket-'));
+    await mkdir(join(dir, 'src/styles'), { recursive: true });
+    await writeFile(join(dir, 'src/styles/tokens.css'), cleanTokens, 'utf8');
+    await writeFile(join(dir, 'src/styles/global.css'), realGlobal + extraCss, 'utf8');
+    let out = '';
+    try {
+      ({ stdout: out } = await run('node', [resolve(ROOT, 'scripts/check-contrast.mjs'), `--root=${dir}`]));
+    } catch (err) {
+      out = String(/** @type {{ stdout?: string }} */ (err)?.stdout ?? '');
+    }
+    await rm(dir, { recursive: true, force: true });
+    return out;
+  };
+
+  const quiet = await runWith('');
+  const okQuiet = !/歸不到這兩桶的屬性/.test(quiet);
+  if (!okQuiet) failed++;
+  console.log(`  ${okQuiet ? '✓' : 'X'} 沒有歸不到桶的東西時不亂說`);
+  if (!okQuiet) console.log('        ' + (quiet.split('\n').find((l) => l.includes('歸不到')) ?? ''));
+
+  const loud = await runWith('\n.probe { box-shadow: 0 0 0 1px var(--c-ink); }\n');
+  const okLoud = /歸不到這兩桶的屬性/.test(loud) && /· box-shadow：--c-ink/.test(loud);
+  if (!okLoud) failed++;
+  console.log(`  ${okLoud ? '✓' : 'X'} box-shadow 用了 token 時點名（屬性與 token 都說）`);
+  if (!okLoud) console.log('        ' + (loud.split('\n').find((l) => l.includes('歸不到')) ?? '（沒印）'));
+
+  const grad = await runWith('\n.probe2 { background: linear-gradient(var(--c-flame), var(--c-moss)); }\n');
+  const okGrad = !/歸不到這兩桶的屬性/.test(grad) && /gradient 背景，判準那一行本來就寫著不算/.test(grad);
+  if (!okGrad) failed++;
+  console.log(`  ${okGrad ? '✓' : 'X'} gradient 背景另外算，不混進「歸不到桶」`);
+  if (!okGrad) console.log('        ' + grad.split('\n').filter((l) => /歸不到|gradient/.test(l)).join(' ｜ '));
+}
+
 process.exit(failed > 0 ? 1 : 0);

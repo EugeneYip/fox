@@ -1298,4 +1298,23 @@ if (over === 0 && staleDocs === 0) {
   }
   console.log('');
 }
-process.exit(over > 0 || staleDocs > 0 ? 1 : 0);
+/*
+ * ── 最後一行用 `process.exitCode`，不用 `process.exit()` ──────────
+ *
+ * `process.exit()` **不等 stdout 排空**。輸出接到終端機時是同步寫的，
+ * 看不出來；接到**管線**時（CI 收集輸出、測試用 execFile 讀 stdout）
+ * 是非同步的，排隊中的那一段就這樣被丟掉。
+ *
+ * 第 8 輪（第四十三圈）量到的：把 `--verbose` 的輸出接到管線跑 30 次，
+ * **1 次被截斷** —— 停在第 74 行的中間，後面 30 行（含最後的判決）全沒了。
+ * 而讀輸出的人看到的是「10 條預算，只有 9 條有 basis」，
+ * 也就是**一個看起來像內容錯誤的假紅燈**。那正是記了好幾圈的偶發紅燈之一。
+ *
+ * 上面第 800 行那段註解說「不用 `process.exitCode`，會被最後這一行蓋掉」——
+ * 那是對的，指的是**中間**那些地方。**最後一行**設 `exitCode` 沒有東西會蓋它，
+ * 而且 node 會等 stdout 排空才真的離開。
+ *
+ * 這個檔案還有兩個早退的 `process.exit(1)`（dist 是空的那種），
+ * 訊息都很短，先不動 —— 其餘七支關卡也都以 `process.exit()` 收尾，記在待辦。
+ */
+process.exitCode = over > 0 || staleDocs > 0 ? 1 : 0;

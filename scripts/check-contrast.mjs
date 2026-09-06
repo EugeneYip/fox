@@ -751,6 +751,10 @@ async function* walkSurf(dir) {
   const fgUse = new Map();
   /** @type {Map<string, Set<string>>} 純色背景 token → 用在哪 */
   const bgUse = new Map();
+  /** @type {Map<string, Set<string>>} 歸不到前景也歸不到背景的屬性 → 它用到的 token */
+  const unbucketed = new Map();
+  /** gradient 背景用掉的 token 次數 —— 判準本來就不算它們，但要說出有幾個 */
+  let gradientBg = 0;
 
   for await (const file of walkSrc(resolve(ROOT, 'src'))) {
     const raw = await readFile(file, 'utf8');
@@ -776,7 +780,42 @@ async function* walkSurf(dir) {
         : BG_PROPS.has(prop) && !/gradient\(/.test(value)
           ? bgUse
           : null;
-      if (!bucket) continue;
+      /*
+       * ── 歸不到桶的那些，要數出來 ──────────────────
+       *
+       * 這一段本來是 `if (!bucket) continue;` —— 歸不到前景也歸不到背景的
+       * 宣告**直接消失**，而底下那句「涵蓋率⋯都在 PAIRS 裡 ✓」照樣印。
+       *
+       * 第 8 輪（第四十三圈）數了一次站上真的用到 `--c-` token 的屬性：
+       *
+       *   color 99、background 30、border 7、border-color 4、
+       *   border-inline-start 3、outline 2、text-decoration-color 2
+       *   —— 以上有桶
+       *   box-shadow 2、`--border-thin: 1px solid var(--c-rule)` 1
+       *   —— **沒有桶**
+       *
+       * `--border-thin` 那一個是自訂屬性帶著顏色，再由 `border-top:
+       * var(--border-thin)` 用出去；`box-shadow` 是第四十二圈第 8 輪刻意
+       * 先不算的（要先講清楚「哪種投影算邊」）。兩種都不是錯，
+       * 但**它們不在那個涵蓋率裡，而那句話沒說**。
+       *
+       * 所以照這一圈其他關卡的做法：不改判準，把邊界外面數出來、印出來。
+       */
+      if (!bucket) {
+        /*
+         * gradient 背景另外算：判準那一行本來就寫著「但不含 gradient」，
+         * 把它混進「歸不到桶」會讓那句話讀起來像有東西壞了。
+         * 第一版就是這樣，`background` 帶著 4 個 token 出現在名單上。
+         */
+        if (BG_PROPS.has(prop)) gradientBg += tokens.length;
+        else {
+          for (const t of tokens) {
+            if (!unbucketed.has(prop)) unbucketed.set(prop, new Set());
+            /** @type {Set<string>} */ (unbucketed.get(prop)).add(t);
+          }
+        }
+        continue;
+      }
       for (const t of tokens) {
         if (!bucket.has(t)) bucket.set(t, new Set());
         /** @type {Set<string>} */ (bucket.get(t)).add(where);
@@ -937,6 +976,34 @@ async function* walkSurf(dir) {
   const pairFg = new Set(PAIRS.map((p) => p.fg));
   const pairAny = new Set([...PAIRS.map((p) => p.fg), ...PAIRS.map((p) => p.bg)]);
 
+  /**
+   * 邊界外面那一句 —— 沒有東西在外面就完全不印（不要為了說而說）。
+   * 兩條路（綠燈那句、紅燈那段）都會接上它，因為那兩種情況下它都一樣真。
+   */
+  const outsideLine = () => {
+    /*
+     * 兩件事互相獨立，所以分開組。
+     * 第一版把 gradient 那句寫在「有歸不到桶的東西」裡面，
+     * 於是站上只有 gradient、沒有別的時，那句話一個字都不會印 ——
+     * 而那正是它要說的情況。突變掃描前就被自己的測試抓到了。
+     */
+    /** @type {string[]} */
+    const parts = [];
+    if (unbucketed.size > 0) {
+      const rows = [...unbucketed.entries()].sort((a, b) => b[1].size - a[1].size);
+      const total = rows.reduce((n, [, ts]) => n + ts.size, 0);
+      parts.push(
+        `　　　　另有 ${total} 個 token 是被**歸不到這兩桶的屬性**用掉的，不在上面那個數字裡：\n` +
+          rows.map(([prop, ts]) => `　　　　　　· ${prop}：${[...ts].join('、')}`).join('\n') +
+          '\n　　　　（自訂屬性帶著顏色、或 `box-shadow` 這種 —— 不是錯，是這個涵蓋率看不到。）',
+      );
+    }
+    if (gradientBg > 0) {
+      parts.push(`　　　　（另外 ${gradientBg} 處是 gradient 背景，判準那一行本來就寫著不算。）`);
+    }
+    return parts.length > 0 ? '\n' + parts.join('\n') : '';
+  };
+
   /** @type {string[]} */
   const gaps = [];
   for (const [token, files] of fgUse) {
@@ -966,12 +1033,16 @@ async function* walkSurf(dir) {
        */
       `涵蓋率：前景 ${fgUse.size} 種、純色背景 ${bgUse.size} 種，都在 PAIRS 裡 ✓\n` +
         '　　　　（只數 `--c-` 開頭的：前景＝`color`／`fill`／`stroke`／`border-*-color` 那一類，' +
-        '背景＝`background`／`background-color`／`background-image` 但不含 gradient）',
+        '背景＝`background`／`background-color`／`background-image` 但不含 gradient）' +
+        outsideLine(),
     );
   } else {
     console.log('涵蓋率：有顏色在用，但沒有任何一組對比在算它 —');
     for (const g of gaps) console.log(g);
     console.log('  修法：在 PAIRS 加一組，順便決定它的門檻（text 4.5 / large 3 / ui 3 / decorative 無）。');
+    /* 紅燈時同樣要說邊界在哪 —— 不然「還有幾個根本沒被分類」會被漏掉 */
+    const outside = outsideLine();
+    if (outside) console.log(outside.replace(/^\n/, ''));
     failures += gaps.length;
   }
 }

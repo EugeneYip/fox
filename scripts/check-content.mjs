@@ -2366,12 +2366,29 @@ if (problems.length === 0) {
     console.log('要看每條規則實際判斷過幾個東西：npm run check:content -- --verbose');
   }
   console.log(idleReport + fieldReport);
-  process.exit(0);
+  /*
+   * ── 這兩個出口用 `process.exitCode`，不用 `process.exit()` ──────────
+   *
+   * `process.exit()` **不等 stdout 排空**。接到終端機時是同步寫的，
+   * 看不出來；接到**管線**時（CI 收集輸出、測試用 execFile 讀 stdout）
+   * 是非同步的，排隊中的那一段就被丟掉。
+   *
+   * 第 8 輪（第四十三圈）在 `check:perf` 上實測到 30 次斷 1 次，
+   * 修完之後同一天又在這一支上撞到：`test:content-rules` 紅，
+   * 而失敗的是 `rule-not-in-guide`（`out.includes('[rule-not-in-guide]')`
+   * 讀不到那一行）—— **不是規則沒響，是那一行沒送到。**
+   *
+   * 綠燈那條路也要改：它印的是最長的那一份報告，最容易被截斷。
+   * 改成設 `exitCode` 之後用 `return` 收尾（這裡是模組頂層，return 不合法，
+   * 所以把底下那段包成 else）。
+   */
+  process.exitCode = 0;
+} else {
+  for (const p of problems) {
+    console.log(`\n  X [${p.id}] ${p.file}`);
+    console.log(`      ${p.msg}`);
+  }
+  console.log('\n' + '─'.repeat(56));
+  console.log(`${problems.length} 個問題。\n`);
+  process.exitCode = 1;
 }
-for (const p of problems) {
-  console.log(`\n  X [${p.id}] ${p.file}`);
-  console.log(`      ${p.msg}`);
-}
-console.log('\n' + '─'.repeat(56));
-console.log(`${problems.length} 個問題。\n`);
-process.exit(1);
