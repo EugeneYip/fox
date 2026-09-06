@@ -78,7 +78,7 @@ const t = useTranslations(locale);
       {description && <p class="article__lead">{description}</p>}
     </header>
 
-    {cover && <CoverImage src={cover} alt={coverAlt} />}
+    {cover && <CoverImage src={cover} alt={coverAlt} column="34rem" />}
 
     {series && seriesEntries.length > 1 && (
       <SeriesNav

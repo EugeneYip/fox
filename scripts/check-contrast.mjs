@@ -867,6 +867,49 @@ async function* walkSurf(dir) {
     }
   }
 
+  /*
+   * ── `sizes` 裡那份 `--gutter` 是抄的，抄的會漂 ────────────
+   *
+   * 第 8 輪（第三十九圈）加的。`CoverImage.astro` 的 `sizes` 要描述欄寬
+   * （`min(100vw − 2 × gutter, 那個 --w-* token)`），而 `sizes` 屬性
+   * **不能用 `var()`** —— 瀏覽器的預載掃描器在 CSS 變數解析之前就要讀它。
+   *
+   * 所以 `--gutter` 的值在那邊有一份**手抄的複本**。改了 tokens.css
+   * 而沒改那一份的話，兩邊會安靜地分岔：畫面照樣正確（CSS 用的是真的 token），
+   * 錯的是瀏覽器挑檔案時心裡想的寬度 —— 而那件事在畫面上看不出來。
+   *
+   * 這一格就是為了那個看不出來的分岔。
+   */
+  {
+    const coverPath = resolve(ROOT, 'src/components/content/CoverImage.astro');
+    const cover = await readFile(coverPath, 'utf8').catch(() => null);
+    const declared = /^\s*--gutter\s*:\s*([^;]+);/m.exec(css)?.[1]?.trim() ?? null;
+    const copied = cover === null ? null : /const GUTTER = '([^']+)'/.exec(cover)?.[1]?.trim() ?? null;
+    console.log('\n' + '─'.repeat(78));
+    if (cover === null) {
+      console.log('gutter 複本：讀不到 CoverImage.astro —— **這一格沒有在守**。');
+    } else if (declared === null || copied === null) {
+      console.log(
+        'gutter 複本：抽不到其中一邊' +
+          `（tokens.css ${declared === null ? '✗' : '✓'}、CoverImage ${copied === null ? '✗' : '✓'}）` +
+          ' —— **這一格沒有在守**。\n' +
+          '  兩邊的寫法換了的話，這裡的樣式要跟著改（不然它會安靜地什麼都不比）。',
+      );
+    } else if (declared === copied) {
+      console.log(`gutter 複本：CoverImage 的 sizes 跟 --gutter 一致 ✓（${declared}）`);
+    } else {
+      console.log(
+        'gutter 複本：**兩邊不一樣** —\n' +
+          `  tokens.css　　--gutter: ${declared}\n` +
+          `  CoverImage　　const GUTTER = '${copied}'\n` +
+          '  `sizes` 不能用 var()，所以那一份是手抄的。畫面不會壞（CSS 用的是真的 token），\n' +
+          '  壞的是瀏覽器挑檔案時心裡想的寬度 —— 在畫面上看不出來。\n' +
+          '  改法：把 CoverImage 的 GUTTER 改成跟 tokens.css 一樣。',
+      );
+      failures += 1;
+    }
+  }
+
   const pairFg = new Set(PAIRS.map((p) => p.fg));
   const pairAny = new Set([...PAIRS.map((p) => p.fg), ...PAIRS.map((p) => p.bg)]);
 

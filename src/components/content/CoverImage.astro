@@ -38,10 +38,48 @@ interface Props {
   alt?: string;
   /** 詩詞頁的封面窄一點，文章頁滿版 */
   width?: number;
+  /**
+   * 這張圖所在的**欄寬上限**，要跟外層 `.wrap--*` 的 token 一致。
+   * 詩詞頁是 `.wrap--content`（46rem），文章頁是 `.wrap--prose`（34rem）。
+   * 見底下 `sizes` 那一段的說明 —— 這不是 `width`，兩個是不同的東西。
+   */
+  column?: string;
   caption?: string;
 }
 
-const { src, alt, width = 900, caption } = Astro.props;
+const { src, alt, width = 900, column = '46rem', caption } = Astro.props;
+
+/*
+ * ── `sizes` 描述的是**欄寬**，不是 `width`，也不是視窗 ──────────
+ *
+ * 第 8 輪（第三十九圈）在瀏覽器裡量出來的。原本寫的是
+ * `(max-width: 40rem) 100vw, ${width}px` —— 三個部分都不對：
+ *
+ * 1. **`40rem` 不對應任何東西。** 版面上根本沒有這個斷點。
+ * 2. **`100vw` 不對。** 圖是 `inline-size: 100%`，填的是 `.wrap` 扣掉
+ *    左右 `--gutter` 之後的欄寬，永遠比視窗窄。實測 640px 視窗上是 576px。
+ * 3. **`${width}px` 不對，而且錯得最遠。** `width` 是內在尺寸（給長寬比用的），
+ *    跟版面上真的畫多寬沒有關係。兩個用處都對不上：
+ *
+ *      文章（EntryLayout，`.wrap--prose`）　width=900　真正上限 34rem＝544px
+ *      詩詞頁（`.wrap--content`）　　　　　width=760　真正上限 46rem＝736px
+ *
+ * 真正的欄寬就是 `.wrap` 那兩行 CSS：
+ *
+ *      .wrap           { padding-inline: var(--gutter); }
+ *      .wrap--content  { max-width: calc(var(--w-content) + var(--gutter) * 2); }
+ *
+ *   → 欄寬 ＝ min(100vw − 2 × gutter, 那個 --w-* token)
+ *
+ * `sizes` 裡**不能用 `var()`** —— 瀏覽器的預載掃描器在 CSS 變數解析之前
+ * 就要讀這個屬性，所以 `--gutter` 的值只能照抄一份。抄的那一份會漂，
+ * 所以兩邊都留了指回對方的註解（`tokens.css` 的 `--gutter` 也是）。
+ *
+ * 實測這個寫法瀏覽器吃得下，而且真的改變了選檔：
+ * 420px 視窗、DPR 2 —— 原本挑 1200w，改完挑 800w。
+ */
+const GUTTER = 'clamp(1.25rem, 5vw, 3rem)';
+const sizes = `min(100vw - 2 * ${GUTTER}, ${column})`;
 const decorative = !alt?.trim();
 ---
 
@@ -51,7 +89,7 @@ const decorative = !alt?.trim();
     alt={alt ?? ''}
     width={width}
     widths={[400, 800, 1200, 1600]}
-    sizes={`(max-width: 40rem) 100vw, ${width}px`}
+    sizes={sizes}
     loading="eager"
     fetchpriority="high"
     decoding="async"
