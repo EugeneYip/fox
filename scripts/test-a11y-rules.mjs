@@ -1135,6 +1135,39 @@ console.log('─'.repeat(64));
   const okCount = /\d+ 頁、\d+ 條規則/.test(out);
   if (!okCount) failed++;
   console.log(`  ${okCount ? '✓' : 'X'} 標題說得出「幾頁、幾條規則」`);
+
+  /*
+   * ── 同一次輸出裡的兩個規則數要相等 ──────────────────
+   *
+   * 第 1 輪（第四十圈）：標題印「31 條規則」，而底下那句
+   * 「上面那 N 條是靜態的」印的是 **30** —— 寫死的，規則加到 31
+   * 的時候沒有人回來改。兩個數字隔了十幾行，各自看都很正常。
+   *
+   * 這一格比的是**兩者相等**，不是「等於 31」——
+   * 釘死一個數字的話，加規則的人要改的地方就從一個變成兩個。
+   */
+  /*
+   * 那一行只在「有比對文件」的時候印，而 `--dir=` 會關掉文件比對
+   * （見 check-a11y 的 `checkDoc`）。所以這裡自己給一份最小的文件：
+   * 只要抽得到一個日期，那一段就會印。
+   */
+  const docPath = join(dir, 'A11Y-fixture.md');
+  await writeFile(docPath, '重驗：2026-09-06\n', 'utf8');
+  const out2 = await runCheck(dir, [`--doc=${docPath}`]);
+  const headline = /(\d+) 頁、(\d+) 條規則/.exec(out2);
+  const inline = /上面那 (\d+) 條是靜態的/.exec(out2);
+  const okSame = headline !== null && inline !== null && headline[2] === inline[1];
+  if (!okSame) failed++;
+  console.log(
+    `  ${okSame ? '✓' : 'X'} 標題與「上面那 N 條」說的是同一個數字` +
+      (headline && inline ? `（${headline[2]}）` : ''),
+  );
+  if (!okSame) {
+    console.log(
+      `      標題：${headline?.[2] ?? '（抽不到）'}　內文：${inline?.[1] ?? '（抽不到）'}\n` +
+        '      兩個數字都要從 RULE_IDS.length 來，不要各寫各的。',
+    );
+  }
   if (!okCount) console.log('        ' + out.split('\n').slice(0, 4).join(' | '));
 
   const okVerbose = /--verbose/.test(out);
