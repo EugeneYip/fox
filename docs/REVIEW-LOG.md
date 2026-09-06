@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 49,500 行、2.6 MB、300 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 49,700 行、2.6 MB、301 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -48690,4 +48690,152 @@ exit 1；還原後 0。
   `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：3 — 內容結構**
+
+### 2026-09-06 — 第 3 輪（第三十八圈）：內容結構
+
+**第三十八圈問：這件事現在靠誰記得？忘了會怎樣？**
+判準：**這一步有沒有自動化？沒有的話，忘記的後果是什麼、多久會被發現？**
+
+#### 1. 先看幾條既有的候選，結果都已經自動化了
+
+| 待辦上的 | 現在的狀況 |
+|---|---|
+| `related` 是單向的 | 站上**今天 0 筆** —— 那條待辦沒有主體 |
+| `translationKey` 沒配成對 | `check:content` 早就在報「3 篇填了、**0 組**真的配成對」 |
+| 同步資料放太久 | 兩個鬧鐘（`generatedAt` 與 `lastSuccessAt`）都在 |
+| 改了 `platforms.data.mjs` 忘了重跑產生器 | `check:generated` 擋 |
+
+**這一格沒有問題。** 內容管線裡「靠人記得」的那幾件，前幾圈已經接上了。
+
+#### 2. 沒人守的是另一種宣稱
+
+這些文件除了連結，還會**叫人跑指令**：
+
+```
+npm run write      npm run verify:all      npm run probe:served
+```
+
+那跟連結是**同一種宣稱** —— 文件指著一個東西，那個東西要存在。
+而 `check:doc-links` 只守連結。
+
+量：8 份主要文件提到 **42 個** `npm run`（全部 16 份共 **94 處**），
+**一個都沒壞**。所以這一條是預防性的。
+
+#### 3. 為什麼值得守：發現的時機最差
+
+改一個 script 名字，七份文件會同時指到一個不存在的指令 ——
+而**要等到有人真的去打它才會發現**。
+
+對站主來說那一刻多半是「**她想發文的時候**」。
+`docs/CONTENT.md` 是她的文件，裡面 7 個指令有一個壞掉，
+她得到的是 `Missing script`，而不是一篇文章。
+
+實測：把 `write` 改名 →
+
+```
+X [doc-command-missing] CLAUDE.md:97　npm run write
+X [doc-command-missing] CLAUDE.md:104　npm run write
+X [doc-command-missing] docs/CONTENT.md:23　npm run write
+```
+
+三處全部點名，exit 1；還原後 0。
+
+#### 4. 加的時候有三件要想清楚
+
+- **`--` 後面的旗標不看**：`npm run check:a11y -- --verbose` 的
+  `--verbose` 是傳給腳本的，不是 script 名字
+- **讀不到 `package.json` 時不比，而且要說出來** ——
+  測試的假倉庫沒有那個檔案，安靜放行的話「指令都存在」跟「這一格沒在比」
+  在輸出上長得一樣
+- **連結與指令要分開講**：加了之後摘要那一行變成「144 個連結」，
+  而其中 **94 個根本不是連結**。主體數合起來算沒關係，
+  **說出來的時候要分得開**（失敗訊息同理，不然會把人送去查路徑）
+
+#### 5. 我自己先量錯了一次
+
+第一次掃的時候字元類別寫成 `[a-z:]` —— **漏了數字與連字號**。
+於是 `check:a11y` 被截成 `check:a`、`test:privacy-rules` 被截成
+`test:privacy`，三份文件看起來都有壞掉的指令。
+
+**那是我的正則錯，不是文件錯。** 補上 `0-9` 與 `-` 之後是 0。
+（這一圈第三次：拿自己寫的判準去量，而正確的做法是拿系統自己的清單 ——
+這裡是 `package.json` 的 `scripts` 鍵。）
+
+| | 之前 | 現在 |
+|---|---|---|
+| 文件裡的 `npm run` | 沒有人確認 | 94 處，每次 `check:doc-links` 都比 |
+| 改了 script 名字 | 等人去打才發現 | 當場點名是哪一份、哪一行 |
+| 摘要 | 「50 個連結」 | 「50 個連結、94 處 npm run 指令」 |
+| 沒有 `package.json` | ——（會爆） | 說「這次沒有比對」 |
+
+`verify:all` 六道全綠、`test:tools` 855 格全綠、`ci:sim` 在 HEAD 上全綠。
+
+### 待辦（不屬於這一輪）
+
+- **只比 `npm run X`。** 文件裡還有 `node scripts/⋯`、`git ⋯`、`nvm ⋯`
+  那些指令，一樣可能指到不存在的東西（→ 3 內容結構）
+- **`docs/REVIEW-LOG.md` 跳過**（跟連結一樣的理由：那是歷史）。
+  裡面提到的舊指令名字不會被抓 —— 那是刻意的（→ 沒有要改）
+- 上一輪與更早的都還在（那段 git 診斷沒有測試、
+  「上界」宣稱要重量得先推（→ 站主）、
+  螢幕閱讀器仍然沒有人做過、重驗是量本機產出不是正式站、
+  那支探針仍然要人手貼、`15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `check:workflows` 的 10 條規則文件提到 0 條、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、那個偶發紅燈沒有留下證據、
+  `example-not-real` 只看程式碼框裡的例子、
+  `VideoFacade` 一次都沒算繪過、那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  `note` 的「合法但 0 筆」連續兩圈都在、
+  那 9 條「維護者的事」的規則沒有文件、
+  11 條預算的上限沒有文件、`ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、`SEVERITY` 的 WCAG 推理住在測試檔註解裡、
+  30 條裡只有 2 條提到 WCAG、
+  瀏覽器掃描沒有變成工具、只走了 4 頁、
+  `check.yml` 永遠不會自己觸發（→ 站主）、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  `reveal('email')` 沒有人呼叫、沒有 href 的 `<a>` 沒有規則在看、
+  `validate-schema` 只實作 8 個關鍵字、同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  `<details>`／`<summary>` 各 44 個沒有規則在看、`<time>` 82 個沒人看 `datetime`、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `--patterns` 那 11 個平臺的「N 筆」沒驗、
+  `SCHEMA_STRUCTURAL` 與「走不到的是哪一個」還沒驗、
+  node 與 python 的 gzip 差 0.9% 沒人查過為什麼、
+  另外 22 個 a11y `--verbose` 數字還沒驗、搜尋結果的連結沒有任何無障礙檢查看過、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `audit:privacy` 沒有 needles 時本機 exit 0、
+  我連續十次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 13 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  `check:perf` 那句「全是 favicon」是寫死的描述、7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  30 條隱私規則裡 11 條 warn 沒說為什麼、`email` 是 warn 而 `google-fonts` 是 error、
+  `pixnet` 的失效樣板、schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、`CoverImage` 的 `sizes` 用 40rem、
+  `ui.ts` 的 `en` 要不要必填、
+  4 條閒置豁免、本機 `ahead 108, behind 2`、
+  `npm run sync` 來源全失敗仍離開碼 0、
+  `ExternalLink.astro` 要刪還是接上去、`PAGE_SIZE` 沒有呼叫者、
+  `aria-live`／`role="status"` 沒有規則、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  `CONTENT.md` 開始偏長、
+  `test-a11y-rules` 用 `.find()` 只驗第一處、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：4 — 平臺 feed 實測**
