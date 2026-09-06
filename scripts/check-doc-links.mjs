@@ -45,9 +45,19 @@ const ROOT = rootArg ? resolve(rootArg.slice('--root='.length)) : HERE;
 
 /** 歷史紀錄。理由見檔頭。 */
 const SKIP = new Set(['docs/REVIEW-LOG.md']);
+/**
+ * package.json 有哪些 script —— 文件叫人跑的指令要在這裡面。
+ *
+ * 讀不到就是 `null`（測試的假倉庫沒有 package.json）。
+ * **那時候不比，而且要說出來** —— 安靜地全部放行的話，
+ * 「指令都存在」跟「這一格沒在比」在輸出上長得一樣。
+ */
+const SCRIPTS = await readFile(resolve(ROOT, 'package.json'), 'utf8')
+  .then((t) => new Set(Object.keys(JSON.parse(t).scripts ?? {})))
+  .catch(() => null);
 const IGNORE_DIRS = new Set(['node_modules', 'dist', '.git', '.astro']);
 
-const RULE_IDS = ['doc-link-missing', 'doc-anchor-missing'];
+const RULE_IDS = ['doc-link-missing', 'doc-anchor-missing', 'doc-command-missing'];
 
 if (process.argv.includes('--list-rules')) {
   console.log(RULE_IDS.join('\n'));
@@ -134,6 +144,44 @@ for (const abs of files) {
    *
    * 圖片 `![alt](path)` 也一起看：路徑打錯的後果一樣。
    */
+  /*
+   * ── 文件叫人跑的指令，還存在嗎 ────────────────────
+   *
+   * 第 3 輪（第三十八圈）加的。這一圈問「這件事現在靠誰記得？忘了會怎樣？」
+   *
+   * 這一支已經在守「連結指不指得到」。而這些文件除了連結，還會**叫人跑指令**
+   * —— `npm run write`、`npm run verify:all`、`npm run probe:served`⋯⋯
+   * 那是同一種宣稱：**文件指著一個東西，那個東西要存在。**
+   *
+   * 量出來：8 份主要文件提到 **42 個** `npm run`，這一輪**一個都沒壞**。
+   * 所以這是預防性的，不是為了修既有的問題。
+   *
+   * 為什麼值得守：改個 script 名字，七份文件會同時指到一個不存在的指令，
+   * 而**要等到有人真的去打它才會發現**。
+   * 對站主來說那一刻多半是「她想發文的時候」——
+   * `docs/CONTENT.md` 是她的文件，裡面 7 個指令有一個壞掉，
+   * 她得到的是 `Missing script`，而不是一篇文章。
+   *
+   * `--` 後面的旗標不看（`npm run check:a11y -- --verbose`）——
+   * 那是傳給腳本的，不是 script 名字。
+   */
+  for (let i = 0; i < lines.length; i++) {
+    for (const m of lines[i].matchAll(/npm run ([a-z0-9:_-]+)/g)) {
+      if (SCRIPTS === null) continue;
+      saw('doc-command-missing', 1);
+      if (SCRIPTS.has(m[1])) continue;
+      problems.push({
+        file: rel,
+        line: i + 1,
+        id: 'doc-command-missing',
+        target: `npm run ${m[1]}`,
+        why:
+          `package.json 裡沒有 "${m[1]}" 這個 script —— 照著文件打的人會拿到 Missing script。` +
+          '　改法：改成現在的名字；真的拿掉那個指令的話，把那一段一起改掉。',
+      });
+    }
+  }
+
   for (let i = 0; i < lines.length; i++) {
     for (const m of lines[i].matchAll(/!?\[[^\]]*\]\(([^)\s]+)\)/g)) {
       const raw = m[1];
@@ -203,7 +251,18 @@ if (scanned === 0) {
 }
 
 const total = [...subjects.values()].reduce((a, b) => a + b, 0);
-console.log(`  ${scanned} 份文件、${total} 個連結`);
+/*
+ * 連結與指令要分開講。
+ *
+ * 第 3 輪（第三十八圈）加指令那一條之後，這一行變成「144 個連結」——
+ * 而其中 94 個是 `npm run`，根本不是連結。
+ * 主體數合起來算沒關係，**說出來的時候要分得開**。
+ */
+const cmdSeen = subjects.get('doc-command-missing') ?? 0;
+if (SCRIPTS === null) {
+  console.log('  ⚠ 讀不到 package.json —— 文件裡的 npm run 指令這次沒有比對。');
+}
+console.log(`  ${scanned} 份文件、${total - cmdSeen} 個連結、${cmdSeen} 處 npm run 指令`);
 
 if (skipped.length > 0) {
   console.log(`  跳過 ${skipped.length} 份：${skipped.join('、')}`);
@@ -226,8 +285,11 @@ for (const p of problems) {
   console.log(`  X [${p.id}] ${p.file}:${p.line}　${p.target}`);
   console.log(`      ${p.why}`);
 }
+/* 指令壞掉的時候說「連結指不到東西」會把人送錯方向 */
+const badCmds = problems.filter((p) => p.id === 'doc-command-missing').length;
+const badLinks = problems.length - badCmds;
 console.log(
-  `\n  ${problems.length} 個連結指不到東西。\n` +
+  `\n  ${badLinks} 個連結指不到東西` + (badCmds > 0 ? `、${badCmds} 處指令不存在` : '') + '。\n' +
     `  改法：連結的路徑是**相對於它所在的那份文件**的 ——\n` +
     `  docs/ 裡面連到同層寫 [X](X.md)，連到倉庫根目錄寫 [X](../X.md)。\n` +
     `  錨點對不上通常是標題改過字：錨點是標題轉小寫、去標點、空白換連字號。\n`,

@@ -147,5 +147,59 @@ console.log('\n文件連結檢查的判斷\n' + '─'.repeat(56));
   check('圖片路徑也檢查', /doc-link-missing/.test(out) && code === 1, `${out}（exit ${code}）`);
 }
 
+/*
+ * ── 11. 文件叫人跑的指令，還存在嗎 ──────────────────
+ *
+ * 第 3 輪（第三十八圈）：這一支已經在守「連結指不指得到」，
+ * 而那些文件除了連結還會**叫人跑指令**。那是同一種宣稱。
+ *
+ * 量出來 8 份主要文件提到 42 個 `npm run`，當時一個都沒壞 ——
+ * 所以這是預防性的。改個 script 名字，七份文件會同時指到不存在的指令，
+ * 而**要等到有人真的去打它才會發現**；對站主來說那一刻多半是她想發文的時候。
+ */
+{
+  const pkg = (/** @type {string[]} */ names) =>
+    JSON.stringify({ scripts: Object.fromEntries(names.map((n) => [n, 'x'])) });
+
+  const okCase = await inFixture({
+    'package.json': pkg(['write', 'build']),
+    'README.md': '# 首頁\n\n寫一篇：`npm run write`，然後 `npm run build`。\n',
+  });
+  check('指令都存在：✓ 而且 exit 0', /每一個都指得到/.test(okCase.out) && okCase.code === 0, `${okCase.out}（exit ${okCase.code}）`);
+
+  const bad = await inFixture({
+    'package.json': pkg(['build']),
+    'README.md': '# 首頁\n\n寫一篇：`npm run write`。\n',
+  });
+  check(
+    '指令不存在：紅，而且點名是哪一行、哪個 script',
+    /\[doc-command-missing\] README\.md:3/.test(bad.out) && /沒有 "write" 這個 script/.test(bad.out) && bad.code === 1,
+    `${bad.out}（exit ${bad.code}）`,
+  );
+
+  /* `--` 後面的旗標是傳給腳本的，不是 script 名字 */
+  const flags = await inFixture({
+    'package.json': pkg(['check:a11y']),
+    'README.md': '# 首頁\n\n`npm run check:a11y -- --verbose`\n',
+  });
+  check('`-- --verbose` 那種旗標不會被當成 script 名字', flags.code === 0, `${flags.out}（exit ${flags.code}）`);
+
+  /* 讀不到 package.json 時不比，而且要說出來 */
+  const noPkg = await inFixture({ 'README.md': '# 首頁\n\n`npm run whatever`\n' });
+  check(
+    '沒有 package.json 時說「這次沒有比對」，不是安靜放行',
+    /讀不到 package.json —— 文件裡的 npm run 指令這次沒有比對/.test(noPkg.out),
+    noPkg.out,
+  );
+
+  /* 連結與指令要分開講 —— 合起來說「N 個連結」會把指令算成連結 */
+  const split = await inFixture({
+    'package.json': pkg(['build']),
+    'README.md': '# 首頁\n\n[設定](docs/S.md) 然後 `npm run build`。\n',
+    'docs/S.md': '# S\n',
+  });
+  check('摘要把連結與指令分開數', /1 個連結、1 處 npm run 指令/.test(split.out), split.out);
+}
+
 console.log(failed === 0 ? '\n全部通過。\n' : `\n${failed} 項失敗。\n`);
 process.exit(failed === 0 ? 0 : 1);
