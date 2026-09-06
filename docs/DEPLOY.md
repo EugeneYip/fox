@@ -252,6 +252,36 @@ Pages 不能自訂回應標頭，要改只能換主機。
 本機 Node 比這舊的話，`npm install` 會出現 EBADENGINE 警告。
 目前實測在 22.15.1 上建置仍然正常，但那是運氣不是保證；有空的話升上去。
 
+### 改 workflow 之前：`npm run check:workflows` 守的十一件事
+
+三份 workflow（`check.yml`、`deploy.yml`、`sync-feeds.yml`）沒有第二個人在看 ——
+`npm run ci:sim` 只模擬 `deploy.yml`，而 `check.yml` 到今天在 GitHub 上
+**一次都沒跑過**（它只在 `pull_request` 上觸發，這個專案是直接推 `main`）。
+所以底下這十一條是它們唯一的守門人：
+
+| id | 它擋的是 |
+|---|---|
+| `unknown-script` | workflow 叫了一個 `package.json` 裡不存在的 script |
+| `duplicate-key` | 同一個區塊裡兩個一樣的 key —— YAML 不允許，GitHub 會拒絕整份 |
+| `dispatch-target-missing` | `gh workflow run` 叫的檔案不存在，或那一份沒宣告 `workflow_dispatch` |
+| `step-output-unset` | 讀 `steps.X.outputs.Y`，但沒有 `id: X` 的 step，或沒有人把 `Y=` 寫進 `$GITHUB_OUTPUT` |
+| `gate-not-on-deploy-path` | 某一道關卡沒有出現在 `deploy.yml` —— 只加在 `check.yml` 是不夠的 |
+| `gate-missing-in-check` | 反過來：部署路徑上會跑，但 `check.yml` 沒跑 |
+| `needs-dist-before-build` | 需要 `dist/` 的步驟排在建置之前（第二十六圈真的踩過一次） |
+| `test-file-not-run` | `scripts/` 底下的測試檔沒有任何 script 會跑到它，或 script 指到不存在的檔案 |
+| `machine-path-in-config` | 設定檔裡有只在一臺機器上成立的絕對路徑（`.npmrc` 真的踩過一次） |
+| `gate-count-stale` | 四份文件裡的「N 道關卡」跟 `npm run verify:all` 的步數對不上 |
+| `rule-undocumented` | 上面這十一條有沒有寫在這一份裡 |
+
+**這一支沒有排除任何一條** —— 十一條都是改 workflow 的人會撞到的東西，
+所以每一條都要出現在這張表裡。加規則的時候一起加一列，
+不然 `check:workflows` 自己會擋下來。
+
+它是**靜態**檢查：讀的是抹掉註解之後的 YAML 文字。
+它判斷得出「這個 script 名字不存在」，判斷不出
+「這份 workflow 在 GitHub 上跑起來會不會過」——
+那兩件事之間隔著 runner、快取、secret 與網路。
+
 ---
 
 ## 出問題時

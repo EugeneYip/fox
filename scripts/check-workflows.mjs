@@ -30,6 +30,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { resolve, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deployStepsFrom, withoutComments } from './lib/deploy-steps.mjs';
+import { documentationDuty } from './lib/copy-rules.mjs';
 
 /*
  * `--root=<路徑>` 只給 scripts/test-workflow-rules.mjs 用 —— 它會做一份
@@ -70,6 +71,7 @@ const RULE_IDS = [
   'dispatch-target-missing',
   'step-output-unset',
   'gate-count-stale',
+  'rule-undocumented',
 ];
 
 if (process.argv.includes('--list-rules')) {
@@ -696,23 +698,51 @@ console.log('\n建置管線檢查\n' + '─'.repeat(56));
     }
   }
   let claims = 0;
+  /*
+   * ── 「N 道關卡」不一定是在數關卡 ──────────────────
+   *
+   * 第 7 輪（第三十九圈）踩到的：上一輪在 `STATE.md` 寫了一句
+   * 「⋯而沒有一道關卡說過話」，這一條當場把那個「一」讀成宣稱，
+   * 說文件寫「一道關卡」而實際有 6 步。那句話不是在數關卡。
+   *
+   * 反過來也一樣糟。改寫成「六道關卡裡沒有一道」之後它就過了 ——
+   * 因為 6 剛好對。可是那是**敘述**，寫的是當時的事實：哪天真的加到七道，
+   * 這一條會叫人去改那句話，而改完會變成一句**假的**歷史。
+   *
+   * 分界線量出來很乾淨：三處真的宣稱，距離最近的 `verify:all` 是
+   * 13、14、15 個字元（都在同一行）；那句敘述是 **1,811** 個字元。
+   * 所以判準用「同一行要提到 `verify:all`」—— 不是抓字面，是抓
+   * **它有沒有在講那個指令**。
+   *
+   * 沒過線的不是安靜跳過，底下會說有幾處、在哪裡 ——
+   * 不然哪天真的宣稱換了寫法（比方拆成兩行），這一格會安靜地少比一份。
+   */
+  /** 看到了「N 道關卡」但那一行沒提 `verify:all` —— 沒有比，但要說得出來 */
+  const prose = [];
   for (const rel of CLAIM_DOCS) {
     const body = await readFile(resolve(ROOT, rel), 'utf8').catch(() => null);
     if (body === null) continue;
-    for (const m of body.matchAll(/([零一二三四五六七八九十]|\d+)\s*道關卡/g)) {
-      claims += 1;
-      if (actual === null) continue;
-      const said = CN.indexOf(m[1]) >= 0 ? CN.indexOf(m[1]) : Number(m[1]);
-      if (said === actual) continue;
-      add(
-        rel,
-        body.slice(0, m.index).split('\n').length,
-        'gate-count-stale',
-        `這裡寫「${m[1]}道關卡」，而 package.json 的 verify:all 有 ${actual} 步。\n` +
-          `      同一個數字在 ${CLAIM_DOCS.length} 份文件裡各寫了一次 —— 加一道關卡就會同時錯四份，\n` +
-          '      而它已經過期過一次了（CLAUDE.md 自己還留著「原本這裡寫五道」那一行）。\n' +
-          `      改法：把那句話的數字改成 ${actual}，四份都要改（這一條會把沒改到的都點出來）。`,
-      );
+    const lines = body.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      for (const m of lines[i].matchAll(/([零一二三四五六七八九十]|\d+)\s*道關卡/g)) {
+        if (!lines[i].includes('verify:all')) {
+          prose.push(`${rel}:${i + 1}`);
+          continue;
+        }
+        claims += 1;
+        if (actual === null) continue;
+        const said = CN.indexOf(m[1]) >= 0 ? CN.indexOf(m[1]) : Number(m[1]);
+        if (said === actual) continue;
+        add(
+          rel,
+          i + 1,
+          'gate-count-stale',
+          `這裡寫「${m[1]}道關卡」，而 package.json 的 verify:all 有 ${actual} 步。\n` +
+            `      同一個數字在 ${CLAIM_DOCS.length} 份文件裡各寫了一次 —— 加一道關卡就會同時錯四份，\n` +
+            '      而它已經過期過一次了（CLAUDE.md 自己還留著「原本這裡寫五道」那一行）。\n' +
+            `      改法：把那句話的數字改成 ${actual}，四份都要改（這一條會把沒改到的都點出來）。`,
+        );
+      }
     }
   }
   saw('gate-count-stale', claims);
@@ -723,6 +753,70 @@ console.log('\n建置管線檢查\n' + '─'.repeat(56));
       '四份文件裡一句「N 道關卡」都抽不到 —— **這一格沒有在守**。\n' +
         '      那句話換了寫法的話，這裡的樣式要跟著改（不然它會安靜地什麼都不比）。',
     );
+  }
+  if (prose.length > 0) {
+    notes.push(
+      `另外 ${prose.length} 處寫了「N 道關卡」但那一行沒提 \`verify:all\` —— **沒有比**：\n` +
+        `      ${prose.join('、')}\n` +
+        '      當成敘述看待（敘述寫的是當時的事實，不該被改成今天的數字）。\n' +
+        '      如果那其實是宣稱，把 `verify:all` 寫進同一行，這一條才看得到它。',
+    );
+  }
+}
+
+/*
+ * ── 這十一條規則，改 workflow 的人看得到嗎 ────────────────
+ *
+ * 第 7 輪（第三十九圈）加的。這一圈問「這條待辦還活著嗎？」——
+ * 「`check:workflows` 的 10 條規則文件提到 0 條」量下去還活著，
+ * 而且比記的更乾脆：十條的 id **全部只出現在 `docs/REVIEW-LOG.md` 裡**，
+ * 那是歷史紀錄，不是給人查的文件。
+ *
+ * 這件事在這個 repo 已經有兩個先例了：`check:copy` 的 `rule-not-documented`
+ * 要求每條規則的 id 同時寫進 `CLAUDE.md` 與 `docs/CONTENT.md`，
+ * `check:content` 的 `rule-not-in-guide` 要求寫進 `docs/CONTENT.md`。
+ * 兩條的理由都一樣：**照文件做的人會被 CI 擋下來，卻不知道為什麼。**
+ *
+ * 這一支沒有排除任何一條。`check:copy` 把自己那條排除掉（自我指涉），
+ * 這裡不排除 —— 「加規則要一起加一列」正是改 workflow 的人需要知道的事，
+ * 寫進表裡是有用的，不是繞圈子。排除清單空著也是一個決定，所以照樣印出來。
+ *
+ * 這一段要在「補 0」那一行**之前** —— 它自己會 `saw()`。
+ * 排在後面的話這條規則會被補成 0，而 `--verbose` 印的是補完的那一份。
+ * （同一個形狀在這個 repo 犯過十一次了，所以這句話每次都留著。）
+ */
+{
+  const DOC = 'docs/DEPLOY.md';
+  /** 空的也是一個決定：十一條都是改 workflow 的人會撞到的 @type {Map<string, string>} */
+  const NOT_A_MAINTAINER_RULE = new Map();
+  const body = await readFile(resolve(ROOT, DOC), 'utf8').catch(() => null);
+  if (body === null) {
+    notes.push(`讀不到 ${DOC} —— 「這些規則有沒有文件」這一格**沒有在守**。`);
+    saw('rule-undocumented', 0);
+  } else {
+    const { required, excluded, unknown } = documentationDuty(RULE_IDS, NOT_A_MAINTAINER_RULE);
+    saw('rule-undocumented', required.length);
+    if (unknown.length > 0) {
+      notes.push(
+        `排除清單裡有不存在的規則：${unknown.join('、')} —— ` +
+          '那會讓「要寫的 ＋ 不用寫的 ＝ 總數」看起來成立，而其實在數不存在的東西。',
+      );
+    }
+    notes.push(
+      `文件要求：${RULE_IDS.length} 條規則裡 **${required.length} 條**要寫進 ${DOC}；` +
+        `${excluded.length} 條不用${excluded.length === 0 ? '（沒有排除任何一條）' : '：\n      ' + excluded.map((id) => `· ${id}：${NOT_A_MAINTAINER_RULE.get(id)}`).join('\n      ')}`,
+    );
+    for (const id of required) {
+      if (body.includes(id)) continue;
+      add(
+        DOC,
+        0,
+        'rule-undocumented',
+        `\`check:workflows\` 有 ${id} 這條規則，但 ${DOC} 沒有寫到它 —— \n` +
+          '      改 workflow 的人會被它擋下來，而查不到那個名字是什麼意思。\n' +
+          `      改法：在「改 workflow 之前」那張表裡加一列（id ＋ 它擋的是什麼）。或者把規則拿掉。`,
+      );
+    }
   }
 }
 

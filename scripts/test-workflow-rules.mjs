@@ -48,6 +48,15 @@ const base = () => ({
   }),
   '.nvmrc': '22\n',
   /*
+   * `rule-undocumented` 要求每條規則的 id 都寫在 `docs/DEPLOY.md` 裡。
+   * base 少了它的話，那條規則會在**每一個**案例上都響 ——
+   * 跟底下 check.yml 那段註解同一個道理。
+   *
+   * 清單從 `--list-rules` 拿，不是抄一份：抄的那份會跟著規則數漂掉，
+   * 而漂掉的方向剛好是「安靜地放行」。
+   */
+  'docs/DEPLOY.md': RULE_IDS_FOR_TEST.join('\n') + '\n',
+  /*
    * base 的 check.yml 要跟得上**部署路徑上的每一件事**，不然新規則會在每個案例上都響。
    * 第 7 輪（第十五圈）把要求的清單從 deploy.yml 推出來之後，
    * 這裡也要有 test:units 與 test:built —— 真的 check.yml 本來就有這兩步。
@@ -646,6 +655,59 @@ try {
     if (!ok3) failed++;
     console.log(`  ${ok3 ? '✓' : 'X'} 一句都抽不到時說「這一格沒有在守」`);
     if (!ok3) console.log('        ' + none.split('\n').filter((l) => /關卡|沒有在守/.test(l)).slice(0, 2).join(' ｜ '));
+
+    /*
+     * ── 「N 道關卡」不一定是在數關卡 ────────────────
+     *
+     * 第 7 輪（第三十九圈）：上一輪在 `STATE.md` 寫了一句
+     * 「⋯而沒有一道關卡說過話」，這一條把那個「一」讀成宣稱。
+     * 判準改成「同一行要提到 `verify:all`」—— 抓的是它有沒有在講那個指令。
+     *
+     * 兩個方向都要驗：敘述不能擋，而且**要說得出它沒有比**
+     * （不然哪天真的宣稱換了寫法，這一格會安靜地少比一份）。
+     */
+    /** @type {Record<string, string>} */
+    const proseOnly = base();
+    proseOnly['CLAUDE.md'] = '那次改完之後，六道關卡沒有一道說過話。\n';
+    const out4 = await check(await build('gate-count-prose', proseOnly));
+    const ok4 = !/\[gate-count-stale\]/.test(out4) && /那一行沒提 `verify:all` —— \*\*沒有比\*\*/.test(out4);
+    if (!ok4) failed++;
+    console.log(`  ${ok4 ? '✓' : 'X'} 敘述裡的「N 道關卡」不擋，但說得出「沒有比」`);
+    if (!ok4) console.log('        ' + out4.split('\n').filter((l) => /關卡|沒有比/.test(l)).slice(0, 2).join(' ｜ '));
+  }
+
+  /*
+   * ── 這些規則，改 workflow 的人查得到嗎 ──────────────
+   *
+   * 第 7 輪（第三十九圈）加的 `rule-undocumented`。它讀的是
+   * `docs/DEPLOY.md`，跟 workflow 檔無關 —— 做不出「一份剛好違反它的 workflow」，
+   * 所以在這裡驗，並且登記在 TESTED_ELSEWHERE 裡。
+   */
+  {
+    /** @type {Record<string, string>} */
+    const missingOne = base();
+    missingOne['docs/DEPLOY.md'] = RULE_IDS_FOR_TEST.filter((r) => r !== 'unknown-script').join('\n') + '\n';
+    const outU = await check(await build('rule-undocumented', missingOne));
+    const okU = /\[rule-undocumented\]/.test(outU) && /unknown-script/.test(outU);
+    if (!okU) failed++;
+    console.log(`  ${okU ? '✓' : 'X'} 規則沒寫進 docs/DEPLOY.md 時擋得住`);
+    if (!okU) console.log('        ' + outU.split('\n').filter((l) => /undocumented|DEPLOY/.test(l)).slice(0, 2).join(' ｜ '));
+
+    const outU2 = await check(await build('rule-documented', base()));
+    const okU2 = !/\[rule-undocumented\]/.test(outU2);
+    if (!okU2) failed++;
+    console.log(`  ${okU2 ? '✓' : 'X'} 十一條都寫到時不誤報（反向案例）`);
+    if (!okU2) console.log('        ' + outU2.split('\n').filter((l) => /undocumented/.test(l)).slice(0, 2).join(' ｜ '));
+
+    /* 讀不到那份文件的時候要說「沒有在守」，不是安靜放行 */
+    /** @type {Record<string, string>} */
+    const noDoc = base();
+    delete noDoc['docs/DEPLOY.md'];
+    const outU3 = await check(await build('rule-doc-missing', noDoc));
+    const okU3 = /讀不到 docs\/DEPLOY\.md —— 「這些規則有沒有文件」這一格\*\*沒有在守\*\*/.test(outU3);
+    if (!okU3) failed++;
+    console.log(`  ${okU3 ? '✓' : 'X'} 讀不到那份文件時說「沒有在守」`);
+    if (!okU3) console.log('        ' + outU3.split('\n').filter((l) => /DEPLOY|沒有在守/.test(l)).slice(0, 2).join(' ｜ '));
   }
 
   {
@@ -811,7 +873,10 @@ try {
      * 這份豁免要**指得出在哪裡驗**，不然它只是一個放行的洞
      * （跟 test-a11y-rules 的 TESTED_ELSEWHERE 同一個作法）。
      */
-    const TESTED_ELSEWHERE = new Map([['gate-count-stale', '上面「N 道關卡」那個區塊']]);
+    const TESTED_ELSEWHERE = new Map([
+      ['gate-count-stale', '上面「N 道關卡」那個區塊'],
+      ['rule-undocumented', '上面「規則有沒有文件」那個區塊'],
+    ]);
     if (TESTED_ELSEWHERE.size > 0) {
       console.log(
         `\n  · 不做假 workflow、在別處驗的規則（${TESTED_ELSEWHERE.size} 條）：` +
