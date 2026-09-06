@@ -118,6 +118,7 @@ const SEVERITY = {
   'lang-content-mismatch': 'error',
   /* 值打錯畫面上什麼都不會變，而那一格從此不再朗讀 —— 擋。 */
   'live-region-value': 'error',
+  'status-not-live': 'error',
   'link-name': 'error',
   /* 只在「同一頁有兩個以上 nav」時才響。多個 nav 沒有名字是**難用**，
      不是不能用 —— 螢幕閱讀器仍然進得去，只是地標清單上分不出誰是誰。 */
@@ -511,6 +512,32 @@ const CASES = {
    * 而這個站的螢幕閱讀器測試「現況：沒有人做過」。
    */
   'live-region-value': { html: page({ body: '<p aria-live="true">狀態</p>' }) },
+  /*
+   * ── JS 要寫進去的容器，不是 live region 就沒人聽得到 ──
+   *
+   * 第 1 輪（第四十六圈）加的。那一圈問「這一段如果拿掉，輸出會差在哪裡」——
+   * 把搜尋頁狀態列的 `aria-live` 拿掉，**沒有任何一道關卡說話**，
+   * 而畫面上照樣看得見，所以唯一分得出差別的是螢幕閱讀器使用者。
+   *
+   * 判準用站上自己的命名慣例（`data-…status`），不另外列清單。
+   */
+  'status-not-live': { html: page({ body: '<p data-search-status>找到 3 筆</p>' }) },
+  /* 反向一：有 aria-live 就不該報 */
+  'status-not-live（有 aria-live）': {
+    rule: 'status-not-live',
+    quiet: true,
+    html: page({ body: '<p data-search-status aria-live="polite">找到 3 筆</p>' }),
+  },
+  /*
+   * 反向二：`role="status"` 本身就隱含 `aria-live="polite"` ——
+   * 站上主題切換那一個就是這種，拿掉 `aria-live` 之後**不該**紅。
+   * 少了這一格，把判準寫成「一定要有 aria-live」也會全綠。
+   */
+  'status-not-live（role="status" 就夠了）': {
+    rule: 'status-not-live',
+    quiet: true,
+    html: page({ body: '<span role="status" data-theme-status>深色</span>' }),
+  },
   /* 反向：三個合法的值都不該報 */
   'live-region-value（polite／assertive／off 都合法）': {
     rule: 'live-region-value',

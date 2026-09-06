@@ -162,6 +162,7 @@ const RULE_IDS = [
   'focus-outline-removed',
   'reduced-motion-blanket',
   'live-region-value',
+  'status-not-live',
   'doc-names-real-rule',
 ];
 
@@ -611,6 +612,45 @@ for await (const file of htmlFiles(DIST)) {
       `aria-live="${live}" 不是合法的值（只有 polite／assertive／off）。` +
         '畫面上什麼都不會變，而那一格從此不再朗讀 —— ' +
         '唯一會發現的人是正在用螢幕閱讀器的人：' + m[0].slice(0, 70),
+    );
+  }
+
+  /*
+   * ── 狀態列不是 live region 的話，改了也沒有人知道 ──────────
+   *
+   * 上面那條守的是「`aria-live` 的**值**打錯」。第 1 輪（第四十六圈）
+   * 這一圈問「這一段如果拿掉，輸出會差在哪裡」，把站上的無障礙設施
+   * 一個一個拿掉再跑一次關卡 —— 搜尋頁那個狀態列的 `aria-live`
+   * **拿掉沒有任何人說話**。
+   *
+   * 那不是小事：那一格是 JS 寫進去的（「找到 3 筆」「沒有結果」），
+   * 而畫面上照樣看得見，所以拿掉之後**唯一分得出差別的是螢幕閱讀器使用者**
+   * —— 而這個站的螢幕閱讀器測試 `docs/A11Y.md` 自己寫著「沒有人做過」。
+   *
+   * 判準用**站上自己的命名慣例**，不另外列一份清單：
+   * JS 要寫進去的容器一律帶 `data-…status`（`data-search-status`、
+   * `data-theme-status`）。那種元素要嘛有 `aria-live`，
+   * 要嘛有一個本身就隱含 live 的 role（`status`／`alert`／`log`）。
+   *
+   * 導入時實測：44 頁共 46 個主體，兩種形狀 ——
+   * 搜尋頁那個靠 `aria-live`，主題切換那個兩者都有。
+   * 拿掉主題切換的 `aria-live` **不該**紅（`role="status"` 本來就隱含
+   * `aria-live="polite"`），這條規則分得出這個差別。
+   */
+  sawTags('status-not-live', /\sdata-[a-z-]*status\b/gi);
+  for (const m of html.matchAll(/<[a-z][a-z0-9]*\b[^>]*>/gi)) {
+    if (!/\sdata-[a-z-]*status\b/i.test(m[0])) continue;
+    if (attr(m[0], 'aria-live') !== null) continue;
+    const role = (attr(m[0], 'role') ?? '').trim().toLowerCase();
+    if (role === 'status' || role === 'alert' || role === 'log') continue;
+    add(
+      'error',
+      rel,
+      'status-not-live',
+      '這個容器是 JS 要把狀態文字寫進去的（名字裡有 data-…status），' +
+        '但它不是 live region —— 文字換了螢幕閱讀器不會說。' +
+        '改法：加 aria-live="polite"，或給它 role="status"（那個 role 本身就隱含 polite）：' +
+        m[0].slice(0, 80),
     );
   }
 
