@@ -17,6 +17,7 @@ import { sourceFeedUrl } from './lib/source-feed-url.mjs';
 import { UA_VERIFY } from './lib/http.mjs';
 import { waitForHost, noteHostHit } from './lib/throttle.mjs';
 import { countItems } from './lib/count-items.mjs';
+import { itemsText } from './lib/items-text.mjs';
 import { projectDay } from './lib/project-day.mjs';
 import { confidenceReport } from './lib/confidence-report.mjs';
 
@@ -74,7 +75,7 @@ const TIMEOUT = 15_000;
 /**
  * @param {string} url
  * @returns {Promise<{ ok: boolean, status: number, kind: string, ms: number,
- *   items?: number, parseErr?: string }>}
+ *   items?: number, parseErr?: string, naive?: number }>}
  */
 async function probe(url) {
   /*
@@ -122,26 +123,33 @@ async function probe(url) {
      * 而通用剖析器第一次有真的主體。
      */
     const parsed = ok ? countItems(body) : null;
-    return { ok, status: res.status, kind, ms, items: parsed?.n, parseErr: parsed?.err };
+    /*
+     * ── 第二種算法：直接數標籤 ────────────────────────
+     *
+     * 第 4 輪（第三十九圈）加的。那一圈在逐條驗待辦，而
+     * 「`--patterns` 那 11 個平臺的『N 筆』沒驗」那一條 —— 我當場用
+     * 第二種方法把 11 個全部數了一次，**11／11 一模一樣**。
+     *
+     * 但那是**一次性的**：下一個人要再問同一個問題，得再打一次網路、
+     * 再寫一次那段程式。而 `countItems()` 走的是完整剖析器 ——
+     * 它哪天開始漏掉項目，這裡的數字只會**變小**，沒有人看得出來。
+     *
+     * 所以把那個對照放進來：回應的文字本來就在手上，數標籤幾乎不花錢。
+     *
+     * **兩邊不一樣不一定是錯的** —— 剖析器會丟掉沒有連結或標題的項目。
+     * 所以只說出來，不擋。
+     */
+    const naive = ok
+      ? (body.match(/<item[\s>]/g) ?? []).length + (body.match(/<entry[\s>]/g) ?? []).length
+      : undefined;
+    return { ok, status: res.status, kind, ms, items: parsed?.n, parseErr: parsed?.err, naive };
   } catch (err) {
     noteHostHit(url);
     return { ok: false, status: 0, kind: /** @type {{ name?: string }} */ (err)?.name === 'TimeoutError' ? '逾時' : '連不上', ms: Date.now() - started };
   }
 }
 
-/**
- * 剖析出幾筆。`-1` 是剖析拋錯，`0` 是「看起來像 feed 但一筆都讀不出來」——
- * 兩種都要說出來，那正是 `sync` 到時候會踩到的東西。
- * @param {{ items?: number, parseErr?: string }} r
- */
-const itemsText = (r) =>
-  r.items === undefined
-    ? ''
-    : r.items < 0
-      ? `**剖析失敗：${r.parseErr}**`
-      : r.items === 0
-        ? '**0 筆**'
-        : `${r.items} 筆`;
+/* 「剖析出幾筆」那一格的文字抽到 lib/items-text.mjs —— 那一支只走網路，抽出去才測得到 */
 
 /**
  * @param {boolean} ok
