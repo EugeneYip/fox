@@ -252,7 +252,24 @@ repo 是公開的，寫進註解等於發佈它。清單上還是只有一筆，
   （`ci:sim` 跑的是 **HEAD**，不是工作樹 —— 那是刻意的，因為 CI 拿到的就是
   版控裡的東西。所以要驗自己剛改的東西，得先 commit。）
   （原本這裡寫「五道」，那是更早以前的數字。）
-- **不要 push。** 站主自己來 —— 這裡的帳號接不到 GitHub。
+- **commit 完就推。** 站主 2026-09-06 授權可以直接 `git push`，
+  而且要**融進 `/loop` 的流程** —— 每一輪跑完關卡、commit 之後就推上去。
+  （在那之前這裡寫的是「不要 push，站主自己來 —— 這裡的帳號接不到 GitHub」，
+  那句話兩件事都不對了：`gh` 是登入的，而站主要的是自動推。）
+
+  **推之前一定要先 rebase。** 排程的 `sync-feeds` 每天自己 commit 兩次
+  `src/data/syndication.json`，所以本機幾乎一定落後：
+
+  ```bash
+  git pull --rebase origin main && git push
+  ```
+
+  撞到的一定是 `syndication.json`（兩邊都只差時間戳）。那是
+  `scripts/sync-feeds.mjs` 產生的，**取遠端那一份**（它比較新）：
+
+  ```bash
+  git checkout --theirs src/data/syndication.json && git add src/data/syndication.json && git rebase --continue
+  ```
 - **不要把狀態留在腦袋裡。** 決定了什麼、找到什麼問題、下一步是什麼，
   都要寫進 `docs/REVIEW-LOG.md`（逐輪的完整紀錄）或 `docs/STATE.md`
   （只放「現在到哪了、接下來做什麼」——**不要把輪次紀錄抄一份過去**，
@@ -264,6 +281,5 @@ repo 是公開的，寫進註解等於發佈它。清單上還是只有一筆，
 ## 不要做的事
 
 - 不要加留言系統、電子報、CMS —— 見 `docs/ARCHITECTURE.md` 的「刻意沒做的事」
-- 不要 `git push`（站主自己來）
 - 不要把 `src/data/syndication.json` 手改，那是 `scripts/sync-feeds.mjs` 產生的
 - 不要編造她的平臺帳號。不知道就是不知道，讓網站誠實地少一塊

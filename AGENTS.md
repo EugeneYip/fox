@@ -22,7 +22,9 @@ Astro 7 純靜態站，部署到 GitHub Pages（repo `EugeneYip/fox`，**公開*
 npm run verify:all && npm run test:tools
 ```
 
-做完一個段落就 `git commit`（本機）。**不要 `git push`** —— 站主自己推。
+做完一個段落就 `git commit`，然後**推上去**（站主 2026-09-06 授權）。
+推之前先 `git pull --rebase origin main` —— 排程每天會自己 commit
+`src/data/syndication.json`，撞到就取遠端那一份。
 
 ---
 
@@ -127,7 +129,8 @@ Claude Code 會自動載入 `CLAUDE.md`；**其他工具不會**。所以：
   讓它指向 `CLAUDE.md`，不要再抄一份 —— 抄一份就是「同一件事兩個地方」，
   而這個 repo 已經因為那件事付過好幾次代價。
 - **暫存檔不要寫進 repo。** 要放中間結果的話放在 repo 之外。
-- **不要 `git push`。** 站主的帳號才推得上去。
+- **推之前先 rebase。** `git pull --rebase origin main && git push`；
+  `syndication.json` 撞到的話取遠端那一份（那是產生的檔案）。
 
 ---
 
