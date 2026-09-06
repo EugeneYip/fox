@@ -953,6 +953,50 @@ const crawlerRow = (/** @type {string} */ text) => `| \`allowAiCrawlers\` | \`fa
   if (!okLocal) failed++;
   console.log(`  ${okLocal ? '✓' : 'X'} 本機沒有 needles：只警告，不擋人`);
 
+  /*
+   * ── 判決那一行不准讀起來像「都查過了」──────────
+   *
+   * 第 5 輪（第三十八圈）：本機沒有 needles 的時候，這一支印一行警告，
+   * 然後結尾寫「必須修正 0」、離開碼 0。`verify:all` 是靠離開碼串的，
+   * 所以六道關卡全綠 —— 而**唯一保護本名與校名的那幾條一次都沒跑**。
+   *
+   * 後果特別重的理由：**這個 repo 是公開的**。本機這一次是推上去之前
+   * 唯一會跑的檢查；CI 上少了 secret 確實會紅，但那時東西已經公開了。
+   *
+   * 離開碼不改（那是既有的決定），改的是那一行要把缺口說出來。
+   */
+  /* 兩條結尾都要說：有問題時是「必須修正 N⋯⋯」，全乾淨時是「乾淨。⋯⋯」 */
+  const okVerdict = /(必須修正 \d+、請確認 \d+　—— \*\*但身分規則這次沒有執行\*\*|\*\*而身分規則這次沒有執行\*\*)/.test(local.out);
+  if (!okVerdict) failed++;
+  console.log(`  ${okVerdict ? '✓' : 'X'} 沒跑身分規則時，判決那一行會把它說出來`);
+  if (!okVerdict) console.log('        尾巴：' + JSON.stringify(local.out.slice(-160)));
+
+  /*
+   * 上面那一格走的是「全乾淨」那條結尾。**數字那條也要驗** ——
+   * 突變掃描抓到的：把數字那條的旗標改成永遠 false，上面那格照樣綠，
+   * 因為那份 fixture 根本沒走到那條路。
+   * 這裡放一個會產生 warn 的東西（原始碼裡的信箱），結尾就會變成
+   * 「必須修正 0、請確認 N」。
+   */
+  const withWarn = await build({ 'src/config/leak.ts': "export const c = 'someone@nowhere.test';\n" });
+  const warned = await audit(withWarn, {});
+  const okNumeric = /必須修正 \d+、請確認 \d+　—— \*\*但身分規則這次沒有執行\*\*/.test(warned.out);
+  if (!okNumeric) failed++;
+  console.log(`  ${okNumeric ? '✓' : 'X'} 數字那條結尾也會說（不是只有「乾淨」那條）`);
+  if (!okNumeric) console.log('        尾巴：' + JSON.stringify(warned.out.slice(-120)));
+  await rm(withWarn, { recursive: true, force: true });
+
+  /* 訊息要說清楚「為什麼本機這一次特別重要」—— 公開 repo，推出去就收不回 */
+  const okPublic = /這個 repo 是公開的/.test(local.out) && /紅燈救不回來/.test(local.out);
+  if (!okPublic) failed++;
+  console.log(`  ${okPublic ? '✓' : 'X'} 訊息說得出「推出去就收不回」`);
+
+  /* 反向：有 needles 的時候那句話不該出現 */
+  const withOk = await audit(dir, { PRIVACY_NEEDLES: '某個假名' });
+  const okQuiet = !/但身分規則這次沒有執行/.test(withOk.out);
+  if (!okQuiet) failed++;
+  console.log(`  ${okQuiet ? '✓' : 'X'} 有 needles 時判決那一行不多話（反向案例）`);
+
   await rm(dir, { recursive: true, force: true });
 }
 
