@@ -22,7 +22,7 @@
  * 結尾寫死 `process.exit(0)` —— 印著「1 個來源有問題」而離開碼是 0。
  * 同一個檔案的 `--patterns` 模式一直都是 `exit(realFailures > 0 ? 1 : 0)`。
  */
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -84,15 +84,12 @@ const base = `http://127.0.0.1:${addr.port}`;
 
 const tmp = await mkdtemp(join(tmpdir(), 'verify-src-'));
 
-/** @param {any[]} sources */
-async function verify(sources) {
+/** @param {any[]} sources @param {string} [scriptPath] 預設是版控裡那一份；只有副本那一格會傳別的 */
+async function verify(sources, scriptPath = resolve(ROOT, 'scripts/verify-sources.mjs')) {
   const file = join(tmp, `s-${Math.random().toString(36).slice(2)}.json`);
   await writeFile(file, JSON.stringify(sources), 'utf8');
   try {
-    const { stdout } = await run('node', [
-      resolve(ROOT, 'scripts/verify-sources.mjs'),
-      `--sources=${file}`,
-    ]);
+    const { stdout } = await run('node', [scriptPath, `--sources=${file}`]);
     return { out: stdout, code: 0 };
   } catch (err) {
     const e = /** @type {{ stdout?: string, code?: number }} */ (err);
@@ -259,7 +256,16 @@ const plat = (/** @type {Record<string, unknown>} */ o) => ({
 
 {
   const { out, code } = await patterns([plat({ feedTemplate: `${base}/ok`, probeHandle: 'h' })]);
-  check('feed 有東西：✓ 而且沒有那句「一筆都沒有」', /✓ p1/.test(out) && !/一筆都沒有/.test(out) && code === 0, `${out}（exit ${code}）`);
+  /*
+   * 反面那一半原本寫 `!/一筆都沒有/` —— 而第 4 輪（第四十五圈）加了一行圖例，
+   * 裡面本來就有那五個字，於是這一格紅了。判準要對準**那句總結**，
+   * 不是對準一個在別處也會出現的詞。
+   */
+  check(
+    'feed 有東西：✓ 而且沒有那句總結',
+    /✓ p1/.test(out) && !/個平臺回了合法的 feed/.test(out) && code === 0,
+    `${out}（exit ${code}）`,
+  );
 }
 
 {
@@ -269,6 +275,15 @@ const plat = (/** @type {Record<string, unknown>} */ o) => ({
     '合法的 feed 但一筆都沒有：說出來（而且不算失敗）',
     /1 個平臺回了合法的 feed 但\*\*一筆都沒有\*\*：pe/.test(out) && code === 0,
     `${out}（exit ${code}）`,
+  );
+  /*
+   * 而且**那一列本身**不能是 ✓ —— 結尾那句話早就有了，
+   * 掃過去的人看的是列。第 4 輪（第四十五圈）補的就是這件事。
+   */
+  check(
+    '而且那一列不是 ✓（跟讀到東西的那種分得開）',
+    !/✓ pe/.test(out) && /· +pe/.test(out),
+    (out.split('\n').find((l) => l.includes('pe ')) ?? '（找不到那一列）').trim(),
   );
 }
 
@@ -285,6 +300,52 @@ const plat = (/** @type {Record<string, unknown>} */ o) => ({
     !/✓ pn/.test(out) && /有樣板但沒有 probeHandle（pn）/.test(out) && code === 0,
     `${out}（exit ${code}）`,
   );
+}
+
+/*
+ * ── FLAKY_ENDPOINT 裡的 id 打錯字會怎樣 ──────────────────
+ *
+ * 那份手寫的 Set 管的是「這個平臺的端點會一陣一陣壞掉，不要當成帳號沒了」
+ * 那段提醒。id 打錯的話 `FLAKY_ENDPOINT.has(p.id)` 永遠是 false ——
+ * feed 照樣間歇壞掉、腳本照樣紅燈，而那段提醒**永遠不會印**，
+ * 而且不會有任何錯誤訊息。第 4 輪（第四十五圈）補的檢查守的就是這個。
+ *
+ * 測法跟 `test-perf-budgets` 那一格一樣：改的是**副本**不是版控裡那一份。
+ * 副本放在同一個資料夾（那支腳本從自己的路徑推 ROOT），檔名帶 pid，
+ * 跑完一定刪掉。傳進去的來源指到那台假伺服器 —— 萬一檢查沒有擋下來，
+ * 它也只會去打 localhost，不會摸到真的網路。
+ */
+console.log('\nFLAKY_ENDPOINT 的 id\n' + '─'.repeat(56));
+{
+  const realPath = resolve(ROOT, 'scripts/verify-sources.mjs');
+  const original = await readFile(realPath, 'utf8');
+  const from = "new Set(['youtube'])";
+  const src = [{ id: 'good', platform: 'medium', enabled: true, feedUrl: `${base}/ok` }];
+  if (!original.includes(from)) {
+    check('找得到 FLAKY_ENDPOINT 那一行（找不到的話底下幾格證明不了什麼）', false, from);
+  } else {
+    const copyPath = resolve(ROOT, `scripts/verify-sources.flaky-probe.${process.pid}.mjs`);
+    /** @type {{ out: string, code: number }} */
+    let r = { out: '', code: -1 };
+    try {
+      await writeFile(copyPath, original.replace(from, "new Set(['youtub'])"), 'utf8');
+      r = await verify(src, copyPath);
+    } finally {
+      await rm(copyPath, { force: true });
+    }
+    check(
+      'id 不是真的平臺 id 時說出來、而且擋得住',
+      /FLAKY_ENDPOINT 裡的 youtub 不是/.test(r.out) && r.code === 1,
+      `${r.out.split('\n')[0]}（exit ${r.code}）`,
+    );
+
+    /* 反向：沒改的那一份不能因為這條檢查就出聲 */
+    const clean = await verify(src);
+    check('沒改的時候這條檢查不出聲（反向案例）', !/FLAKY_ENDPOINT 裡的/.test(clean.out), clean.out.slice(0, 80));
+
+    /* 跑完之後版控裡那一份必須一個字都沒變 —— 這才是「改副本」的真正保證 */
+    check('跑完之後 scripts/verify-sources.mjs 沒有被動過', (await readFile(realPath, 'utf8')) === original, '被動過了');
+  }
 }
 
 /* 收尾搬到這裡 —— `--patterns` 那幾格用的是同一個假伺服器與同一個暫存目錄 */

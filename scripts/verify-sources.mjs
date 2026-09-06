@@ -36,6 +36,39 @@ import { confidenceReport } from './lib/confidence-report.mjs';
  */
 const FLAKY_ENDPOINT = new Set(['youtube']);
 
+/*
+ * ── 這份手寫的名單裡如果打錯字，什麼都不會發生 ──────────
+ *
+ * 第 4 輪（第四十五圈）逐條驗待辦時量到的。上面那段話**只有在 id 對得上
+ * 平臺資料的時候**才會印出來 —— 寫成 `youtub` 或 `YouTube` 的話，
+ * `FLAKY_ENDPOINT.has(p.id)` 永遠是 false，於是結果是：
+ * feed 一如往常地間歇壞掉、腳本紅燈、而那句「不要當成帳號沒了」
+ * **永遠不會出現**。跑的人照結尾那句去改 `platforms.data.mjs`，
+ * 改的是一個沒有壞的東西。
+ *
+ * 這是「安靜地不做事」那一類，不是會報錯的那一類，所以要有人問一次。
+ * 判準是平臺資料自己的 id —— 不需要第二份清單。
+ *
+ * 刻意用 `realPlatforms` 而不是底下那個吃 `--platforms=` 的 `PLATFORMS`：
+ * 「YouTube 的端點會一陣一陣壞掉」是**真實世界的事**，不是測試傳進來的
+ * 那份假清單的事。拿假清單當判準的話，這條檢查會在每一個
+ * 傳 `--platforms=` 的測試裡誤報。
+ */
+const flakyUnknown = [...FLAKY_ENDPOINT].filter((id) => !realPlatforms.some((p) => p.id === id));
+if (flakyUnknown.length > 0) {
+  /* 用 console.log 不用 console.error：這支腳本其餘 28 句話都在 stdout，
+     混兩個串流的話「它有沒有說話」會變成看你接哪一根管子 —— 補測試時就踩到了。 */
+  console.log(
+    `X FLAKY_ENDPOINT 裡的 ${flakyUnknown.join('、')} 不是 platforms.data.mjs 裡的平臺 id。\n` +
+      '  那份名單管的是「端點會一陣一陣壞掉、不要當成帳號沒了」那段提醒 ——\n' +
+      '  id 對不上的話那段話永遠不會印，而且不會有任何錯誤訊息。\n' +
+      '  改法：改成真的 id（現在有這些：' +
+      realPlatforms.map((p) => p.id).join('、') +
+      '）。',
+  );
+  process.exit(1);
+}
+
 const argv = process.argv.slice(2);
 const ALL = argv.includes('--all');
 const PATTERNS = argv.includes('--patterns');
@@ -155,14 +188,38 @@ async function probe(url) {
  * @param {boolean} ok
  * @param {string} label
  * @param {string} detail
+ * @param {string} [mark] 蓋掉預設的符號
  */
-function line(ok, label, detail) {
-  console.log(`  ${ok ? '✓' : '✗'} ${label.padEnd(30)} ${detail}`);
+function line(ok, label, detail, mark) {
+  console.log(`  ${mark ?? (ok ? '✓' : '✗')} ${label.padEnd(30)} ${detail}`);
 }
+
+/*
+ * ── 「端點活著」跟「讀得到東西」不共用一個符號 ──────────────
+ *
+ * 第 4 輪（第四十五圈）逐條驗待辦時量到的。實測 `note`：
+ *
+ *     ✓ note    200 RSS 2.0 **0 筆**  255ms  https://note.com/note_official/rss
+ *
+ * 200、合法的 RSS、**一筆都沒有** —— 而那一列的符號跟旁邊抓到 30 筆的
+ * `hatena` 一模一樣。結尾那句「1 個平臺回了合法的 feed 但一筆都沒有」
+ * 早就有了，但**列本身**還是綠的，於是掃過去的人不會停下來。
+ * 那個平臺的 `confidence` 也還是 `verified` —— 綠燈證明的是端點還在。
+ *
+ * 這條待辦（「綠燈與抓到東西了分不開」）從第三十圈掛到現在。
+ * 改的只有符號，不動離開碼：0 筆不是失敗，是「這一格什麼都沒證明」。
+ */
+/**
+ * @param {{ ok: boolean, items?: number }} r
+ * @param {string} label
+ * @param {string} detail
+ */
+const resultLine = (r, label, detail) => line(r.ok, label, detail, r.ok && r.items === 0 ? '·' : undefined);
 
 if (PATTERNS) {
   console.log('\n平臺 feed 樣板檢查\n' + '─'.repeat(70));
-  console.log('有 probeHandle 的用真實公開帳號實測；推導不出網址的標成「查不準」。\n');
+  console.log('有 probeHandle 的用真實公開帳號實測；推導不出網址的標成「查不準」。');
+  console.log('符號：✓ 讀到東西　· 端點活著、但讀到 0 筆　✗ 打不通　– 沒有樣板\n');
 
   let realFailures = 0;
   /** 哪幾個失敗了 —— 底下要判斷是不是「那個會一陣一陣回 404 的」 */
@@ -193,7 +250,7 @@ if (PATTERNS) {
       const url = fillTemplate(template, p.probeHandle);
       const r = await probe(url);
       probedIds.push(p.id);
-      line(r.ok, p.id, `${r.status} ${r.kind} ${itemsText(r)}  ${r.ms}ms  ${url}`);
+      resultLine(r, p.id, `${r.status} ${r.kind} ${itemsText(r)}  ${r.ms}ms  ${url}`);
       if (!r.ok) {
         realFailures++;
         failedIds.push(p.id);
@@ -371,7 +428,7 @@ for (const source of targets) {
     }
     const url = base + fillTemplate(platform.bridgeRoute, source.handle ?? '');
     const r = await probe(url);
-    line(r.ok, label, `${r.status} ${r.kind} ${itemsText(r)}  ${r.ms}ms`);
+    resultLine(r, label, `${r.status} ${r.kind} ${itemsText(r)}  ${r.ms}ms`);
     if (!r.ok) { bad++; badIds.push(source.id); }
     continue;
   }
@@ -426,7 +483,7 @@ for (const source of targets) {
   }
 
   const r = await probe(url);
-  line(r.ok, label, `${r.status} ${r.kind} ${itemsText(r)}  ${r.ms}ms  ${url}`);
+  resultLine(r, label, `${r.status} ${r.kind} ${itemsText(r)}  ${r.ms}ms  ${url}`);
   if (!r.ok) { bad++; badIds.push(source.id); }
 }
 

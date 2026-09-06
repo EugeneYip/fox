@@ -47,8 +47,9 @@ const configured = new Map(sources.map((s) => [s.platform, s]));
  * 第 4 輪（第四十二圈）問「這份清單是誰維護的？漏一個會怎樣？」。
  *
  * `REGION`／`MEDIA`／`KIND`／`SHAPE`／`CONFIDENCE` 是五份**人手維護的**
- * 對照表，把資料裡的英文值翻成表格裡的中文。今天五份都蓋得住
- * （5／5、6／6、4／5、4／4、3／3）—— 而**沒有東西在比**。
+ * 對照表，把資料裡的英文值翻成表格裡的中文 —— 而**沒有東西在比**。
+ *（幾份表各蓋住幾個鍵，跑一次這支腳本就會印出來。原本這裡寫著
+ * 那五組數字，那是一個寫下來就沒有人再算的數字。）
  *
  * 實測：把某個平臺的 `region` 改成表裡沒有的值，再跑一次產生器 ——
  *
@@ -63,6 +64,27 @@ const configured = new Map(sources.map((s) => [s.platform, s]));
  */
 /** @type {string[]} */
 const unmapped = [];
+
+/*
+ * ── 反過來那一半：表裡有鍵，而沒有任何一筆資料用它 ──────────
+ *
+ * 上面守的是「資料有值而表裡沒有鍵」（會印出 `undefined`）。
+ * 反過來沒有人看：**表裡多一個鍵，什麼事都不會發生。**
+ *
+ * 第 4 輪（第四十五圈）逐條驗待辦時量到的：`KIND` 有 5 個鍵，
+ * 24 個平臺只用到 4 種 —— `api` 今天什麼都沒翻譯。那不是錯
+ *（`feedKind: 'api'` 是合法的值，只是還沒有平臺是那樣），
+ * 但寫在註解裡的「4／5」是一個沒有人在算的數字，
+ * 而這一圈才剛因為同一個形狀改過兩支腳本。
+ *
+ * 所以讓它每次自己算一次。用到的鍵由 `label()` 順手記 ——
+ * 不另外寫一份「哪份表對到哪個欄位」的對照，那正是上面那條規則
+ * 已經在守的東西，寫第二份就會分岔。
+ * （寫這一段的時候第一次就分岔了：我照著表名猜欄位叫 `kind`，
+ * 而資料裡是 `feedKind`，於是量出「5 個鍵一個都沒用到」。）
+ */
+/** @type {Map<string, { table: Record<string, string>, used: Set<string> }>} */
+const tableUse = new Map();
 /**
  * @param {Record<string, string>} table
  * @param {string} tableName 出問題時要說得出是哪一份表
@@ -71,8 +93,14 @@ const unmapped = [];
  * @param {string} value
  */
 const label = (table, tableName, id, field, value) => {
+  let rec = tableUse.get(tableName);
+  if (rec === undefined) {
+    rec = { table, used: new Set() };
+    tableUse.set(tableName, rec);
+  }
   const hit = table[value];
   if (hit === undefined) unmapped.push(`${id} 的 ${field} 是 \`${value}\`，而 ${tableName} 裡沒有這個鍵`);
+  else rec.used.add(value);
   return hit ?? `（${value}？）`;
 };
 
@@ -373,6 +401,29 @@ if (datedRows !== verifiedCount) {
    *（某份對照表少一個鍵）要等人真的去跑產生器才看得到。
    * 同一個形狀在這個 repo 犯到第十三次了。
    */
+  /*
+   * 跟底下那一段一樣，要在 `--check` 的分岔**之前** ——
+   * CI 跑的是那個模式，放在寫檔那一支裡的話它一輩子看不到。
+   */
+  {
+    const idle = [...tableUse]
+      .map(([name, rec]) => [name, Object.keys(rec.table).filter((k) => !rec.used.has(k))])
+      .filter(([, keys]) => keys.length > 0);
+    const totals = [...tableUse]
+      .map(([name, rec]) => `${name} ${rec.used.size}／${Object.keys(rec.table).length}`)
+      .join('、');
+    if (idle.length > 0) {
+      console.log(`· 對照表的鍵有沒有人用：${totals}`);
+      for (const [name, keys] of idle) {
+        console.log(`    ${name} 裡的 ${/** @type {string[]} */ (keys).join('、')} 這一輪什麼都沒翻譯到。`);
+      }
+      console.log('  不是錯（那些是合法的值，只是還沒有平臺是那樣）——');
+      console.log('  但那幾行看起來像在守什麼，其實沒有，所以每次說一次。');
+    } else if (tableUse.size > 0) {
+      console.log(`✓ 對照表的鍵每一個都有人用到（${totals}）`);
+    }
+  }
+
   if (unmapped.length > 0) {
     console.error('\nX 對照表少了鍵，文件會寫出 undefined：');
     for (const line of unmapped) console.error(`    · ${line}`);
