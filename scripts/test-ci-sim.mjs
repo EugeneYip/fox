@@ -307,13 +307,44 @@ console.log('─'.repeat(56));
     out.split('\n').filter((l) => /秒/.test(l)).join(' | '),
   );
 
+  /*
+   * ── 斷言不要跟「哪一步比較快」綁在一起 ──────────────
+   *
+   * 原本這一格寫死 `named[1] === 'verify:all' && Number(named[2]) >= 50`。
+   * 慢的那一步是靠忙等 700ms 造出來的，而快的那一步 `echo ok` 也要經過
+   * 一次 `npm run`（起一個 node 行程）—— 機器一有負載，那一邊超過 700ms
+   * 不是不可能，於是這一格會紅，而紅的理由跟它要驗的事情無關。
+   *
+   * 第 7 輪（第四十三圈）就把這件事記進待辦了（「斷言的邊界有沒有跟
+   * 量得到的耗時綁在一起」），第 7 輪（第四十五圈）逐條驗待辦時處理。
+   *
+   * 改成從**輸出自己**推：最久的那一步要真的是螢幕上秒數最大的那一個，
+   * 而百分比要等於它自己的秒數除以合計。一個時間常數都不用。
+   *
+   * 反貧化那一半也要有：兩步的秒數如果一樣，「最大的」證明不了什麼 ——
+   * 那時候要說出來，不是安靜地綠。
+   */
+  const rows = [...out.matchAll(/^\s+[✓X] (\S+)\s+(\d+) 秒$/gm)].map((m) => ({
+    name: m[1],
+    sec: Number(m[2]),
+  }));
+  const maxSec = Math.max(...rows.map((r) => r.sec));
+  const tie = rows.filter((r) => r.sec === maxSec).length !== 1;
   const named = /合計 \d+ 秒，最久的是 (\S+)（(\d+)%）/.exec(out);
-  /* 慢的那一步是 verify:all（忙等 700ms），beta 只是 echo */
-  const okTotal = named !== null && named[1] === 'verify:all' && Number(named[2]) >= 50;
+  const namedRow = named === null ? undefined : rows.find((r) => r.name === named[1]);
+  const okTotal =
+    named !== null &&
+    !tie &&
+    namedRow !== undefined &&
+    namedRow.sec === maxSec &&
+    totalShown > 0 &&
+    Number(named[2]) === Math.round((namedRow.sec / totalShown) * 100);
   ok(
-    '說得出合計與最久的那一步（而且真的是最久的那一步）',
+    `說得出合計與最久的那一步（螢幕上最大的是 ${maxSec} 秒${tie ? '，而且不只一步' : ''}）`,
     okTotal,
-    out.split('\n').filter((l) => l.includes('合計') || l.includes('✓')).join(' | '),
+    tie
+      ? `兩步的秒數一樣（${rows.map((r) => `${r.name} ${r.sec}`).join('、')}）—— 這一格證明不了「挑的是最久的那一個」`
+      : out.split('\n').filter((l) => l.includes('合計') || l.includes('✓')).join(' | '),
   );
 
   await rm(dir, { recursive: true, force: true });

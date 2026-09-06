@@ -1499,4 +1499,24 @@ if (!process.argv.includes('--verbose')) {
   console.log('要看每條規則真的有東西可判斷幾次：npm run check:copy -- --verbose');
 }
 console.log('');
-process.exit(0);
+/*
+ * ── 最後一行用 `process.exitCode`，不用 `process.exit()` ──────────
+ *
+ * `process.exit()` **不等 stdout 排空**。輸出接到終端機時是同步寫的，
+ * 所以看不出差別；接到**管線**（`| tail`、CI 的 log 收集）時，
+ * 超過管線緩衝區的部分會是非同步的，而 `process.exit()` 會把它丟掉。
+ *
+ * 第 7 輪（第四十五圈）量了這台機器的緩衝區與每一支關卡的輸出：
+ *
+ *     管線緩衝區          65,536 bytes
+ *     最大的一支輸出      13,827 bytes（check:perf --verbose）＝ 21%
+ *
+ * 也就是說**今天還咬不到**。改它不是在修一個現在會發生的錯，
+ * 是在拿掉一個「輸出長大就會安靜地開始截斷」的機制 ——
+ * 而這個 repo 的輸出每一圈都在長。
+ *
+ * 最後一行是輸出累積最多的那一刻，所以先改這裡。
+ * 檔案裡中途早退的那幾個 `process.exit()` 記在待辦（它們累積的比較少）。
+ *（`check:perf` 與 `check:content` 第 7 輪〔第四十四圈〕就改過了。）
+ */
+process.exitCode = 0;

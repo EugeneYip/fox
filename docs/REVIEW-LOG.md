@@ -83,7 +83,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 60,100 行、3.2 MB、360 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 60,300 行、3.2 MB、361 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -60031,4 +60031,172 @@ JSDoc 又放在 `/* */` 而不是 `/** */`，三個 implicit any ——
   七支關卡只有兩支有 `--list-rules`、圈末索引停在第二十六圈、
   以及第二十三圈記的三件站主決定（→ 站主））
 
-**下一輪：7 — 建置與 CI**
+### 2026-09-06 — 第 7 輪（第四十五圈）：建置與 CI
+
+**第四十五圈問：這條待辦還在那裡，是因為它還成立嗎？**
+判準：**挑幾條被抄了很多圈的待辦，回去對照現在的程式 ——
+它描述的那件事今天還是真的嗎？**
+
+挑了四條。**全部還成立**，但其中一條的**判準是錯的**（它找不到它自己在講的東西）。
+補掉三件。
+
+#### 1. 「其餘六支關卡也都以 `process.exit()` 收尾」—— 還成立，而且第一次有數字
+
+`process.exit()` **不等 stdout 排空**。接到終端機時是同步寫的（看不出差別），
+接到**管線**時超過緩衝區的部分是非同步的，而 `process.exit()` 會把它丟掉。
+
+這條掛了好幾圈，而從來沒有人量過「離咬到還有多遠」。量了：
+
+| | bytes |
+|---|---|
+| 這台機器的管線緩衝區 | **65,536** |
+| 最大的一支關卡輸出（`check:perf --verbose`） | 13,827（**21%**） |
+| `check:contrast --verbose` | 10,748 |
+| `audit:privacy --verbose` | 3,841 |
+| `check:content --verbose` | 4,713 |
+| `check:copy --verbose` | 2,972 |
+| `check:a11y --verbose` | 2,368 |
+| `check:links` | 373 |
+
+（緩衝區是實測的：`node -e "process.stdout.write('x'.repeat(200000));process.exit(0)" | wc -c`
+回 **65536**。）七支關卡接管線與寫檔案的輸出**一個 byte 都沒差**。
+
+**所以今天咬不到。** 改它不是在修一個現在會發生的錯，是在拿掉一個
+「輸出長大就會安靜地開始截斷」的機制 —— 而這個 repo 的輸出每一圈都在長。
+
+改的是**最後一行**（輸出累積最多的那一刻）：`check:a11y`、`check:copy`、
+`check:contrast`、`audit:privacy`、`check:links` 五支的收尾從
+`process.exit(n)` 換成 `process.exitCode = n`。
+（`check:perf` 與 `check:content` 第 7 輪〔第四十四圈〕就改過了。）
+
+綠燈與紅燈兩邊都驗過：五支現在都離開碼 0；
+`tokens.css` 的 `--c-ink` 改名 → `check:contrast` 離開碼 1；
+`docs/CONTENT.md` 的「臺灣」改成「台灣」→ `check:copy` 離開碼 1。
+
+檔案中途早退的那幾個 `process.exit()` 沒動（它們累積的輸出比較少），記進待辦。
+
+#### 2. 「第二把尺依賴 `.astro/`，而它不在的時候只印一句 note、不擋」—— 還成立，補了
+
+這是這一圈第 3 輪自己留下的。欄位抽取的第二把尺是
+`.astro/collections/*.schema.json`（`astro sync`／`astro build` 產生的），
+而那個目錄在 `.gitignore` 裡。
+
+**判準不是「是不是同一棵樹」** —— fixture 的 `dist` 是手寫的、`--astro=`
+也指到暫存目錄，兩邊在同一棵樹裡卻沒有 `.astro/`。真正該問的是
+**這個 `dist` 是不是 Astro 真的建出來的**：是的話就有 `dist/_astro/`，
+而它跟 `.astro/collections/` 是**同一個指令**產生的。
+一個在、另一個不在，就是有事情變了。
+
+實測（把 `.astro/collections` 暫時改名）：
+
+```
+dist/ 是 Astro 建出來的（有 _astro/），但 .astro/collections/ 不在。
+  那兩個是同一個指令產生的 —— 一個在、另一個不在，表示有事情變了。
+離開碼 1
+```
+
+44 步全部通過，fixture 一格都沒紅。
+
+#### 3. 「`test:units` 裡還有沒有別的時間相依斷言」—— 有一個，改成從輸出自己推
+
+找到的是 `test-ci-sim.mjs`：
+
+```js
+const okTotal = named !== null && named[1] === 'verify:all' && Number(named[2]) >= 50;
+```
+
+慢的那一步是靠忙等 700ms 造出來的，而快的那一步 `echo ok` 也要經過一次
+`npm run`（起一個 node 行程）—— 機器一有負載，那一邊超過 700ms 不是不可能，
+於是這一格會紅，而**紅的理由跟它要驗的事情無關**。
+（第 7 輪〔第四十三圈〕就記過這條待辦，那一輪修的是 `test:throttle`。）
+
+改成從輸出自己推：最久的那一步要真的是螢幕上秒數最大的那一個，
+百分比要等於它自己的秒數除以合計。**一個時間常數都不用。**
+
+反貧化那一半也補上：兩步的秒數如果一樣，「最大的」證明不了什麼 ——
+那時候要說出來，不是安靜地綠。
+
+突變（把 `ci-sim.mjs` 挑最久那一步的比較 `>` 寫成 `<`）：這一格紅，
+訊息裡看得到它挑的是 `beta 0 秒` 而不是 `verify:all 1 秒`。
+
+#### 4. 「還有沒有別的測試會動到版控裡的檔案？」—— **判準是錯的**
+
+那條待辦自己寫了判準：「測試裡出現 `writeFile(resolve(ROOT, …))`
+而路徑不在暫存目錄底下」。照著跑：
+
+```
+grep -n "writeFile(resolve(ROOT" scripts/test-*.mjs
+（一個都沒有）
+```
+
+**而那件事確實存在**，只是寫法不同 —— 兩處都先把路徑存進變數：
+
+| 檔案 | 行 | 寫到哪 |
+|---|---|---|
+| `test-perf-budgets.mjs` | 1194 | `scripts/check-perf.stale-probe.<pid>.mjs` |
+| `test-verify-sources.mjs` | 327 | `scripts/verify-sources.flaky-probe.<pid>.mjs` |
+
+兩處都是這一組圈刻意做的（改副本不改版控裡那一份），都有 `finally` 刪掉，
+也都有一格「跑完之後那個檔案沒有被動過」。所以**風險是有人管的**，
+只是那條待辦的判準找不到它們。
+
+真正找得到的判準是**結果**不是寫法：跑完之後工作樹有沒有變。
+量了一次（`git status --porcelain` 跑前跑後比對）：**沒有變**。
+沒有人在自動跑這一句，記進待辦。
+
+#### 六道關卡
+
+`npm run verify:all` 全綠、`npm run test:tools` 44 步全通過。
+`ci:sim` 也跑了（改到 `test:units` 那條鏈裡的檔案），離開碼 0。
+
+#### 待辦（不屬於這一輪）
+
+- **中途早退的 `process.exit()` 還在 14 處**（`check:a11y` 3、
+  `check:content` 3、`audit:privacy` 3、`check:copy` 2、`check:links` 2、
+  `check:perf` 1；`check:contrast` 一個都沒有了）。它們累積的輸出比較少，
+  而且今天最大的一支只用掉緩衝區的 21% —— 但那是**今天**的數字。
+  （數法：`grep -n "process\.exit(" scripts/X.mjs` 要扣掉註解裡提到它的行 ——
+  這一輪加的那段註解自己就讓 `grep -c` 從 3 跳到 7）（→ 7 建置與 CI）
+- **沒有人在守那 21%。** 輸出長大到超過 65,536 的話，中途早退那幾條路會
+  開始安靜地截斷。判準很好算（跑一次 `--verbose` 數 bytes），
+  但沒有東西每次都在算（→ 7 建置與 CI）
+- **「跑完測試工作樹不能變」沒有人在自動驗。** 這一輪手動量過一次是乾淨的；
+  判準是 `git status --porcelain` 跑前跑後一樣，比「grep 某種寫法」可靠得多
+  （→ 7 建置與 CI）
+- **同時跑兩份 `test-perf-budgets` 仍然會紅**（副本已經帶 pid，所以不是它）
+  —— 這一輪沒查（→ 7 建置與 CI）
+- **`membersOf` 只展開一層**、**`gate-count-stale` 會把散文讀成宣稱**、
+  **為什麼不讓 `check.yml` 直接跑 `verify:all` ＋ `test:tools` 三行了事**
+  —— 三條都還在，這一輪沒動（→ 7 建置與 CI）
+- 上一輪與更早的都還在（`unbalanced-backtick` 只掃 `scan()` 進來的東西、
+  `EN_COVERAGE.pct` 仍然是手寫的 100、
+  `tags.count_one` 還是沒有證據（→ 站主）、文字抽取只認單引號、
+  `SEVERITY` 那份表跟 `STRUCTURAL_IDS` 是第二份手寫清單、
+  `unscanned-tracked-file` 走了第二次 `filesToScan()`、
+  `repoCoverage` 那一行沒有測試、`docs/PRIVACY.md` 沒有規則清單（→ 站主）、
+  `gen-platform-docs.mjs` 沒有測試檔、
+  `test-verify-sources.mjs` 的 helper 只收 stdout、
+  「來源檢查」那一半沒有 0 筆的總結句、
+  `note` 的 `confidence` 還是 `verified`（→ 站主）、
+  `sync-feeds.mjs` 四個策略沒有匯出、`check-handle.mjs` 不能離線跑、
+  `manifest-drift` 現在是兩件事、`icons[]` 沒驗 `sizes`、
+  `git` 那 5 個指令沒人驗但不建議補子指令名檢查、
+  微網誌型平臺的退路等真的有來源那天再處理、
+  `CNAME` 的 content-type 是 `octet-stream`、
+  `--w-prose`／`--w-content` 那兩份手抄值、
+  `test-contrast` 把 `#faf6ee` 寫死在 fixture 裡、
+  `images` 還是副檔名認的、CSS 那三條沒有被 `sawTags` 涵蓋、
+  這份檔案自己的頁首也是個沒人守的數字、
+  「71～108 秒」也是一個沒人守的數字、`CONTENT.md` 現在 588 行（→ 站主）、
+  `MEASURED` 的日期沒有東西在守、`probe:served` 只量 5 頁而且寫死、
+  「雜湊資源只有 `max-age=600`」是這個主機做不到（→ 站主）、
+  `check:content` 那一半還是只看 `syndication.json`、
+  排程跑的 `sync:health` 沒有 `--strict`（→ 站主）、
+  `CHANGE_ME` 那條路連 failures 都不加、
+  `SCHEMA_STRUCTURAL` 3 個什麼都沒擋、那 4 條什麼都沒擋的豁免（→ 站主）、
+  沒有東西在守「空狀態不要自相矛盾」、英文那一半沒有人系統地讀過、
+  `box-shadow` 算不算邊、`BG_PROPS` 三個裡只有一個被用到、
+  七支關卡只有兩支有 `--list-rules`、圈末索引停在第二十六圈、
+  以及第二十三圈記的三件站主決定（→ 站主））
+
+**下一輪：8 — 視覺與版面**

@@ -387,6 +387,37 @@ if (built.length === 0) {
   process.exit(1);
 }
 
+/*
+ * ── 第二把尺不見了，不當作過關 ──────────────────────
+ *
+ * 第 3 輪（第四十五圈）加的欄位抽取自我檢查靠
+ * `.astro/collections/*.schema.json`（`astro sync`／`astro build` 產生的）。
+ * 那個目錄在 `.gitignore` 裡，而它不在的時候底下只印一句 note、**不擋** ——
+ * 那一輪自己就把這件事記進待辦了：哪天 Astro 改了輸出位置，
+ * 就會安靜地退回一把尺。
+ *
+ * 判準不是「是不是同一棵樹」（fixture 的 dist 是手寫的，`--astro=` 也指到
+ * 暫存目錄，那種情況兩邊都在暫存目錄裡，同一棵樹卻沒有 `.astro/`）。
+ * 真正該問的是**這個 dist 是不是 Astro 真的建出來的** ——
+ * 是的話就有 `dist/_astro/`，而那跟 `.astro/collections/` 是同一個指令產生的。
+ * 一個在、另一個不在，就是有事情變了。
+ */
+{
+  const reallyBuilt = existsSync(resolve(DIST, '_astro'));
+  const rulerDir = resolve(dirname(ASTRO_CONFIG), '.astro/collections');
+  if (reallyBuilt && !existsSync(rulerDir)) {
+    console.error(
+      '\ndist/ 是 Astro 建出來的（有 _astro/），但 .astro/collections/ 不在。\n' +
+        '  那兩個是同一個指令產生的 —— 一個在、另一個不在，表示有事情變了。\n' +
+        '  欄位抽取的第二把尺（Astro 自己寫的 schema）靠那個目錄，\n' +
+        '  它不在的話 field-undocumented 與 guide-field-unknown 會少一層保護。\n' +
+        '  先跑 npm run build；還是不見的話，Astro 可能改了輸出位置，\n' +
+        '  要跟著改 check-content.mjs 裡那一段。\n',
+    );
+    process.exit(1);
+  }
+}
+
 /** collection 名稱 → 網址前綴。跟 lib/content.ts 的 entryUrl() 對應 */
 const URL_PREFIX = { posts: 'writing', poems: 'poems', notes: 'notes' };
 const DEFAULT_LANG = 'zh-TW';
