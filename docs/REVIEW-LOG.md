@@ -60081,11 +60081,9 @@ JSDoc 又放在 `/* */` 而不是 `/** */`，三個 implicit any ——
 `.astro/collections/*.schema.json`（`astro sync`／`astro build` 產生的），
 而那個目錄在 `.gitignore` 裡。
 
-**判準不是「是不是同一棵樹」** —— fixture 的 `dist` 是手寫的、`--astro=`
-也指到暫存目錄，兩邊在同一棵樹裡卻沒有 `.astro/`。真正該問的是
-**這個 `dist` 是不是 Astro 真的建出來的**：是的話就有 `dist/_astro/`，
-而它跟 `.astro/collections/` 是**同一個指令**產生的。
-一個在、另一個不在，就是有事情變了。
+判準要兩個條件**同時**成立：`dist/` 是 Astro 真的建出來的
+（有 `dist/_astro/`，而它跟 `.astro/collections/` 是**同一個指令**產生的），
+而且這個 `dist/` 跟 `--astro=` 指的是**同一棵樹**。
 
 實測（把 `.astro/collections` 暫時改名）：
 
@@ -60095,7 +60093,15 @@ dist/ 是 Astro 建出來的（有 _astro/），但 .astro/collections/ 不在�
 離開碼 1
 ```
 
-44 步全部通過，fixture 一格都沒紅。
+**第一版只有前面那個條件，而 `ci:sim` 當場抓到。** fixture 會自己寫
+`_astro/x.css`（那是直排那幾格要的語料），而它們多半不傳 `--astro=` ——
+於是 `ASTRO_CONFIG` 是真 repo 的，`.astro/` 在乾淨的 checkout 上還沒有
+（`deploy.yml` 的 `test:units` 跑在 build **之前**），
+這一支就在 12 格 fixture 上早退，印出來的是「（沒印）」。
+
+本機 `verify:all` 與 `test:tools` 兩套關卡**全綠** —— 因為工作樹永遠有
+`.astro/`。唯一抓到它的是 `ci:sim`，而它只有人手動跑才會跑。
+CLAUDE.md 寫的就是這件事，這一輪是第二次被它救。
 
 #### 3. 「`test:units` 裡還有沒有別的時間相依斷言」—— 有一個，改成從輸出自己推
 

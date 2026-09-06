@@ -396,14 +396,24 @@ if (built.length === 0) {
  * 那一輪自己就把這件事記進待辦了：哪天 Astro 改了輸出位置，
  * 就會安靜地退回一把尺。
  *
- * 判準不是「是不是同一棵樹」（fixture 的 dist 是手寫的，`--astro=` 也指到
- * 暫存目錄，那種情況兩邊都在暫存目錄裡，同一棵樹卻沒有 `.astro/`）。
- * 真正該問的是**這個 dist 是不是 Astro 真的建出來的** ——
- * 是的話就有 `dist/_astro/`，而那跟 `.astro/collections/` 是同一個指令產生的。
- * 一個在、另一個不在，就是有事情變了。
+ * 判準要兩個條件**同時**成立：
+ *
+ *   1. `dist/` 是 Astro 真的建出來的 —— 有 `dist/_astro/`，
+ *      而它跟 `.astro/collections/` 是**同一個指令**產生的
+ *   2. 這個 `dist/` 跟 `--astro=` 指的是**同一棵樹**
+ *
+ * 只有第 1 個不夠：`ci:sim` 當場抓到。fixture 會自己寫 `_astro/x.css`
+ *（那是直排那幾格要的語料），而它們多半不傳 `--astro=` ——
+ * 於是 `ASTRO_CONFIG` 是真 repo 的，`.astro/` 在乾淨的 checkout 上還沒有
+ *（`deploy.yml` 的 `test:units` 跑在 build **之前**），
+ * 這一支就在 12 格 fixture 上早退，印出來的是「（沒印）」。
+ *
+ * 本機兩套關卡全綠，因為工作樹永遠有 `.astro/`。
+ * **唯一抓到它的是 `ci:sim`** —— CLAUDE.md 寫的就是這件事。
  */
 {
-  const reallyBuilt = existsSync(resolve(DIST, '_astro'));
+  const reallyBuilt =
+    existsSync(resolve(DIST, '_astro')) && resolve(dirname(ASTRO_CONFIG), 'dist') === DIST;
   const rulerDir = resolve(dirname(ASTRO_CONFIG), '.astro/collections');
   if (reallyBuilt && !existsSync(rulerDir)) {
     console.error(

@@ -211,9 +211,11 @@ git ls-files | grep -c identity.local    # 必須是 0
 **21%**）—— 所以今天咬不到。五支的收尾改成 `process.exitCode`；
 改它是在拿掉一個「輸出長大就會安靜開始截斷」的機制。
 
-**第二把尺不見了不再只是印一句 note。** 判準不是「同一棵樹」（fixture 也是），
-而是「這個 dist 是不是 Astro 真的建出來的」—— 有 `dist/_astro/` 就有，
-而它跟 `.astro/collections/` 是同一個指令產生的。
+**第二把尺不見了不再只是印一句 note。** 判準要兩個條件同時成立：
+`dist/` 是 Astro 真的建出來的（有 `dist/_astro/`），而且跟 `--astro=`
+是同一棵樹。第一版只有前一個，**`ci:sim` 當場抓到**（fixture 自己會寫
+`_astro/x.css`，而乾淨的 checkout 在 build 之前沒有 `.astro/`）——
+本機兩套關卡全綠，這一輪第二次被 `ci:sim` 救。
 
 **`test-ci-sim` 那個時間相依斷言改成從輸出自己推**（原本寫死
 「最久的是 verify:all 而且 ≥50%」，而快的那一步也要起一個 node 行程）。
