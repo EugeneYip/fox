@@ -76,7 +76,13 @@ import { RULES, documentationDuty } from './lib/copy-rules.mjs';
  */
 const EN_COVERAGE = { date: '2026-09-06', pairs: 147, pct: 100 };
 
-const EXTRA_RULE_IDS = ['unused-i18n-key', 'rule-not-documented', 'date-wrong-language', 'example-not-real'];
+const EXTRA_RULE_IDS = [
+  'unused-i18n-key',
+  'rule-not-documented',
+  'date-wrong-language',
+  'example-not-real',
+  'unbalanced-backtick',
+];
 
 /**
  * 這些檔案會**引用問題本身**（歷史紀錄、以及訂下這條規則的地方），
@@ -127,6 +133,75 @@ const subjects = new Map();
 const saw = (/** @type {string} */ id, /** @type {number} */ n) =>
   subjects.set(id, (subjects.get(id) ?? 0) + n);
 
+/*
+ * ── 少打一個反引號，會有一段文字安靜地離開視野 ──────────────
+ *
+ * `stripCode()` 是拿正則配對的：````…```` 與 `B…B`。
+ * 配對的東西一旦少了一半，**配到的就是下一個** ——
+ * 一行裡少打一個反引號，它會跟這一行後面某個不相干的反引號配成一對，
+ * 中間那一段真的文案就被當成程式碼拿掉了。
+ *
+ * 後果不是誤報，是**漏報**：那幾個字從此不受任何一條規則管，
+ * 而「掃了 N 個檔案、M 行」那兩個數字一點都不會變（行還在，內容沒了）。
+ *
+ * 第 6 輪（第四十五圈）逐條驗待辦時量的：上一圈留了一條
+ * 「`check:copy` 掃之前會拿掉程式碼區塊，但**行內**的反引號片段呢」——
+ * 量出來行內那種**本來就有拿掉**（`stripCode` 第二個 replace），
+ * 所以那條待辦的前提是錯的。真正沒有人在看的是**配不成對**的情況。
+ *
+ * 導入時實測：那 10 份文件語料，圍欄與行內反引號**全部成對**，
+ * 一處都沒有。所以這是預防性的，不是在修什麼。
+ */
+/**
+ * @param {string} rel
+ * @param {string} text
+ * @param {boolean} realLines
+ */
+function checkBackticks(rel, text, realLines) {
+  const raw = text.split('\n');
+  /* 圍欄用逐行狀態機數，不用正則 —— 正則本身就是這裡要驗的東西 */
+  let inFence = false;
+  let fenceOpenedAt = 0;
+  let checked = 0;
+  for (const [i, line] of raw.entries()) {
+    if (line.trimStart().startsWith('```')) {
+      if (!inFence) fenceOpenedAt = i + 1;
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const n = (line.match(/`/g) ?? []).length;
+    /* 主體是「有反引號的行」—— 沒有反引號的行上，這條規則沒有東西可判斷 */
+    if (n === 0) continue;
+    checked++;
+    if (n % 2 === 0) continue;
+    problems.push({
+      file: rel,
+      line: realLines ? i + 1 : 0,
+      id: 'unbalanced-backtick',
+      text: line.trim().slice(0, 60),
+      why:
+        '這一行的反引號是單數個。check:copy 掃之前會把 `…` 當程式碼拿掉，' +
+        '而少一個的話它會跟後面某個不相干的反引號配成一對 —— ' +
+        '中間那一段文案就從此不受任何一條規則管，而且「掃了 N 行」不會變。' +
+        '　改法：補上少的那一個，或把它改成別的寫法。',
+    });
+  }
+  if (inFence) {
+    problems.push({
+      file: rel,
+      line: realLines ? fenceOpenedAt : 0,
+      id: 'unbalanced-backtick',
+      text: '（這裡開了一個程式碼圍欄，到檔案結束都沒有關）',
+      why:
+        '圍欄沒有關。stripCode() 是用正則配對圍欄的，沒關的話配到的是下一個 —— ' +
+        '從這裡到下一個圍欄之間的文案會被整段當成程式碼拿掉。' +
+        '　改法：把圍欄關起來。',
+    });
+  }
+  saw('unbalanced-backtick', checked);
+}
+
 /**
  * @param {string} rel
  * @param {string} text  已經去掉標籤的可見文字，或整份 markdown
@@ -143,6 +218,7 @@ const saw = (/** @type {string} */ id, /** @type {number} */ n) =>
  */
 function scan(rel, text, { realLines = true } = {}) {
   if (SKIP.has(rel)) return;
+  checkBackticks(rel, text, realLines);
   const lines = stripCode(text).split('\n');
   scanned.files++;
   scanned.lines += lines.length;
@@ -650,8 +726,9 @@ for (const rel of ['src/i18n/ui.ts', 'src/config/site.ts']) {
     ['rule-not-documented', '它自己就是這條檢查，寫進文件會變成自我指涉'],
     ['date-wrong-language', '守的是 <time> 標籤算繪出來的語言，那是程式的事不是寫法'],
     ['example-not-real', '守的是那兩份文件裡的例子本身，不是一條寫作約定'],
+    ['unbalanced-backtick', '守的是這支腳本自己的視野（少一個反引號會讓一段文案消失），不是一條寫作約定'],
   ]);
-  /** 全部 9 條，不是只有逐行掃語料的那 5 條 */
+  /** 全部 10 條，不是只有逐行掃語料的那 5 條 */
   const ALL_RULE_IDS = [...RULES.map((r) => r.id), ...EXTRA_RULE_IDS];
   /** 一份給在這裡寫程式的人（含 AI），一份給真的在寫文案的人 */
   const DOCS = ['CLAUDE.md', 'docs/CONTENT.md'];
@@ -1029,13 +1106,48 @@ if (l10nPairs.length > 0) {
    * 所以另外比一次組數。跟上面一樣不擋 —— 少一組文案有可能是刻意刪的，
    * 只是要讓它被看見，並且要說得出「本來是幾組」。
    */
-  const fewer = EN_COVERAGE.pairs - l10nPairs.length;
-  if (fewer > 0) {
+  /*
+   * ── 變多也要說一句 ──────────────────────────
+   *
+   * 第 6 輪（第四十五圈）逐條驗待辦時處理的。原本只比「變少」——
+   * 而**新增文案是常態**，所以 `EN_COVERAGE.pairs` 會一直被超過，
+   * 而沒有任何人知道那個數字已經過期。過期的基準線比沒有基準線更糟：
+   * 下次真的少了 3 組的時候，它比的是一個很久以前的數，
+   * 那個「少了」會被稀釋掉。
+   *
+   * 順手把 `date` 也變成一個算得出來的東西。它原本只是印出來 ——
+   * 「2026-09-06 記下的」讀起來像近的，而那要讀的人自己去減。
+   * 這一圈第 2 輪剛為 `check:perf` 的 `MEASURED` 做過同一件事。
+   */
+  const drift = l10nPairs.length - EN_COVERAGE.pairs;
+  /*
+   * 用**日期**相減，不是拿現在的時刻減那天的午夜 —— 後者在當天下午就會
+   * 說「1 天前」（時區一偏就滿 24 小時）。差一天不重要，重要的是
+   * 這一行的用途正是講「多舊」，而它自己不能有偏差。
+   */
+  const today = new Date();
+  const days = Math.max(
+    0,
+    Math.round(
+      (Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()) -
+        Date.parse(`${EN_COVERAGE.date}T00:00:00Z`)) /
+        86400000,
+    ),
+  );
+  const since = `${EN_COVERAGE.date}（${days === 0 ? '就是今天' : `${days} 天前`}）`;
+  if (drift < 0) {
     notes.push(
-      `文案組數：**比 ${EN_COVERAGE.date} 少了 ${fewer} 組**（${EN_COVERAGE.pairs} → ${l10nPairs.length}）。\n` +
+      `文案組數：**比 ${since} 少了 ${-drift} 組**（${EN_COVERAGE.pairs} → ${l10nPairs.length}）。\n` +
         '    上面那個百分比看不見這件事 —— 一整組刪掉的時候分子分母一起少，比例不動。\n' +
         '    是刻意刪的就把 `check-copy.mjs` 的 `EN_COVERAGE.pairs` 一起改掉；\n' +
         '    不是的話，有一句文案不見了，而型別與建置都不會響（`_one` 那種動態查表的尤其）。',
+    );
+  } else if (drift > 0) {
+    notes.push(
+      `文案組數：比 ${since} **多了 ${drift} 組**（${EN_COVERAGE.pairs} → ${l10nPairs.length}）。\n` +
+        '    多出來不是問題，但那表示 `EN_COVERAGE.pairs` 已經過期了 ——\n' +
+        '    下次真的少幾組的時候，它比的是一個舊的數字，那個「少了」會被稀釋掉。\n' +
+        `    改法：把 \`check-copy.mjs\` 的 \`EN_COVERAGE\` 改成 { date: '今天', pairs: ${l10nPairs.length}, pct: ${EN_COVERAGE.pct} }。`,
     );
   }
 }
@@ -1229,9 +1341,14 @@ if (process.argv.includes('--verbose')) {
   for (const [id, n] of [...subjects.entries()].sort((a, b) => b[1] - a[1])) {
     const base = scanned.cjkLines || 1;
     const pct = ((n / base) * 100).toFixed(1);
-    const scale = ['unused-i18n-key', 'rule-not-documented', 'date-wrong-language'].includes(id)
-      ? ''
-      : `　佔含漢字的行 ${pct}%`;
+    /*
+     * 佔比只對**逐行掃語料**的那幾條有意義 —— 它們的分母就是「含漢字的行」。
+     * 原本這裡是一份手寫的排除清單，而它漏了 `example-not-real`
+     *（那條的主體是那兩份文件裡的例子，不是行），所以那一條一直帶著一個
+     * 沒有意義的百分比。第 6 輪（第四十五圈）改成問 `RULES` 本人 ——
+     * 「在不在 RULES 裡」正是「主體是不是行」這件事，不需要第二份清單。
+     */
+    const scale = RULES.some((r) => r.id === id) ? `　佔含漢字的行 ${pct}%` : '';
     console.log(`  ${String(n).padStart(6)}  ${id}${scale}`);
   }
 }

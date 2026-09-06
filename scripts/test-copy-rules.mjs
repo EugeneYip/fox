@@ -39,6 +39,28 @@ const html = (/** @type {string} */ body) =>
  */
 const CASES = {
   /*
+   * ── 少打一個反引號 ──
+   *
+   * `stripCode()` 是拿正則配對的，配不成對時它會**配到下一個** ——
+   * 中間那一段真的文案就被當成程式碼拿掉了。後果不是誤報是**漏報**，
+   * 而且「掃了 N 行」一點都不會變（行還在，內容沒了）。
+   *
+   * miss 那一行刻意有**兩個**反引號：這條規則的主體是「有反引號的行」，
+   * 一個都沒有的話它連看都不會看，那一格就綠得沒有意義。
+   */
+  'unbalanced-backtick': {
+    hit: { 'docs/X.md': '拿掉 `draft: true 那一行就會出現。\n' },
+    miss: { 'docs/X.md': '拿掉 `draft: true` 那一行就會出現。\n' },
+  },
+  /*
+   * 圍欄沒關的那一半 —— 從那裡到下一個圍欄之間會被整段拿掉。
+   */
+  'unbalanced-backtick（圍欄沒關）': {
+    expect: 'unbalanced-backtick',
+    hit: { 'docs/X.md': '```bash\nnpm run dev\n' },
+    miss: { 'docs/X.md': '```bash\nnpm run dev\n```\n' },
+  },
+  /*
    * 地名那一支要有自己的案例。第 6 輪（第八圈）的突變掃描發現：
    * 把規則砍成只剩 `平台`，這個案例照樣綠 —— 因為它的 hit 同時含
    * 「平台」與「台北」，**證明不了地名那一支還活著**。
