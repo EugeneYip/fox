@@ -915,6 +915,38 @@ try {
   }
 
   /*
+   * ── frontmatter 的欄位只在 frontmatter 裡找 ──────────────
+   *
+   * 第 3 輪（第四十一圈）：`field()` 原本比對「整份檔案裡第一行
+   * `name:` 開頭的」。`title` 是必填所以永遠先命中 frontmatter，
+   * 出事的是**選填**的 —— 今天只有 `lang`。
+   *
+   * 這一格放一篇**沒有寫 `lang:`**、而正文裡有一段示範 frontmatter 的內容
+   * （這個站正好在教人怎麼發文，那種程式碼框很自然）。
+   * 錨在長相上的話它會被讀成 `en`，於是被 `lang-leaked` 冤枉。
+   */
+  {
+    const dir = await build('field-frontmatter-only', {
+      content: {
+        'poems/p.md':
+          '---\ntitle: 一首詩\npoem:\n  title: 一首詩\n  author: 某人\n  original: |\n    山\n---\n' +
+          '示範一下 frontmatter 怎麼寫：\n\n```\nlang: en\n```\n',
+      },
+      dist: { 'poems/p/index.html': page('一首詩 山') },
+    });
+    const out = await check(dir);
+    const ok = !/lang-leaked/.test(out);
+    if (!ok) failed++;
+    console.log(`  ${ok ? '✓' : 'X'} 正文裡的 \`lang:\` 不會被當成這篇的語言`);
+    if (!ok) {
+      console.log(
+        `        ${out.split('\n').find((l) => l.includes('lang-leaked'))?.trim() ?? ''}\n` +
+          '        `field()` 要先切 frontmatter，不要在整份檔案裡找。',
+      );
+    }
+  }
+
+  /*
    * ── 「poem.title」要錨在 `poem:` 上，不是錨在縮排上 ──────────
    *
    * 第 3 輪（第四十圈）：原本用 `/^\s{2,}title:/` 抽 `poem.title`，

@@ -72,8 +72,36 @@ async function* walk(dir) {
 }
 
 /** 從 frontmatter 取一個純量欄位（值可能有引號） */
+/*
+ * ── 只在 frontmatter 裡找，不要整份檔案找 ──────────────
+ *
+ * 第 3 輪（第四十一圈）補的。這一圈問「這一課學過了，當時修乾淨了嗎？」，
+ * 而那一課就是兩輪前（第四十圈）在這個檔案裡記的：
+ * **判準錨在「長得像」上，不是錨在「在哪個鍵底下」**
+ * （當時 `poem.title` 是用「有縮排的 title:」抽的，於是短札的
+ * `inResponseTo.title` 被當成詩題）。
+ *
+ * 那一次只修了 `poemTitle`。這一支 `field()` 是同一個形狀：
+ * 它比對的是「**整份檔案**裡第一行 `name:` 開頭的」——
+ * 而 frontmatter 只是檔案的前面那一段。
+ *
+ * `title` 是必填，frontmatter 一定在前面，所以第一個命中永遠是對的。
+ * 出事的是**選填**的那些 —— 今天只有 `lang`：
+ * 一篇沒有寫 `lang:` 的內容，只要正文裡有一行以 `lang:` 開頭
+ * （例如一段示範 frontmatter 的程式碼框，而這個站正好在教人怎麼發文），
+ * 那一行就會被當成這篇的語言。`lang` 牽動 `lang-leaked`、
+ * `locale-dead-end`、`missing-page` 與搜尋索引。
+ *
+ * 同一個函式底下十幾行的 `usedFields` 早就先切 frontmatter 了
+ * （`md.split(/^---$/m)[1]`）—— **同一個檔案裡兩種讀法**，
+ * 一種錨在結構上、一種錨在長相上。這裡跟它對齊。
+ *
+ * 今天量過：6 篇內容的正文裡，行首就是 `key:` 的行 **0 行**。
+ * 所以這是補一個還沒發生的誤讀，不是修一個現行的 bug。
+ */
 const field = (/** @type {string} */ md, /** @type {string} */ name) => {
-  const m = md.match(new RegExp(`^${name}:\\s*(.+)$`, 'm'));
+  const fm = md.split(/^---$/m)[1] ?? '';
+  const m = fm.match(new RegExp(`^${name}:\\s*(.+)$`, 'm'));
   return m ? m[1].trim().replace(/^['"]|['"]$/g, '') : undefined;
 };
 
