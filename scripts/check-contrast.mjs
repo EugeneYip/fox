@@ -679,6 +679,30 @@ async function* walkSurf(dir) {
     'border-block-start-color', 'border-block-end-color',
   ]);
   const BG_PROPS = new Set(['background', 'background-color', 'background-image']);
+  /*
+   * ── 邊框與外框：用規則認，不要再列一份清單 ────────────────
+   *
+   * 第 8 輪（第四十二圈）發現的。這一圈問「這份清單是誰維護的？漏一個會怎樣？」
+   *
+   * `FG_PROPS` 上面列了 `border-color`、`border-inline-start-color`⋯
+   * 那些**長寫法**，而站上的 CSS 用的是**簡寫**：
+   *
+   *     border: 1px solid var(--c-rule);        ← 8 處
+   *     border-inline-start: … var(--c-edge);   ← 3 處
+   *     outline: … var(--c-focus);              ← 2 處
+   *
+   * 於是有**三個 token 只經由清單外的屬性用到**（`--c-rule`、`--c-edge`、
+   * `--c-focus`）—— 它們今天在 `PAIRS` 裡是**手動放進去的**，
+   * 而底下那個「涵蓋率」與 `gaps`（PAIRS 漏了誰）**看不到它們**。
+   * 也就是說那句「都在 PAIRS 裡 ✓」對這三個是**沒有驗過**的。
+   *
+   * 改成照 CSS 自己的命名規則認，而不是再補一份長寫法清單 ——
+   * 補清單只會再漏下一個（`border-block-end`、之後新的邏輯屬性⋯）。
+   *
+   * `box-shadow` **刻意不算**：`0 0 0 1px var(…)` 是一圈邊，
+   * 但一般的投影不是對比的主體，全部當成前景會把判準撐鬆。那兩處記在待辦上。
+   */
+  const BORDERISH = /^(?:border|outline)(?:-(?:top|bottom|left|right|inline|block)(?:-(?:start|end))?)?(?:-color)?$/;
 
   /*
    * 要排除的是 `src/content`（markdown 內容），**不是任何叫 content 的目錄**。
@@ -747,7 +771,7 @@ async function* walkSurf(dir) {
       const value = decl.slice(colon + 1);
       const tokens = [...value.matchAll(/var\(\s*(--c-[\w-]+)/g)].map((m) => m[1]);
       if (tokens.length === 0) continue;
-      const bucket = FG_PROPS.has(prop)
+      const bucket = FG_PROPS.has(prop) || BORDERISH.test(prop)
         ? fgUse
         : BG_PROPS.has(prop) && !/gradient\(/.test(value)
           ? bgUse
