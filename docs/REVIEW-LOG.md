@@ -76,7 +76,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 58,400 行、3.0 MB、352 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 58,600 行、3.0 MB、353 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -58409,4 +58409,229 @@ error 掃產出（真的會不會發生）。**
   `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：7 — 建置與 CI**
+### 2026-09-06 — 第 7 輪（第四十四圈）：建置與 CI
+
+**第四十四圈問：這件事，站主要自己做嗎？**
+判準：**找一個「→ 站主」的待辦，問它為什麼還在那裡 —— 是真的需要他決定，
+還是只是沒有人把它做完？**
+
+#### 1. 挑的是「`check.yml` 永遠不會自己觸發（→ 站主）」
+
+`check:workflows` 每次都印：
+
+```
+（`check.yml` 到今天 **0 次** —— 它只在 PR 上觸發，而這個專案是直接推 main。）
+```
+
+那句話讀起來像在等他決定「要不要改用 PR 流程」。而在那個決定之前，
+有一件事**誰都可以做，也沒有人做過**：
+
+**那份 workflow 從來沒有跑過，所以沒有人知道它會不會過。**
+
+它有 `workflow_dispatch`。手動觸發一次就知道了。
+
+#### 2. 觸發了
+
+```
+gh workflow run check.yml --repo EugeneYip/fox
+```
+
+在那之前 `gh run list --workflow check.yml` 回的是 `[]` —— **這份 workflow
+在它整個生命裡跑過 0 次。**
+
+結果：**12 個步驟全綠，88 秒。**
+
+```
+success  型別檢查
+success  對比度（WCAG，深淺兩套都算）
+success  建置
+success  隱私稽核（⋯要有 dist/ 才驗得到那 10 條）
+success  無障礙靜態檢查
+success  效能預算
+success  工具的單元測試
+success  產出的檢查（文案慣例、內容管線）
+```
+
+而且從 log 裡讀得到 `身分規則：8 個值，來自 PRIVACY_NEEDLES（8 個值）`——
+它拿得到 secret，那 10 條讀 `dist/` 的隱私規則也真的驗到了。
+
+#### 3. 順便確認了它是不是重複的
+
+| check.yml 跑的 | deploy.yml 跑的 |
+|---|---|
+| `check`、`check:contrast`、`build`、`audit:privacy`、`check:a11y`、`check:perf` | `verify:all`（就是左邊那六個） |
+| `test:units`、`test:built` | `test:units`、`test:built` |
+
+**同一套，只是拼法不同**，連 `PRIVACY_NEEDLES` 都一樣帶。
+所以它今天的價值不是「多守一層」，是「**如果哪天開始用 PR，它是現成的**」——
+而現在也知道它是**能跑的**現成，不是壞掉的現成。
+
+要不要改用 PR 流程仍然是站主的決定。這一輪只是把那個決定的其中一個未知數
+變成已知。
+
+#### 4. 那個「0 次」是寫死的，而我把它變成 1
+
+`check-workflows.mjs` 有三處寫著 `check.yml` 跑過 **0 次**，其中一處的
+註解還特別解釋為什麼可以寫死：
+
+> `check.yml` 的 0 不一樣：它是 0 **因為沒有人開 PR**，不是因為還沒輪到。
+> 那是一個結構性的事實，值得寫死。
+
+同一段註解的上面兩行才剛說過另一件事：
+
+> 這裡原本寫「8 次」「2 次」。同一天再數是 9 與 3 ——
+> **那種數字寫下來的那一刻就開始爛**，所以只留「有沒有跑過」。
+
+**那個教訓沒有套用到 0 身上**，因為 0 看起來像常數。它不是 ——
+它只是爛得比較慢，而這一輪一個指令就讓它過期了。
+
+改成寫**性質**而不是次數：
+
+```
+（`check.yml` **不會自己跑** —— 它只在 PR 與手動觸發上啟動，
+ 而這個專案是直接推 main。2026-09-06 手動觸發過一次，12 個步驟全綠。
+ 要自己跑一次：gh workflow run check.yml --repo EugeneYip/fox）
+```
+
+#### 5. 這一圈第五種答案
+
+| 輪 | 那條待辦的真正答案 |
+|---|---|
+| 2 | 不再是他的事（阻塞消失了） |
+| 2 | 誰都做不了（主機沒有那個開關） |
+| 3 | 真的是他的（但指令本身是錯的，那部分不是） |
+| 5 | 一半是他的（寫理由不是，改嚴重度是） |
+| 6 | 是他的，但問題問錯了（分家之後才答得了） |
+| **7** | **是他的，但底下壓著一個誰都能做的量測** |
+
+第 7 輪這一種最安靜：那條待辦沒有錯，只是它上面蓋著一個「還沒有人按過那個
+按鈕」的事實，而那個事實不需要任何人決定。
+
+| | 之前 | 現在 |
+|---|---|---|
+| `check.yml` 跑過幾次 | 0（整個生命裡） | 1，12 步全綠、88 秒 |
+| 它會不會過 | 沒有人知道 | 知道了 |
+| 它跟 deploy 的關係 | 沒有人比過 | 同一套，只是拼法不同 |
+| 那句「0 次」 | 寫死，而且解釋過為什麼可以寫死 | 改成寫性質 |
+
+`verify:all` 六道全綠、`test:tools` 44 步全過。
+
+### 待辦（不屬於這一輪）
+
+- **要不要改用 PR 流程仍然是站主的**（→ 站主）。現在多知道兩件事：
+  `check.yml` 是能跑的，而且它跟 deploy 跑的是同一套 ——
+  所以「開 PR」買到的是**部署前先看到結果**，不是多一層檢查
+- **`gate-missing-in-check` 那條規則是為了讓 check.yml 跟 deploy 同步。**
+  既然兩邊本來就是同一套，那條規則守的其實是「不要讓它們分岔」——
+  值得問的是：為什麼不讓 `check.yml` 直接跑 `verify:all` ＋ `test:tools`
+  三行了事？（→ 7 建置與 CI）
+- 上一輪與更早的都還在（要不要把約定延伸到註解（→ 站主）、
+  `halfwidth-punct` 那種行內程式碼片段、
+  那五條的嚴重度本身還沒有人決定過（→ 站主）、
+  `audit:privacy` 沒有 `SEVERITY` 表、
+  `bridge` 那條路卡在沒有 RSSHub、
+  四個策略都寫在 `sync-feeds.mjs` 裡沒有匯出、
+  微網誌型平臺沒有標題那件事畫面那端沒處理過、
+  `docs/CONTENT.md` 裡的指令沒有任何東西在驗、
+  「71～108 秒」也是一個沒人守的數字、`CONTENT.md` 現在 588 行（→ 站主）、
+  `MEASURED` 的日期沒有東西在守、`probe:served` 只量 5 頁而且寫死、
+  「雜湊資源只有 `max-age=600`」是這個主機做不到（→ 站主）、
+  螢幕閱讀器仍然沒有人做過（→ 站主）、
+  探針的結果沒有東西在比對、「英文頁量不到最壞情況」值得記進探針、
+  `box-shadow` 算不算邊、自訂屬性帶顏色的間接層、
+  `BG_PROPS` 三個裡只有一個被用到、
+  其餘六支關卡也都以 `process.exit()` 收尾、
+  `check-perf.mjs` 還有兩個早退的 `process.exit(1)`、
+  `test:units` 裡還有沒有別的時間相依斷言、
+  還有沒有別的測試會動到版控裡的檔案、同時跑兩份 `test-perf-budgets` 仍會紅、
+  `membersOf` 只展開一層、
+  那 39 組裡有 25 組在 `platforms.data.mjs`、
+  `pick()` 收 `Partial` 型別擋不住（→ 站主）、文字抽取只認單引號、
+  那份「跳過 node_modules⋯」的清單在 `audit-privacy.mjs` 裡有兩份、
+  `unscanned-dir` 只看頂層、那 4 條什麼都沒擋的豁免（→ 站主）、
+  `check:content` 那一半還是只看 `syndication.json`、
+  排程跑的 `sync:health` 沒有 `--strict`、`CHANGE_ME` 那條路連 failures 都不加、
+  `test-contrast` 把 `#faf6ee` 寫死在 fixture 裡、
+  manifest 的 `icons[]` 沒有人確認存在、`start_url`／`scope`／`lang` 還沒人比、
+  schema 欄位抽取的自我檢查只驗得到內容用過的那 25 個、
+  `images` 還是副檔名認的、GitHub Pages 會不會壓 `.atom`／`.rss` 沒有人量過、
+  CSS 那三條沒有被 `sawTags` 涵蓋、另外 5 條的主體不是用正則數的、
+  這份檔案自己的頁首也是個沒人守的數字、
+  同一個判斷寫在四個地方、四格抽名單用的都是正則、
+  `FLAKY_ENDPOINT` 的平臺 id 沒有人比、那五份對照表只驗了單向、
+  只比資料夾名字不比 `loader` 的 `base`、`collections` 的抽取只認一種寫法、
+  那八種只是「不數」不是「不該數」、`url()` 與 `@font-face` 只掃 HTML、
+  `CASES` 的鍵沒有反向檢查、
+  那個掃描分不出元件與動態標籤名、`writing-mode` 只有一個檔案在用、
+  `needs-dist-before-build` 打不開 npm 的 `&&` 串、
+  那份「每條規則都有反例」的報告只說不擋、兩份文件的例子沒有分開數、
+  另外五份文件還是寫「404、500」、`accept` 那些 header 沒被測過、
+  `field()` 假設 frontmatter 是第一個 `---`、
+  只比了檔名沒比路徑、識別字沒有比、`why:` 欄位沒掃、
+  `same-name-different-target` 比 `hasAccessibleName()` 窄、
+  「判斷寫兩份」沒有東西在數、那 59 條「元件沒算繪過」沒有人在守、
+  「要跑起來才有」那 25 條這個方法看不到、分類判準是兩條寫死的正則、
+  同一種「當天就爛」的數字可能還在別的關卡的輸出裡、
+  沒有東西在守「空狀態不要自相矛盾」、英文那一半沒有人系統地讀過、
+  `tags.count_one` 與 `list.count_one` 連算繪都沒有過、
+  `csp-frame-src-mismatch` 在站上主體是 0、
+  Data API v3 那一半也沒跑過、CSP 的 `frame-src` 在全部 44 頁上、
+  `related` 只驗了畫得出來、那六個欄位刪掉之後又回到沒人用過、
+  那段建議裡的 273 KB／94 KB 沒有人在守、
+  「站上 0 張內容圖」是三條待辦的共同原因、
+  markdown 裡的原始 HTML 沒有人在擋、另外六支關卡的寫死數字沒比過、
+  `column` 跟外層 `.wrap--*` 是靠人對的、
+  「42 個用了但沒說明」要重寫或刪掉、`--w-prose`／`--w-content` 也是抄進 `sizes` 的、
+  `rule-undocumented` 只看 id 有沒有出現、
+  那張表是手寫的而 `--list-rules` 是機器的、
+  `gate-count-stale` 的判準是「同一行有 `verify:all`」、
+  `EN_COVERAGE.date` 沒有人問多久以前、組數比對只認得變少、
+  其他三支規則測試的空綠沒驗、
+  結構性規則沒有 `whyWarn` 欄位、`email` 是 warn 而 `google-fonts` 是 error、
+  標籤數也是一種近似、`note` 的 0 筆連續五圈、
+  那 3 個沒人用的匯出（→ 站主）、判準看名字不解析 import、
+  判準是檔名不是用途、`role="status"` 本身沒有被檢查、
+  `<details>`／`<summary>`／`<time>` 那 170 個仍然沒有規則、
+  「22 個 `--verbose` 數字」那條的數字過期了、
+  `LOOKS_BAD` 那個正則是猜的、`verify:all` 還是 `&&` 串、
+  `ui.ts` 的 `en` 要不要改必填（→ 站主）、
+  job summary 只有站主會去看、`sync:health` 沒有接進六道關卡、
+  只比 `npm run X`、那段 git 診斷沒有測試、
+  `15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、
+  `example-not-real` 只看程式碼框裡的例子、
+  那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  那 9 條「維護者的事」的規則沒有文件、
+  `ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、
+  `taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、`SCHEMA_STRUCTURAL` 3 個什麼都沒擋、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 15 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  7 條 a11y 規則的邊界沒人守、
+  7 個沒人用的 token（→ 站主）、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、
+  `inlineStylesheets: always` 只到 98%、圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、
+  `test-content-rules` 的改法檢查只看第一處、
+  `--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：8 — 視覺與版面**
