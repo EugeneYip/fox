@@ -39,6 +39,7 @@ import { ALL_TEMPLATE_TEXT } from './lib/entry-template.mjs';
 import { dedupedInlineStyles } from './lib/site-css.mjs';
 import { validate, unsupported } from './lib/validate-schema.mjs';
 import { documentationDuty } from './lib/copy-rules.mjs';
+import { sourceHealth, coldLine, SYNC_STALE_DAYS as STALE_DAYS } from './lib/sync-health.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const arg = (/** @type {string} */ name) => {
@@ -1796,23 +1797,16 @@ const SYNC_STALE_DAYS = 3;
        *
        * 沿用同一個 3 天的門檻（不另訂一個），一樣只說話、不擋。
        */
-      const sources = Object.entries(data.sources ?? {});
-      /** @type {string[]} */
-      const cold = [];
-      for (const [id, st] of sources) {
-        const last = st?.lastSuccessAt ? Date.parse(st.lastSuccessAt) : NaN;
-        if (Number.isNaN(last)) {
-          cold.push(`      · ${id} —— **從來沒有成功過**（lastSuccessAt 是空的）`);
-          continue;
-        }
-        const quiet = (Date.now() - last) / 86_400_000;
-        if (quiet > SYNC_STALE_DAYS) {
-          cold.push(`      · ${id} —— 上次真的拿到資料是 ${quiet.toFixed(1)} 天前`);
-        }
-      }
+      /*
+       * 判斷搬到 scripts/lib/sync-health.mjs 了 —— 第 4 輪（第三十八圈）
+       * 追出來這個鬧鐘從排程那條路走不到（來源全掛時 deploy 根本不會跑），
+       * 所以 `npm run sync:health` 也要問同一句。門檻是同一個常數。
+       */
+      const { total: sourceCount, cold: coldSources } = sourceHealth(data);
+      const cold = coldSources.map((c) => `      · ${coldLine(c)}`);
       if (cold.length > 0) {
         notes.push(
-          `${sources.length} 個來源裡，**${cold.length} 個已經超過 ${SYNC_STALE_DAYS} 天沒有成功過**：\n` +
+          `${sourceCount} 個來源裡，**${cold.length} 個已經超過 ${STALE_DAYS} 天沒有成功過**：\n` +
             cold.join('\n') +
             '\n    這跟上面那句不是同一件事：`generatedAt` 每跑一次就更新（不管成不成功），\n' +
             '    所以排程活著的時候，那個鬧鐘永遠不會為「來源死掉」響。\n' +

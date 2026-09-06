@@ -64,6 +64,22 @@ jobs:
             node scripts/sync-feeds.mjs --verbose
           fi
 
+      # 這一步**不加 if:** —— 那正是重點。
+      #
+      # 「來源已經 N 天沒成功」那個鬧鐘本來只在 check:content 裡，
+      # 而 check:content 只在 deploy.yml 跑。而底下「觸發部署」那一步有
+      # `if: changed == 'true'` —— 來源全部失敗的時候資料不會變，
+      # 於是不 commit、不部署、鬧鐘也就不會響。
+      #
+      # 也就是說：**來源死掉的時候，正好是那個鬧鐘走不到的時候。**
+      # 排程那一次是綠的、而且安靜的，在 Actions 上跟「今天沒有新影片」
+      # 長得一模一樣。（第 4 輪〔第三十八圈〕追出來的。）
+      #
+      # 預設只說不擋，跟這個 workflow 上面那句「某個平臺掛掉不該讓整個
+      # 流程變紅燈」同一個立場。它會多寫一份到 job summary。
+      - name: 來源健康檢查（只說不擋）
+        run: npm run sync:health
+
       - name: 有變動就 commit
         id: commit
         run: |
