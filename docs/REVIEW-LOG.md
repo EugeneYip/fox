@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 51,600 行、2.7 MB、310 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 51,800 行、2.7 MB、311 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -50167,4 +50167,131 @@ note      關卡說  0　我數  0　一樣      ghost      關卡說 15　我�
   `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：5 — 隱私與安全**
+
+### 2026-09-06 — 第 5 輪（第三十九圈）：隱私與安全
+
+**第三十九圈問：這條待辦還活著嗎？**
+判準：**拿今天的 repo 驗一次 —— 還成立嗎？還是已經被別的改動解決了？**
+
+#### 1. 逐條驗
+
+| 待辦 | 今天驗出來 |
+|---|---|
+| 「**11 條** warn 沒說為什麼」 | 還在，但**數字漂了**：今天是 **13 條** |
+| 4 條閒置豁免 | 還在 —— 而且 `audit:privacy` **每次都點名那四條** |
+| `reveal('email')` 沒有人呼叫 | 還在（**0 個**呼叫）—— 而且每次都會說 |
+| 離開碼仍然是 0 | 還在（站主的決定；第三十八圈已讓結尾說出缺口） |
+
+**其中兩條已經是「關卡每次都說」的狀態** —— 它們不靠人記得，
+只是還沒有人做決定。那跟「沒有人知道」是兩回事。
+
+#### 2. 「沒說為什麼」是真的
+
+`privacy-rules.mjs` 的 5 條 warn：`email`、`raw-youtube-embed`、
+`third-party-cdn`、`target-blank-no-rel`、`leftover-placeholder`
+—— **一條都沒寫過理由**。
+
+旁邊不是沒有註解，是**註解講的不是那件事**。
+`target-blank-no-rel` 上面有 20 行，講的是 lookahead 只往後看、
+以及 `\b` 會配到 `data-rel=` 的兩個 bug ——
+**都是正則怎麼修的，不是「為什麼這一條不擋」。**
+
+對照組就在隔壁：`check:a11y` 的 `SEVERITY` 表每一條 warn 都寫了。
+
+> WCAG 沒有「標題層級不可以跳」這一條成功準則 —— 它是可讀性的啟發式判斷，
+> 而內容有時真的會跳一層。所以提醒，不擋。
+
+#### 3. 加欄位，但**刻意不填內容**
+
+`privacy-rules.mjs` 的型別多一個 `whyWarn`，`audit:privacy` 印：
+
+```
+逐行掃語料的 8 條規則裡，5 條是提醒（warn）、3 條會擋（error）。
+  其中 **0／5 條說得出為什麼是提醒而不是擋**（`whyWarn`）。
+  沒寫的：email、raw-youtube-embed、third-party-cdn、target-blank-no-rel、leftover-placeholder
+```
+
+**內容不由我填。** 那幾條當初為什麼定成提醒，要由知道那個決定的人寫；
+我現在補上去的會是**我自己編的**。
+
+數出來的理由是：讓那個缺口有一個**會跟著程式走的數字**，
+而不是待辦上一句過期的話 —— 「11」就是這樣過期的。
+
+實測補一條 `whyWarn` → 「**1／5**」，而且沒寫的那一行少一個名字。
+
+（只涵蓋逐行掃語料的那 8 條。結構性規則是在 `audit-privacy.mjs` 裡
+就地建出來的，沒有這個欄位 —— 那件事說在註解裡。）
+
+| | 之前 | 現在 |
+|---|---|---|
+| 「11 條 warn」 | 待辦上一個過期的數字 | 每次跑都重算（今天 5／8 是 warn） |
+| 為什麼是提醒不是擋 | 沒有地方寫 | 有欄位、有計數、沒寫的會被點名 |
+
+`verify:all` 六道全綠、`test:tools` 44 步全過、`ci:sim` 在 HEAD 上全綠。
+
+### 待辦（不屬於這一輪）
+
+- **那 5 條的 `whyWarn` 還是空的**（→ 站主，或知道當初決定的人）
+- **結構性規則沒有這個欄位。** 13 條 warn 裡只有 5 條在這個計數裡；
+  另外 8 條在 `audit-privacy.mjs` 裡就地建出來（→ 5 隱私與安全）
+- **`email` 是 warn 而 `google-fonts` 是 error 這條**，現在被上面那條蓋掉了 ——
+  它問的正是「為什麼」，而答案要寫進 `whyWarn`（→ 5 隱私與安全）
+- 上一輪與更早的都還在（標籤數也是一種近似、`note` 的 0 筆連續四圈、
+  那 4 個沒人用的匯出（→ 站主）、判準看名字不解析 import、
+  `CONTENT.md` 533 行（→ 站主）、判準是檔名不是用途、
+  另外四條效能待辦沒有重驗、
+  `role="status"` 本身沒有被檢查、
+  `<details>`／`<summary>`／`<time>` 那 170 個仍然沒有規則、
+  「22 個 `--verbose` 數字」那條的數字過期了、
+  探針還是要人手貼、只跑了首頁、
+  `LOOKS_BAD` 那個正則是猜的、`verify:all` 還是 `&&` 串、
+  `EN_COVERAGE` 的 `pairs` 沒有在比、`ui.ts` 的 `en` 要不要改必填（→ 站主）、
+  job summary 只有站主會去看、`sync:health` 沒有接進六道關卡、
+  只比 `npm run X`、那段 git 診斷沒有測試、
+  「上界」宣稱要重量得先推（→ 站主）、
+  螢幕閱讀器仍然沒有人做過、重驗是量本機產出不是正式站、
+  `15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `check:workflows` 的 10 條規則文件提到 0 條、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、
+  `example-not-real` 只看程式碼框裡的例子、
+  `VideoFacade` 一次都沒算繪過、那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  那 9 條「維護者的事」的規則沒有文件、
+  `ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、
+  搜尋結果那 2 個連結沒有規則看過（但關卡會說出來）、
+  `check.yml` 永遠不會自己觸發（→ 站主）、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `SCHEMA_STRUCTURAL` 與「走不到的是哪一個」還沒驗、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  我連續十次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 13 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  7 條 a11y 規則的邊界沒人守、
+  65 個 token 裡 42 個「用了但沒說明」、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、`CoverImage` 的 `sizes` 用 40rem、
+  本機 `ahead 128, behind 2`、
+  `inlineStylesheets: always` 只到 98%、9／11 條預算從來沒響過、
+  圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  `check:contrast` 讀不到檔案時丟原始堆疊、`test-content-rules` 的改法檢查只看第一處、
+  `check:copy` 的「bad 一律命中」掃描要做成常設檢查、`--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：6 — 文案與語氣**
