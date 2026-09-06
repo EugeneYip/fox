@@ -18,6 +18,7 @@ import { resolve, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { attrOf, parseAttrs } from './lib/html-attrs.mjs';
 import { dedupedInlineStyles } from './lib/site-css.mjs';
+import { projectDay } from './lib/project-day.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 /*
@@ -1231,6 +1232,40 @@ const doc = checkDoc
       (id) => !RULE_IDS.includes(id) && /^(aria|img|link|button|input|focus|skip|heading|html|lang|nav|svg|duplicate|empty|positive|current|sr|unnamed|unlabelled|fullwidth|decorative|same|blank|reduced)-/.test(id),
     );
     saw('doc-names-real-rule', claimed.length);
+
+    /*
+     * ── 那三件自動不了的事，上一次做是多久以前 ────────────────
+     *
+     * 第 1 輪（第三十八圈）加的。這一圈問「這件事現在靠誰記得？忘了會怎樣？」
+     *
+     * `docs/A11Y.md` 點名三件**只能靠人**的事：Tab 順序、目標尺寸、
+     * 螢幕閱讀器。前兩件有探針，但那支探針要**人手貼進 console**；
+     * 第三件那份文件自己寫著「現況：**沒有人做過**」。
+     *
+     * 在這之前，沒有任何一個地方會提醒你這件事在變舊 ——
+     * 綠燈只說靜態的那 30 條過了，而那三件事可能已經半年沒人碰。
+     *
+     * 這裡只把**天數**印出來，不擋：那是人的工作，關卡沒有立場替它訂期限。
+     * 但「上一次是 N 天前」是個數字，而數字會讓人想起來。
+     */
+    const dates = [...doc.matchAll(/(?:基準（|重驗：)(\d{4}-\d{2}-\d{2})/g)].map((m) => m[1]).sort();
+    const neverDone = /現況：\*\*沒有人做過\*\*/.test(doc);
+    const today = projectDay();
+    if (dates.length === 0) {
+      console.log(
+        '\n⚠ docs/A11Y.md 裡抽不到「上一次量是哪一天」—— 這一格沒有在守。\n' +
+          '  那份文件記的是三件只能靠人做的事，抽不到日期通常表示寫法變了。',
+      );
+    } else {
+      const last = dates[dates.length - 1];
+      const days = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${last}T00:00:00Z`)) / 86_400_000);
+      console.log(
+        `\n只能靠人做的那幾件：目標尺寸與 Tab 順序上一次量是 ${last}（${days} 天前）；` +
+          `螢幕閱讀器${neverDone ? '**還沒有人做過**' : '有紀錄'}。\n` +
+          '  上面那 30 條是靜態的，這三件它們看不到。怎麼做在 docs/A11Y.md，\n' +
+          '  前兩件有一支貼進 console 就能跑的探針（scripts/probe-a11y-layout.js）。',
+      );
+    }
     if (claimed.length === 0) {
       console.log(
         '\n⚠ docs/A11Y.md 一個規則 id 都沒點到 —— 這一格沒有在守。\n' +

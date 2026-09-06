@@ -1263,6 +1263,34 @@ console.log('─'.repeat(64));
   if (!okGhost) console.log('        ' + ghost.out.split('\n').filter((l) => /點名|規則/.test(l)).slice(0, 2).join(' ｜ '));
 
   /* 反向：一個都沒點到要說話，不然文件改寫之後這一格會安靜地什麼都不比 */
+  /*
+   * ── 那三件靠人做的事，上一次是多久以前 ──────────
+   *
+   * 第 1 輪（第三十八圈）：`docs/A11Y.md` 點名三件只能靠人的事，
+   * 而在這之前沒有任何地方提醒你它們在變舊 ——
+   * 綠燈只說靜態的那 30 條過了。
+   */
+  const aged = await run1(claim(actual) + '### 基準（2020-01-01 量於 x）\n\n### 現況：**沒有人做過**\n');
+  const okAged = /上一次量是 2020-01-01（\d+ 天前）/.test(aged.out) && /螢幕閱讀器\*\*還沒有人做過\*\*/.test(aged.out);
+  if (!okAged) failed++;
+  console.log(`  ${okAged ? '\u2713' : 'X'} 說得出上一次量是哪一天、幾天前，以及螢幕閱讀器還沒做`);
+  if (!okAged) console.log('        ' + aged.out.split('\n').filter((l) => /靠人|天前/.test(l)).join(' ｜ '));
+
+  /* 有重驗紀錄時要用**比較新**的那一個，不是第一個 */
+  const rechecked = await run1(claim(actual) + '### 基準（2020-01-01 量於 x）\n\n重驗：2020-06-01\n');
+  const okNewest = /上一次量是 2020-06-01/.test(rechecked.out);
+  if (!okNewest) failed++;
+  console.log(`  ${okNewest ? '\u2713' : 'X'} 有重驗紀錄時取最新的那一天`);
+  if (!okNewest) console.log('        ' + rechecked.out.split('\n').filter((l) => /靠人|天前/.test(l)).join(' ｜ '));
+
+  /* 抽不到日期要說話，不然文件改寫法之後這一格會安靜地不提醒 */
+  const noDate = await run1(claim(actual) + '這一份沒有寫上一次是哪一天。\n');
+  const okNoDate = /抽不到「上一次量是哪一天」—— 這一格沒有在守/.test(noDate.out);
+  if (!okNoDate) failed++;
+  console.log(`  ${okNoDate ? '\u2713' : 'X'} 抽不到日期時說「這一格沒有在守」`);
+  if (!okNoDate) console.log('        ' + noDate.out.split('\n').filter((l) => /抽不到|靠人/.test(l)).join(' ｜ '));
+
+
   const noneNamed = await run1(claim(actual) + '這一份完全不提任何規則的名字。\n');
   const okNone = /一個規則 id 都沒點到 —— 這一格沒有在守/.test(noneNamed.out);
   if (!okNone) failed++;
