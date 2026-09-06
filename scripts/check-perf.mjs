@@ -1007,7 +1007,13 @@ console.log(
  * 這幾個數字是量出來的，不是猜的，所以要說清楚**什麼時候量的、怎麼重量**。
  * 上一版把一個從別人的站推論出來的等級寫成事實，而且方向還是反的。
  */
-const MEASURED = { date: '2026-09-04', lo: -1.7, hi: -0.4, pages: 4, cmd: 'npm run probe:served' };
+/*
+ * 2026-09-06（第 2 輪，第四十四圈）重量過一次，四頁的差距**一字不差**
+ * 還是 -1.7% ～ -0.4%。那一輪的問題是「這件事站主要自己做嗎」——
+ * 這一格的待辦本來寫著「要重量得先推（→ 站主）」，
+ * 而那天推的權限已經下放，所以它不再是他的事，就重量了。
+ */
+const MEASURED = { date: '2026-09-06', lo: -1.7, hi: -0.4, pages: 4, cmd: 'npm run probe:served' };
 /*
  * ── 那個日期要說出「多久以前」──────────────────
  *
@@ -1053,7 +1059,27 @@ console.log(
   `  讀者第一次到訪最多下載 ${kb(worstCritical.critical)}（gzip）：${worstCritical.path} 的 HTML ` +
     `${kb(worstCritical.gzip)} ＋ 阻塞渲染的樣式表 ${kb(worstCritical.critical - worstCritical.gzip)}`,
 );
+/*
+ * ── 「在快取裡」有個 10 分鐘的期限 ──────────────────
+ *
+ * 原本這一行寫「第二頁起樣式表在快取裡，就只剩 HTML」。
+ * 第 2 輪（第四十四圈）去線上量了 header，那句話只在**十分鐘內**成立：
+ *
+ *   cache-control: max-age=600     ← 連內容雜湊過的 /_astro/*.css 也是這個
+ *   etag: "6a9da7b9-3396"
+ *   帶 If-None-Match 再打一次 → 304，body 0 bytes、header 363 bytes
+ *
+ * GitHub Pages 不讓你設快取標頭，所以這個 600 是**改不動的** ——
+ * 不是「還沒有人去改」，是這個主機上沒有那個開關。
+ * 但代價比看起來小：超過十分鐘之後多的是一趟來回 ＋ 363 bytes，
+ * 不是重新下載那 3.7 KB。這一行要說得出這件事，不然它太樂觀。
+ */
 console.log('  　　　　　第二頁起樣式表在快取裡，就只剩 HTML —— 也就是上面那個數字。');
+console.log(
+  '  　　　　　（快取只有 10 分鐘：GitHub Pages 一律送 `max-age=600`，連雜湊過的檔案也是。\n' +
+    '  　　　　　　超過之後多一次條件式請求 —— 有 ETag，所以是 304、body 0 bytes、header 363，\n' +
+    '  　　　　　　不是重新下載。2026-09-06 實測。）',
+);
 
 /*
  * ── 說出這些預算實際量到什麼 ──────────
