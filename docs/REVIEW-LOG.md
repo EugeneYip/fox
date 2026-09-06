@@ -76,7 +76,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 57,800 行、3.0 MB、349 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 58,000 行、3.0 MB、350 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -57791,4 +57791,212 @@ git push
   `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：4 — 平臺 feed 實測**
+### 2026-09-06 — 第 4 輪（第四十四圈）：平臺 feed 實測
+
+**第四十四圈問：這件事，站主要自己做嗎？**
+判準：**找一個「→ 站主」的待辦，問它為什麼還在那裡 —— 是真的需要他決定，
+還是只是沒有人把它做完？**
+
+#### 1. 先照這一輪本來的工作打一次
+
+| 打的東西 | 結果 |
+|---|---|
+| `npm run verify`（她的來源） | `youtube-foxpoetry` 200 Atom **9 筆** 423ms |
+| `verify -- --patterns`（樣板） | 11 個真的打過，**全部通過** |
+| `sync:health` | 1 個來源，3 天內成功過 ✓ |
+
+沒有平臺改版或下架，`confidence` 一個都不用改。
+
+#### 2. 那條掛著站主的待辦：「`rss` 與 `bridge` 兩條路一次都沒跑過」
+
+問下去：**這為什麼是站主的事？**
+
+不是。站上只有 YouTube 一個來源（走 `hybrid`），所以那兩條策略確實從來沒被
+執行過 —— 但要執行它們**不需要她的帳號**：平臺目錄裡每一筆都帶著一個
+`probeHandle`（公開帳號，`verify -- --patterns` 每次都在打）。
+把那三行組回去，指向那些公開的 feed 就跑得起來。
+
+沒有人做，是因為 `fetchRssSource` 寫在 `sync-feeds.mjs` 裡面、沒有匯出，
+所以「跑一次」需要有人動手把那三行組回來。**那是五分鐘的事，不是他的事。**
+
+#### 3. 跑了，五個平臺都通
+
+`sourceFeedUrl` → `fetchWithRetry` → `parseFeed`，用目錄自己的 `probeHandle`：
+
+| 平臺 | 狀態 | 筆數 | 有網址 | 有日期 | id 唯一 |
+|---|---|---|---|---|---|
+| wordpress | 200 | 10 | 10 | 10 | 10 |
+| ghost | 200 | 15 | 15 | 15 | 15 |
+| github | 200 | 30 | 30 | 30 | 30 |
+| mastodon | 200 | 20 | 20 | 20 | 20 |
+| bluesky | 200 | 21 | 21 | 21 | 21 |
+
+**每一筆都有網址、有日期、id 不重複**，欄位是
+`id、title、url、publishedAt、summary、tags` —— 跟 YouTube 那條路一樣。
+`rss` 這條策略今天第一次真的跑過。
+
+#### 4. 但兩個平臺的項目**沒有標題**
+
+`mastodon` 與 `bluesky` 的第一筆都印 `(無標題)`。那不是壞掉 ——
+微網誌的貼文本來就沒有標題欄。站上的卡片是拿 `title` 當主要文字的，
+所以哪天真的加了這兩個來源，畫面上會出現一整排「(無標題)」。
+
+**這件事只有真的跑過才看得到**，而它們在目錄上都是 `confidence: verified`
+（樣板通得過），`verify -- --patterns` 也一路綠燈 ——
+**那個綠燈證明的是「端點還在」，不是「抓回來的東西畫得出來」。**
+
+#### 5. 我自己踩到一個 403，而那是這一支自己的陷阱
+
+第一次跑的時候 `ghost` 回 **403**，看起來像「這個平臺擋我們」。
+原因是我直接 import `fetchWithRetry` 組那三行，**忘了帶 User-Agent** ——
+而它的預設值是 `''`，也就是送出一個空的 `user-agent:`。
+帶上 `UA_SYNC` 再打一次：**200，15 筆**。
+
+今天正式的呼叫者只有 `sync-feeds.mjs`，而它每次都帶 `UA_SYNC`，
+所以那個預設值在正式路徑上碰不到 —— **但它是一顆上膛的子彈**，
+而且這個 repo 為 UA 付過一次很貴的代價（第 4 輪〔第一圈〕那個全形破折號，
+整條同步管線從第一天起就沒成功送出過任何一個請求）。
+
+**UA 的問題會偽裝成平臺的問題。** 所以：
+
+- `lib/http.mjs` 多一個 `UA_DEFAULT`（誠實的自我介紹，也進 `ALL_USER_AGENTS`，
+  所以 `test:http-headers` 會驗它是合法的 Latin-1）
+- `lib/fetch-retry.mjs` 的預設值從 `''` 改成 `UA_DEFAULT`
+- `test:fetch-retry` 多兩格：沒指定時送的**不是空字串**、而且就是 `UA_DEFAULT`
+
+#### 6. `bridge` 那一半仍然沒跑過，但理由不是「站主還沒決定」
+
+`fetchBridgeSource` 第一行就是：
+
+```js
+if (!ENV.rsshubBase) throw new Error('⋯需要設定 RSSHUB_BASE 才能橋接（略過）');
+```
+
+要跑它得**有一臺 RSSHub**（自架或找一個公開實例）。那是一件要架東西的事，
+不是一個等他點頭的決定。待辦上的措辭因此改掉：
+不是「→ 站主」，是「卡在沒有 RSSHub」。
+
+| | 之前 | 現在 |
+|---|---|---|
+| `rss` 策略 | 一次都沒跑過（→ 站主） | **跑過了**，五個平臺、96 筆，全部有網址與日期 |
+| `bridge` 策略 | 同上 | 仍然沒跑過，但理由寫明白了：缺 RSSHub |
+| `fetchWithRetry` 沒給 UA | 送空字串，某些站回 403 | 送 `UA_DEFAULT`，兩格測試守著 |
+| mastodon／bluesky 的內容長相 | 沒有人看過 | 沒有標題 —— 記下來了 |
+
+`verify:all` 六道全綠、`test:tools` 44 步全過。
+
+### 待辦（不屬於這一輪）
+
+- **`bridge` 那條路卡在沒有 RSSHub**（不是站主的決定）。要跑得先有一個
+  可用的 RSSHub 實例；在那之前它的兩條錯誤路徑（沒有 base、沒有
+  `bridgeRoute`）其實不用網路就驗得到，只是它們也寫在 `sync-feeds.mjs`
+  裡沒有匯出（→ 4 平臺 feed 實測）
+- **四個策略都寫在 `sync-feeds.mjs` 裡面、沒有匯出**，所以「跑一次某一條」
+  永遠要有人手動把那幾行組回去 —— 而組回去就有可能組錯（這一輪就漏了 UA）。
+  抽到 `lib/` 底下的話，`rss` 那條可以有離線測試（→ 4 平臺 feed 實測）
+- **微網誌型平臺沒有標題這件事，畫面那一端沒有人處理過。** `mastodon`、
+  `bluesky`、`threads`、`x` 都是這一類，而卡片是拿 `title` 當主要文字的
+  （→ 3 內容結構）
+- 上一輪與更早的都還在（`docs/CONTENT.md` 裡的指令沒有任何東西在驗、
+  「71～108 秒」也是一個沒人守的數字、`CONTENT.md` 現在 588 行（→ 站主）、
+  `MEASURED` 的日期沒有東西在守、`probe:served` 只量 5 頁而且寫死、
+  「雜湊資源只有 `max-age=600`」是這個主機做不到（→ 站主）、
+  螢幕閱讀器仍然沒有人做過（→ 站主）、
+  探針的結果沒有東西在比對、「英文頁量不到最壞情況」值得記進探針、
+  `box-shadow` 算不算邊、自訂屬性帶顏色的間接層、
+  `BG_PROPS` 三個裡只有一個被用到、
+  其餘六支關卡也都以 `process.exit()` 收尾、
+  `check-perf.mjs` 還有兩個早退的 `process.exit(1)`、
+  `test:units` 裡還有沒有別的時間相依斷言、
+  還有沒有別的測試會動到版控裡的檔案、同時跑兩份 `test-perf-budgets` 仍會紅、
+  `membersOf` 只展開一層、`check.yml` 在 GitHub 上跑過 0 次（→ 站主）、
+  那 39 組裡有 25 組在 `platforms.data.mjs`、
+  `pick()` 收 `Partial` 型別擋不住（→ 站主）、文字抽取只認單引號、
+  那份「跳過 node_modules⋯」的清單在 `audit-privacy.mjs` 裡有兩份、
+  `unscanned-dir` 只看頂層、那 4 條什麼都沒擋的豁免（→ 站主）、
+  `check:content` 那一半還是只看 `syndication.json`、
+  排程跑的 `sync:health` 沒有 `--strict`、`CHANGE_ME` 那條路連 failures 都不加、
+  `test-contrast` 把 `#faf6ee` 寫死在 fixture 裡、
+  manifest 的 `icons[]` 沒有人確認存在、`start_url`／`scope`／`lang` 還沒人比、
+  schema 欄位抽取的自我檢查只驗得到內容用過的那 25 個、
+  `images` 還是副檔名認的、GitHub Pages 會不會壓 `.atom`／`.rss` 沒有人量過、
+  CSS 那三條沒有被 `sawTags` 涵蓋、另外 5 條的主體不是用正則數的、
+  這份檔案自己的頁首也是個沒人守的數字、
+  同一個判斷寫在四個地方、四格抽名單用的都是正則、
+  `FLAKY_ENDPOINT` 的平臺 id 沒有人比、那五份對照表只驗了單向、
+  只比資料夾名字不比 `loader` 的 `base`、`collections` 的抽取只認一種寫法、
+  那八種只是「不數」不是「不該數」、`url()` 與 `@font-face` 只掃 HTML、
+  `CASES` 的鍵沒有反向檢查、
+  那個掃描分不出元件與動態標籤名、`writing-mode` 只有一個檔案在用、
+  `needs-dist-before-build` 打不開 npm 的 `&&` 串、
+  那份「每條規則都有反例」的報告只說不擋、兩份文件的例子沒有分開數、
+  另外五份文件還是寫「404、500」、`accept` 那些 header 沒被測過、
+  `field()` 假設 frontmatter 是第一個 `---`、
+  只比了檔名沒比路徑、識別字沒有比、`why:` 欄位沒掃、
+  `same-name-different-target` 比 `hasAccessibleName()` 窄、
+  「判斷寫兩份」沒有東西在數、那 59 條「元件沒算繪過」沒有人在守、
+  「要跑起來才有」那 25 條這個方法看不到、分類判準是兩條寫死的正則、
+  同一種「當天就爛」的數字可能還在別的關卡的輸出裡、
+  沒有東西在守「空狀態不要自相矛盾」、英文那一半沒有人系統地讀過、
+  `tags.count_one` 與 `list.count_one` 連算繪都沒有過、
+  `csp-frame-src-mismatch` 在站上主體是 0、
+  Data API v3 那一半也沒跑過、CSP 的 `frame-src` 在全部 44 頁上、
+  `related` 只驗了畫得出來、那六個欄位刪掉之後又回到沒人用過、
+  那段建議裡的 273 KB／94 KB 沒有人在守、
+  「站上 0 張內容圖」是三條待辦的共同原因、
+  markdown 裡的原始 HTML 沒有人在擋、另外六支關卡的寫死數字沒比過、
+  `column` 跟外層 `.wrap--*` 是靠人對的、
+  「42 個用了但沒說明」要重寫或刪掉、`--w-prose`／`--w-content` 也是抄進 `sizes` 的、
+  `rule-undocumented` 只看 id 有沒有出現、
+  那張表是手寫的而 `--list-rules` 是機器的、
+  `gate-count-stale` 的判準是「同一行有 `verify:all`」、
+  `EN_COVERAGE.date` 沒有人問多久以前、組數比對只認得變少、
+  其他三支規則測試的空綠沒驗、那 5 條的 `whyWarn` 還是空的（→ 站主）、
+  結構性規則沒有 `whyWarn` 欄位、`email` 是 warn 而 `google-fonts` 是 error、
+  標籤數也是一種近似、`note` 的 0 筆連續五圈、
+  那 3 個沒人用的匯出（→ 站主）、判準看名字不解析 import、
+  判準是檔名不是用途、`role="status"` 本身沒有被檢查、
+  `<details>`／`<summary>`／`<time>` 那 170 個仍然沒有規則、
+  「22 個 `--verbose` 數字」那條的數字過期了、
+  `LOOKS_BAD` 那個正則是猜的、`verify:all` 還是 `&&` 串、
+  `ui.ts` 的 `en` 要不要改必填（→ 站主）、
+  job summary 只有站主會去看、`sync:health` 沒有接進六道關卡、
+  只比 `npm run X`、那段 git 診斷沒有測試、
+  `15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、
+  `example-not-real` 只看程式碼框裡的例子、
+  那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  那 9 條「維護者的事」的規則沒有文件、
+  `ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、`SCHEMA_STRUCTURAL` 3 個什麼都沒擋、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 15 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  7 條 a11y 規則的邊界沒人守、
+  7 個沒人用的 token（→ 站主）、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、
+  `inlineStylesheets: always` 只到 98%、圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、
+  `test-content-rules` 的改法檢查只看第一處、
+  `--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：5 — 隱私與安全**

@@ -34,4 +34,21 @@ export const UA_VERIFY = 'bellafoxy.com source check (+https://bellafoxy.com/col
 export const UA_BROWSER =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36';
 
-export const ALL_USER_AGENTS = { UA_SYNC, UA_VERIFY, UA_BROWSER };
+/*
+ * ── 沒有指定的時候送這個，不要送空字串 ──────────────
+ *
+ * `fetchWithRetry` 的 `userAgent` 預設值本來是 `''`，也就是送出
+ * `user-agent:` 一個空值。今天正式的呼叫者只有 `sync-feeds.mjs`，
+ * 而它每次都帶 `UA_SYNC`，所以那個預設值在正式路徑上碰不到。
+ *
+ * 但它是一個上膛的陷阱：第 4 輪（第四十四圈）為了跑一次 `rss` 那條策略，
+ * 直接 import `fetchWithRetry` 來組那三行 —— 忘了帶 UA，於是 Ghost 回
+ * **403**，而畫面上長得像「這個平臺擋我們」。改成帶 `UA_SYNC` 再打一次：
+ * **200，15 筆**。
+ *
+ * 那個 403 花掉的時間，跟第 4 輪（第一圈）那個全形破折號是同一種 ——
+ * **UA 的問題會偽裝成平臺的問題。** 所以預設值改成一個誠實的自我介紹。
+ */
+export const UA_DEFAULT = 'bellafoxy.com (+https://bellafoxy.com/colophon)';
+
+export const ALL_USER_AGENTS = { UA_SYNC, UA_VERIFY, UA_BROWSER, UA_DEFAULT };

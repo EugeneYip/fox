@@ -20,6 +20,7 @@
  */
 import { readFile } from 'node:fs/promises';
 import { fetchWithRetry } from './lib/fetch-retry.mjs';
+import { UA_DEFAULT } from './lib/http.mjs';
 
 let failed = 0;
 /** @param {string} name @param {boolean} ok @param {unknown} [detail] */
@@ -246,6 +247,21 @@ console.log('\n重試策略（零網路）\n' + '─'.repeat(64));
   const f = fakeFetch([200]);
   await fetchWithRetry('https://x.test/j', { ...quiet, fetchImpl: f, userAgent: 'fox-test/1.0' });
   check('headers 裡真的有 user-agent', f.calls[0].headers['user-agent'] === 'fox-test/1.0', f.calls[0].headers);
+
+  /*
+   * ── 沒指定的時候也不能送空的 ──────────────────
+   *
+   * 預設值本來是 `''`，也就是送出 `user-agent:` 一個空值。
+   * 正式路徑碰不到（`sync-feeds.mjs` 每次都帶 `UA_SYNC`），
+   * 但第 4 輪（第四十四圈）為了跑一次 `rss` 策略直接 import 這一支、
+   * 忘了帶 UA —— Ghost 回 **403**，看起來像平臺擋人；帶上 UA 再打是 200。
+   * **UA 的問題會偽裝成平臺的問題**，所以預設值要是一個誠實的自我介紹。
+   */
+  const g = fakeFetch([200]);
+  await fetchWithRetry('https://x.test/k', { ...quiet, fetchImpl: g });
+  const ua = g.calls[0].headers['user-agent'];
+  check('沒指定 userAgent 時送的不是空字串', typeof ua === 'string' && ua.length > 0, { ua });
+  check('而且那個預設值就是 UA_DEFAULT', ua === UA_DEFAULT, { ua, UA_DEFAULT });
 }
 
 // ── 11. YouTube 那條路的重試視窗要蓋得過壞段 ─────────

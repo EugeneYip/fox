@@ -22,6 +22,7 @@
  */
 import { sleep as realSleep } from './throttle.mjs';
 import { waitForHost as realWait, noteHostHit as realNote, retryAfterMs as realRetryAfter } from './throttle.mjs';
+import { UA_DEFAULT } from './http.mjs';
 
 /** 逾時 + 重試的 fetch。對方掛了就是掛了，不要卡住整個 build。 */
 /**
@@ -43,7 +44,7 @@ export async function fetchWithRetry(
     retries = 2,
     headers = {},
     retryOn404 = false,
-    userAgent = '',
+    userAgent = UA_DEFAULT,
     timeoutMs = 20_000,
     log = { debug: () => {} },
     fetchImpl = fetch,
