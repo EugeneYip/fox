@@ -1328,6 +1328,48 @@ console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
   const okQuiet = !/\*\*這是回退\*\*/.test(full);
   if (!okQuiet) failed++;
   console.log(`  ${okQuiet ? '✓' : 'X'} 沒掉的時候不說回退（反向案例）`);
+
+  /*
+   * ── 分母不只那兩個 i18n 檔案 ──────────────────
+   *
+   * 第 6 輪（第四十三圈）量到的：那一圈只 import `ui.ts` 與 `site.ts`，
+   * 而頁面自己也寫 `pick({ 'zh-TW': …, en: … }, locale)`。
+   * `pick()` 收的是 `Partial`，所以少一個 `en` 型別不會響。
+   * 實測拿掉 `about.astro` 的 `en: 'About'`：型別 0、build 0、
+   * `check:copy` 0，而且照樣印「108 組文案全部都有 en（100%）」，
+   * 同時 `dist/en/about/index.html` 的 `<title>` 變成「關於 — Fox Says」。
+   *
+   * `.astro` import 不了，所以改用文字上的括號配對抽 —— 而那種抽法
+   * 要有東西驗它抽得準，見下一格。
+   */
+  const page = "---\nconst t = pick({ 'zh-TW': '關於' }, locale);\n---\n<h1>{t}</h1>\n";
+  const dirPage = await build({
+    'dist/index.html': html('<p>乾淨的一頁。</p>'),
+    'src/i18n/ui.ts': "export const ui = {\n  'a.b': { 'zh-TW': '中', en: 'EN' },\n};\n",
+    'src/pages/about.astro': page,
+  });
+  const outPage = await check(dirPage);
+  const okPage = /2 組文案裡 \*\*1 組沒有 en\*\*/.test(outPage) && /src\/pages\/about\.astro/.test(outPage);
+  if (!okPage) failed++;
+  console.log(`  ${okPage ? '✓' : 'X'} 頁面裡的 L10n 物件也算進分母（.astro 也數）`);
+  if (!okPage) console.log('        ' + outPage.split('\n').filter((l) => /英文覆蓋|about/.test(l)).join(' ｜ '));
+
+  /*
+   * 抽取方式有洞的時候要說出來，而不是印一個更大但可能是錯的分母。
+   * 判準：文字抽到的組數必須跟 import 抽到的一樣（那兩個檔案兩種方式都做得到）。
+   */
+  const dirBlind = await build({
+    'dist/index.html': html('<p>乾淨的一頁。</p>'),
+    /* 動態組出來的 key：import 看得到，文字上的 `'zh-TW':` 看不到 */
+    'src/i18n/ui.ts':
+      "const KEY = 'zh' + '-TW';\nexport const ui = {\n  'a.b': { [KEY]: '中', en: 'EN' },\n};\n",
+    'src/pages/about.astro': page,
+  });
+  const outBlind = await check(dirBlind);
+  const okBlind = /對不上，所以不敢把別的檔案算進來/.test(outBlind);
+  if (!okBlind) failed++;
+  console.log(`  ${okBlind ? '✓' : 'X'} 兩種抽法對不上時說「不敢算」，不是印一個大分母`);
+  if (!okBlind) console.log('        ' + outBlind.split('\n').filter((l) => /英文覆蓋|抽取|對不上/.test(l)).join(' ｜ '));
 }
 
 process.exit(failed > 0 ? 1 : 0);

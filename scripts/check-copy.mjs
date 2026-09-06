@@ -74,7 +74,7 @@ import { RULES, documentationDuty } from './lib/copy-rules.mjs';
  * 記一個基準在這裡：掉下來的時候那一段會說「這是回退」並附上上一次的數字。
  * 真的決定要少一句英文的話，把這裡一起改 —— 那一改就是「我知道我在改什麼」。
  */
-const EN_COVERAGE = { date: '2026-09-06', pairs: 108, pct: 100 };
+const EN_COVERAGE = { date: '2026-09-06', pairs: 147, pct: 100 };
 
 const EXTRA_RULE_IDS = ['unused-i18n-key', 'rule-not-documented', 'date-wrong-language', 'example-not-real'];
 
@@ -881,6 +881,106 @@ for (const f of await readdir(resolve(ROOT, '.github/workflows')).catch(() => []
 }
 
 /*
+ * ── 那個 100% 的分母，是一份兩個檔案的清單 ──────────
+ *
+ * 上面那一圈只 import 兩個檔案（`ui.ts`、`site.ts`），所以「N 組文案全部
+ * 都有 en」講的是**那兩個檔案裡的** N 組。可是頁面自己也寫 L10n 物件：
+ *
+ *     const title = pick({ 'zh-TW': '關於', en: 'About' }, locale) ?? '關於';
+ *
+ * `pick()` 收的是 `Partial<Record<Locale, T>>` —— **`en` 型別上是選填**，
+ * 所以少掉不會有型別錯誤。第 6 輪（第四十三圈）實測把 `about.astro` 那一行
+ * 的 `en: 'About'` 拿掉：
+ *
+ *     npm run check   0
+ *     npm run build   0
+ *     check:copy      0，而且照樣印「108 組文案全部都有 en（100%）」
+ *     dist/en/about/index.html 的 <title> 是「關於 — Fox Says」，h1 是「關於」
+ *
+ * `.astro` 沒辦法 import，所以改用**文字上的括號配對**去抽。
+ * 抽取方式對不對，拿那兩個能 import 的檔案自我驗證：
+ * 文字抽到的組數必須跟 import 抽到的一樣，對不上就說「抽取方式有洞」
+ * 而不是印一個更大但可能是錯的分母。
+ * （`check:content` 抽 schema 欄位用的是同一招。）
+ */
+{
+  /**
+   * 文字上找出所有含 `'zh-TW':` 的物件字面值。
+   * @param {string} text
+   * @returns {{ hasEn: boolean, line: number }[]}
+   */
+  const l10nObjectsIn = (text) => {
+    const out = [];
+    for (const m of text.matchAll(/'zh-TW'\s*:/g)) {
+      const at = m.index ?? 0;
+      let depth = 0;
+      let start = -1;
+      for (let i = at; i >= 0; i--) {
+        if (text[i] === '}') depth++;
+        else if (text[i] === '{') {
+          if (depth === 0) {
+            start = i;
+            break;
+          }
+          depth--;
+        }
+      }
+      if (start < 0) continue;
+      let d = 0;
+      let end = -1;
+      for (let i = start; i < text.length; i++) {
+        if (text[i] === '{') d++;
+        else if (text[i] === '}') {
+          d--;
+          if (d === 0) {
+            end = i;
+            break;
+          }
+        }
+      }
+      if (end < 0) continue;
+      /* 只看第一層：巢狀的物件自己會被單獨掃到 */
+      let flat = text.slice(start + 1, end);
+      let prev;
+      do {
+        prev = flat;
+        flat = flat.replace(/\{[^{}]*\}/g, '');
+      } while (flat !== prev);
+      out.push({ hasEn: /(^|[,{\s])en\s*:/.test(flat), line: text.slice(0, start).split('\n').length });
+    }
+    return out;
+  };
+
+  const IMPORTED = ['src/i18n/ui.ts', 'src/config/site.ts'];
+  /** @type {{ rel: string, path: string, hasEn: boolean }[]} */
+  const extra = [];
+  let selfCheck = 0;
+  for await (const file of walk(resolve(ROOT, 'src'))) {
+    if (!/\.(ts|mjs|astro)$/.test(file)) continue;
+    /* 路徑分隔符正規化 —— 對不上的話自我驗證會失敗，分母會安靜地縮回去 */
+    const rel = relative(ROOT, file).split('\\').join('/');
+    const objs = l10nObjectsIn(await readFile(file, 'utf8'));
+    if (objs.length === 0) continue;
+    if (IMPORTED.includes(rel)) {
+      selfCheck += objs.length;
+      continue;
+    }
+    for (const o of objs) extra.push({ rel, path: `第 ${o.line} 行`, hasEn: o.hasEn });
+  }
+
+  const imported = l10nPairs.length;
+  if (imported > 0 && selfCheck !== imported) {
+    notes.push(
+      `英文覆蓋只數了 import 得到的那兩個檔案：文字抽取在 \`ui.ts\` 與 \`site.ts\` 上抽到 ` +
+        `${selfCheck} 組，import 抽到 ${imported} 組 —— **對不上，所以不敢把別的檔案算進來**。\n` +
+        '    （抽取方式有洞的時候，寧可分母小而誠實，也不要大而可能是錯的。）',
+    );
+  } else if (imported > 0) {
+    l10nPairs.push(...extra);
+  }
+}
+
+/*
  * ── 英文少一句，誰會發現 ────────────────────────────
  *
  * 見 l10nPairs 的說明：ui.ts 的 `en` 型別上是選填，少掉不會有任何東西響。
@@ -892,7 +992,8 @@ if (l10nPairs.length > 0) {
   if (missing.length === 0) {
     notes.push(
       `英文覆蓋：${l10nPairs.length} 組文案全部都有 en（100%）。\n` +
-        '    （數的是 `ui.ts` 與 `site.ts` 裡每一個有 `zh-TW` 的物件 —— 不只 `ui.ts`。）\n' +
+        '    （數的是 `src/` 底下每一個有 `zh-TW` 的物件 —— 不只那兩個 i18n 檔案；\n' +
+        '    　`.astro` import 不了，改用文字上的括號配對，並拿那兩個檔案驗過抽得準。）\n' +
         '    這一項不擋 —— `ui.ts` 的 `en` 型別上是選填（`Partial`），少一句只會安靜地退回中文。\n' +
         `    ${EN_COVERAGE.date} 記下的是 ${EN_COVERAGE.pairs} 組 ${EN_COVERAGE.pct}% —— ` +
         '掉下來的話底下那一段會說那是**回退**，不是現況。',

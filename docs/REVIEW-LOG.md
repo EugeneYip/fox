@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 56,400 行、2.9 MB、343 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 56,700 行、2.9 MB、344 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -56313,4 +56313,218 @@ const SCAN_DIRS = ['src', 'scripts', 'public', 'docs', '.github'];
   `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：6 — 文案與語氣**
+### 2026-09-06 — 第 6 輪（第四十三圈）：文案與語氣
+
+**第四十三圈問：這個綠勾的分母是什麼？誰決定了它？**
+判準：**找一個印出 ✓ 或百分比的地方，問它的分母怎麼來的 —— 是數出來的，
+還是一份人挑的清單決定的？如果是後者，那個 ✓ 涵蓋了多少？**
+
+`check:copy` 是這一圈到目前為止**最會講自己涵蓋範圍**的一支：
+它會說掃了 61 個檔案、13808 行、9 條規則，會列出邊界外面有什麼
+（程式碼註解 9981 行、草稿正文 3 行），還會說「35 個介面字串從來沒有被算繪」
+並且解釋那個分母是誰。
+
+而它有一句 100%：
+
+```
+· 英文覆蓋：108 組文案全部都有 en（100%）。
+  （數的是 `ui.ts` 與 `site.ts` 裡每一個有 `zh-TW` 的物件 —— 不只 `ui.ts`。）
+```
+
+#### 1. 那個分母是一份**兩個檔案**的清單
+
+```js
+for (const rel of ['src/i18n/ui.ts', 'src/config/site.ts']) {
+```
+
+括號裡那句話是誠實的，它說了自己數的是哪兩個檔案。問題是**站上的 L10n
+物件不只寫在那兩個檔案裡** —— 頁面自己也寫：
+
+```js
+const title = pick({ 'zh-TW': '關於', en: 'About' }, locale) ?? '關於';
+```
+
+逐個數（判準跟那一支一樣：「這個物件有沒有 `'zh-TW'` 這個鍵」）：
+
+| 檔案 | 組數 | 有沒有被算進 100% |
+|---|---|---|
+| `src/i18n/ui.ts` | 89 | ✓ |
+| `src/config/site.ts` | 19 | ✓ |
+| `src/config/platforms.data.mjs` | 25 | ✗ |
+| `src/pages/[...locale]/about.astro` | 5 | ✗ |
+| `src/pages/[...locale]/privacy.astro` | 4 | ✗ |
+| `src/pages/[...locale]/colophon.astro` | 2 | ✗ |
+| 另外三個檔案各 1 | 3 | ✗ |
+
+**108／147 —— 那個 100% 涵蓋的是 73%。**
+
+#### 2. 型別也擋不住
+
+`pick()` 收的是 `Partial<Record<Locale, T>>` —— **`en` 是選填**。
+實測把 `about.astro` 那一行的 `en: 'About'` 拿掉：
+
+| | 結果 |
+|---|---|
+| `npm run check`（型別） | **0** |
+| `npm run build` | **0** |
+| `check:copy` | **0**，而且照樣印「108 組文案全部都有 en（100%）」 |
+| `dist/en/about/index.html` 的 `<title>` | **「關於 — Fox Says」** |
+| 同一頁的 `<h1>` | **「關於」** |
+
+英文讀者看到的是中文標題，四道檢查沒有一個說話。
+
+#### 3. 改法：分母改成「`src/` 底下每一個有 `zh-TW` 的物件」
+
+`.astro` 沒辦法 `import`，所以那部分用**文字上的括號配對**抽
+（往回找 `{`、往前配對 `}`、把巢狀的挖掉、看第一層有沒有 `en:`）。
+
+**抽取方式對不對，拿那兩個能 import 的檔案自我驗證** ——
+文字抽到的組數必須跟 import 抽到的一樣（108 = 108）。對不上就印
+「不敢把別的檔案算進來」，而不是印一個更大但可能是錯的分母。
+（`check:content` 抽 schema 欄位用的是同一招：**內容裡實際用到的欄位，
+一定要抽得到**。）
+
+改完同一個實驗：
+
+```
+· 英文覆蓋：147 組文案裡 **1 組沒有 en**（99%）：
+      · src/pages/[...locale]/about.astro　第 33 行
+  **這是回退**：2026-09-06 記下的是 147 組 100%。
+```
+
+`EN_COVERAGE.pairs` 一起改成 147 —— 那個基準本來就是給「組數變少」用的。
+
+#### 4. 三個突變都紅
+
+| 突變 | 紅的是哪一格 |
+|---|---|
+| 不把別的檔案算進來（`push(...extra)` 拿掉） | 「頁面裡的 L10n 物件也算進分母」 |
+| 自我驗證永遠通過（`if (false)`） | 「兩種抽法對不上時說『不敢算』」 |
+| `hasEn` 永遠是 `true` | 「頁面裡的 L10n 物件也算進分母」 |
+
+第二格的 fixture 是**動態組出來的鍵**（`const KEY = 'zh' + '-TW'`）——
+import 看得到，文字上的 `'zh-TW':` 看不到。那正是「抽取方式有洞」的樣子。
+
+| | 之前 | 現在 |
+|---|---|---|
+| 「100%」的分母 | 108 組（兩個檔案） | **147 組**（`src/` 全部） |
+| 涵蓋率 | 73% 的 L10n 物件 | 100% |
+| 頁面裡少一個 `en` | 四道檢查全綠、照樣說 100% | 點名檔案與行號，並說「這是回退」 |
+| 抽取方式有洞 | —— | 說「不敢算」，分母縮回 108 |
+
+`verify:all` 六道全綠、`test:tools` 44 步全過、`ci:sim` 0。
+
+### 待辦（不屬於這一輪）
+
+- **那 39 組裡有 25 組在 `platforms.data.mjs`，而它的字一個都不會進 `dist`**
+  （站上只有 YouTube 一個來源）。算進覆蓋率是對的 —— 但「有 en」不等於
+  「有人看過它長什麼樣」，這兩件事同一支腳本裡分別有兩個數字在講（→ 6 文案與語氣）
+- **`pick()` 收 `Partial`，所以型別擋不住少一個 `en`。** 改成必填會影響
+  `ui.ts` 那 89 組（它們刻意是選填），要不要改是站主的決定（→ 站主）
+- **文字抽取只認 `'zh-TW':`（單引號）。** `"zh-TW":` 或 `['zh-TW']:`
+  抽不到，而自我驗證只驗得到那兩個 import 得了的檔案 —— 別的檔案改寫法
+  的話，分母會安靜地少（→ 6 文案與語氣）
+- 上一輪與更早的都還在（`mutate` 的 `.orig` 不在 `.gitignore`、
+  那份「跳過 node_modules⋯」的清單在 `audit-privacy.mjs` 裡有兩份、
+  `unscanned-dir` 只看頂層、那 4 條什麼都沒擋的豁免（→ 站主）、
+  `check:content` 那一半還是只看 `syndication.json`、
+  排程跑的 `sync:health` 沒有 `--strict`、`CHANGE_ME` 那條路連 failures 都不加、
+  `test-contrast` 把 `#faf6ee` 寫死在 fixture 裡、
+  manifest 的 `icons[]` 沒有人確認存在、`start_url`／`scope`／`lang` 還沒人比、
+  schema 欄位抽取的自我檢查只驗得到內容用過的那 25 個、
+  `images` 還是副檔名認的、GitHub Pages 會不會壓 `.atom`／`.rss` 沒有人量過、
+  CSS 那三條沒有被 `sawTags` 涵蓋、另外 5 條的主體不是用正則數的、
+  這份檔案自己的頁首也是個沒人守的數字、
+  `box-shadow` 那兩處不算、`BG_PROPS` 還是列舉的、
+  同一個判斷寫在四個地方、四格抽名單用的都是正則、
+  `FLAKY_ENDPOINT` 的平臺 id 沒有人比、那五份對照表只驗了單向、
+  只比資料夾名字不比 `loader` 的 `base`、`collections` 的抽取只認一種寫法、
+  那八種只是「不數」不是「不該數」、`url()` 與 `@font-face` 只掃 HTML、
+  `MEASURED` 仍是快照、
+  `CASES` 的鍵沒有反向檢查、
+  那個掃描分不出元件與動態標籤名、`writing-mode` 只有一個檔案在用、
+  `needs-dist-before-build` 打不開 npm 的 `&&` 串、
+  那份「每條規則都有反例」的報告只說不擋、兩份文件的例子沒有分開數、
+  另外五份文件還是寫「404、500」、`accept` 那些 header 沒被測過、
+  `field()` 假設 frontmatter 是第一個 `---`、
+  只比了檔名沒比路徑、識別字沒有比、`why:` 欄位沒掃、
+  `same-name-different-target` 比 `hasAccessibleName()` 窄、
+  「判斷寫兩份」沒有東西在數、
+  那 59 條「元件沒算繪過」沒有人在守、
+  「要跑起來才有」那 25 條這個方法看不到、分類判準是兩條寫死的正則、
+  同一種「當天就爛」的數字可能還在別的關卡的輸出裡、
+  偶發紅燈的共同點是 `test:units`、量離開碼不要把輸出丟掉、
+  沒有東西在守「空狀態不要自相矛盾」、英文那一半沒有人系統地讀過、
+  `tags.count_one` 與 `list.count_one` 連算繪都沒有過、
+  `csp-frame-src-mismatch` 在站上主體是 0、手動那一次沒有自動化、
+  `rss` 與 `bridge` 兩條路一次都沒跑過（→ 站主）、
+  Data API v3 那一半也沒跑過、
+  CSP 的 `frame-src` 在全部 44 頁上、
+  `related` 只驗了畫得出來、那六個欄位刪掉之後又回到沒人用過、
+  那段建議裡的 273 KB／94 KB 沒有人在守、
+  「站上 0 張內容圖」是三條待辦的共同原因、
+  那三條 a11y 的「第一次」是手動做出來的、
+  markdown 裡的原始 HTML 沒有人在擋、另外六支關卡的寫死數字沒比過、
+  `column` 跟外層 `.wrap--*` 是靠人對的、
+  「42 個用了但沒說明」要重寫或刪掉、`--w-prose`／`--w-content` 也是抄進 `sizes` 的、
+  `rule-undocumented` 只看 id 有沒有出現、
+  那張表是手寫的而 `--list-rules` 是機器的、
+  `gate-count-stale` 的判準是「同一行有 `verify:all`」、
+  `EN_COVERAGE.date` 沒有人問多久以前、組數比對只認得變少、
+  其他三支規則測試的空綠沒驗、
+  那 5 條的 `whyWarn` 還是空的（→ 站主）、
+  結構性規則沒有 `whyWarn` 欄位、`email` 是 warn 而 `google-fonts` 是 error、
+  標籤數也是一種近似、`note` 的 0 筆連續五圈、
+  那 3 個沒人用的匯出（→ 站主）、判準看名字不解析 import、
+  `CONTENT.md` 已經超過 550 行（→ 站主）、判準是檔名不是用途、
+  `role="status"` 本身沒有被檢查、
+  `<details>`／`<summary>`／`<time>` 那 170 個仍然沒有規則、
+  「22 個 `--verbose` 數字」那條的數字過期了、
+  探針還是要人手貼、只跑了首頁、
+  `LOOKS_BAD` 那個正則是猜的、`verify:all` 還是 `&&` 串、
+  `ui.ts` 的 `en` 要不要改必填（→ 站主）、
+  job summary 只有站主會去看、`sync:health` 沒有接進六道關卡、
+  只比 `npm run X`、那段 git 診斷沒有測試、
+  「上界」宣稱要重量得先推（→ 站主）、
+  螢幕閱讀器仍然沒有人做過、重驗是量本機產出不是正式站、
+  `15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、
+  `example-not-real` 只看程式碼框裡的例子、
+  那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  那 9 條「維護者的事」的規則沒有文件、
+  `ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、
+  搜尋結果那 2 個連結沒有規則看過（現在關卡會逐條說出來）、
+  `check.yml` 永遠不會自己觸發（→ 站主）、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `SCHEMA_STRUCTURAL` 3 個什麼都沒擋、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 15 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  7 條 a11y 規則的邊界沒人守、
+  7 個沒人用的 token（→ 站主）、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、本機 `ahead 161, behind 3`、
+  `inlineStylesheets: always` 只到 98%、圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  `test-content-rules` 的改法檢查只看第一處、
+  `--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：7 — 建置與 CI**
