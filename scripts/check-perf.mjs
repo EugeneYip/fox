@@ -182,7 +182,30 @@ function requestParts(text) {
       rel.includes('manifest')
     );
   }).length;
-  return { links, scripts, imgs, uncountedLinks, total: links + scripts + imgs };
+  /*
+   * ── 那句「一個都沒有」是第三十六圈的快照 ────────────────
+   *
+   * 第 2 輪（第四十二圈）問「這份清單是誰維護的？漏一個會怎樣？」。
+   *
+   * 上面那段註解把邊界列得很完整，但它是**寫死的**：`uncountedLinks`
+   * （圖示與 manifest）每次跑都重算，而那九種「一個都沒有」的
+   * **沒有人再數過**。今天重量，九種確實還是 0 ——
+   * 而那正是問題：一個永遠對的句子跟一個沒有人在看的句子，讀起來一模一樣。
+   *
+   * 站上哪天放一支影片（`<video>`）、一張內容圖、或一個內嵌 iframe，
+   * 這條預算就會安靜地少算 —— 而註解還會繼續說「一個都沒有」。
+   */
+  const otherShapes = {
+    preload: (text.match(/<link\b[^>]*rel=["']?(?:module)?preload/gi) ?? []).length,
+    preconnect: (text.match(/<link\b[^>]*rel=["']?(?:preconnect|dns-prefetch)/gi) ?? []).length,
+    iframe: (text.match(/<iframe\b/gi) ?? []).length,
+    media: (text.match(/<(?:video|audio|source)\b/gi) ?? []).length,
+    embed: (text.match(/<(?:object|embed)\b/gi) ?? []).length,
+    useHref: (text.match(/<use\b[^>]*\shref=/gi) ?? []).length,
+    cssUrl: (text.match(/url\(\s*["']?(?!data:|#)/gi) ?? []).length,
+    fontFace: (text.match(/@font-face/gi) ?? []).length,
+  };
+  return { links, scripts, imgs, uncountedLinks, otherShapes, total: links + scripts + imgs };
 }
 
 /*
@@ -1014,8 +1037,12 @@ const reqTotals = pageStats.reduce(
     uncountedLinks: a.uncountedLinks + p.requests.uncountedLinks,
     scripts: a.scripts + p.requests.scripts,
     imgs: a.imgs + p.requests.imgs,
+    otherShapes: Object.fromEntries(
+      Object.entries(p.requests.otherShapes).map(([k, v]) => [k, (a.otherShapes[k] ?? 0) + v]),
+    ),
   }),
-  { links: 0, scripts: 0, imgs: 0, uncountedLinks: 0 },
+  /** @type {{ links: number, scripts: number, imgs: number, uncountedLinks: number, otherShapes: Record<string, number> }} */
+  ({ links: 0, scripts: 0, imgs: 0, uncountedLinks: 0, otherShapes: {} }),
 );
 /** @type {string[]} */
 const empty = [];
@@ -1099,6 +1126,21 @@ if (images.length > 0 && rendered.length === 0) {
         '      它們只抓一次、快取很久，所以不算進這條預算 —— 但「2」不是這一頁請求的全部。',
     );
   }
+
+  /*
+   * 那九種「還會發出請求、但這條預算不數」的寫法，每次重算一次。
+   * 全是 0 也要說出口 —— 「今天沒有」跟「沒有人在看」在輸出上長得一樣。
+   */
+  const others = Object.entries(reqTotals.otherShapes).filter(([, n]) => n > 0);
+  empty.push(
+    others.length === 0
+      ? `別種會發請求的寫法（preload、iframe、video／audio、object、\`<use href>\`、` +
+          `CSS 的 url()、@font-face⋯共 ${Object.keys(reqTotals.otherShapes).length} 種）：` +
+          `${html.length} 頁合計 **0 個**，所以這條預算今天沒有漏數。`
+      : `**這條預算漏數了**：${others.map(([k, n]) => `${k} ${n} 個`).join('、')}。\n` +
+          '    它們會發出請求，而「單頁請求數」只數 stylesheet／script src／img src。\n' +
+          '    改法：把它算進 `requestParts()`，或說明為什麼不算（像圖示那樣）。',
+  );
 }
 if (skipped.length > 0) {
   console.log(`\n  這次少了 ${skipped.length} 條預算（東西不在，所以沒得量）：`);

@@ -1192,6 +1192,41 @@ console.log('─'.repeat(64));
   await rm(dir, { recursive: true, force: true });
 }
 
+/*
+ * ── 那八種「會發請求但不數」的寫法，每次都要重算 ──────────────
+ *
+ * 第 2 輪（第四十二圈）：`requestParts()` 上面那段註解把邊界列得很完整
+ * （preload、iframe、video⋯），但它是**第三十六圈的快照** ——
+ * `uncountedLinks`（圖示與 manifest）每次跑都重算，那八種沒有人再數過。
+ *
+ * 今天重量還是 0，而那正是問題：**一個永遠對的句子跟一個沒有人在看的
+ * 句子，讀起來一模一樣。**
+ */
+{
+  const clean = await mkdtemp(join(tmpdir(), 'perf-shapes-clean-'));
+  await writeFile(join(clean, 'index.html'), page({ body: '<p>小</p>' }), 'utf8');
+  const outClean = await check(clean);
+  const okClean = /別種會發請求的寫法/.test(outClean) && /\*\*0 個\*\*/.test(outClean);
+  if (!okClean) failed++;
+  console.log(`  ${okClean ? '✓' : 'X'} 一種都沒有的時候也說得出來（不是安靜跳過）`);
+  if (!okClean) console.log('        ' + outClean.split('\n').filter((l) => /別種會發請求/.test(l)).join(' ｜ '));
+  await rm(clean, { recursive: true, force: true });
+
+  const withShapes = await mkdtemp(join(tmpdir(), 'perf-shapes-'));
+  await writeFile(
+    join(withShapes, 'index.html'),
+    page({ head: '<link rel="preload" href="/y.css" as="style">', body: '<video src="/x.mp4"></video>' }),
+    'utf8',
+  );
+  const outShapes = await check(withShapes);
+  const okShapes =
+    /\*\*這條預算漏數了\*\*/.test(outShapes) && /preload 1 個/.test(outShapes) && /media 1 個/.test(outShapes);
+  if (!okShapes) failed++;
+  console.log(`  ${okShapes ? '✓' : 'X'} 出現 preload／video 時說得出「這條預算漏數了」`);
+  if (!okShapes) console.log('        ' + outShapes.split('\n').filter((l) => /漏數|別種會發請求/.test(l)).join(' ｜ '));
+  await rm(withShapes, { recursive: true, force: true });
+}
+
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
 process.exit(failed > 0 ? 1 : 0);
 
