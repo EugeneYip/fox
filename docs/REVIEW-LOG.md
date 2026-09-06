@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 55,400 行、2.8 MB、328 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 55,600 行、2.8 MB、329 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -53446,3 +53446,183 @@ id 在、例子也對 —— 但**那條規則可能一個例子都沒有**。
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
 **下一輪：7 — 建置與 CI**
+
+### 2026-09-06 — 第 7 輪（第四十一圈）：建置與 CI
+
+**第四十一圈問：這一課學過了，當時修乾淨了嗎？**
+判準：**翻出 `REVIEW-LOG.md` 裡記過的一課，找出它今天在 repo 裡
+每一個同形狀的地方 —— 有幾個當時沒修到？**
+
+#### 1. 那一課（第二十六圈）
+
+> `test:units` 裡有一格需要真的 `dist/`，而 deploy.yml 的 `test:units`
+> 跑在 build **之前**（那一步的名字就叫「不需要 dist 的那些」）。
+> **本機永遠有 dist，所以兩套關卡全綠；乾淨的 runner 上會停在第一步。**
+
+修法：`needs-dist-before-build`（掃 `.github/workflows/` 每一份）＋ `ci:sim`。
+
+#### 2. 同一個形狀還在，而且在更要緊的地方
+
+`audit:privacy` 在**兩份 workflow 上都排在建置之前**：
+
+```
+verify:all = check && audit:privacy && check:contrast && build && check:a11y && check:perf
+                      ↑ 在 build 前面
+check.yml  = check → audit:privacy → check:contrast → build → ⋯
+```
+
+把 `dist/` 移走再跑 `audit:privacy`，看它少判斷了什麼：
+
+```
+這次沒有東西可看的規則：10 條（built-third-party-request、cookie-promised-none、
+  csp-frame-host-unpromised、csp-frame-src-mismatch、csp-missing、csp-no-default-src、
+  csp-unsafe-inline、external-link-rel-broken-promise、storage-documented-not-used、
+  storage-not-documented）
+```
+
+**31 條裡有 10 條在 CI 上一次都沒跑過** —— 其中包括
+`built-third-party-request`（產出裡有沒有第三方請求，**這個專案最硬的那條承諾**）
+與**四條 CSP 規則**。
+
+#### 3. 為什麼二十六圈那次抓得到，這次抓不到
+
+那一課修的是 `needs-dist-before-build`，而它的 `NEEDS_DIST` 是
+「**沒有 dist 就會失敗**」的那幾支。`audit:privacy` 不在裡面 ——
+因為它**不會失敗**：它照跑，只是那 10 條一條都不判斷。
+
+**它不紅，它只是少驗。** 而本機永遠有 dist，所以兩套關卡永遠全綠。
+
+#### 4. 改了三處
+
+| 改哪裡 | 改成什麼 |
+|---|---|
+| `package.json` 的 `verify:all` | `audit:privacy` 移到 `build` 之後 |
+| `.github/workflows/check.yml` | 同上，並在註解裡寫明理由 |
+| `NEEDS_DIST` | 加入 `audit:privacy`，而且**分開兩種後果** |
+
+第三項要特別講：原本的訊息寫「這一步在 CI 上**一定會失敗**」——
+對 `audit:privacy` 是**假的**。所以 `NEEDS_DIST` 改成一份對照表
+（`fail` 或 `quiet`），訊息照著說：
+
+```
+X [needs-dist-before-build] `npm run audit:privacy` 需要 dist/，但它排在建置之前。
+    乾淨的 checkout 沒有 dist/，**而這一步不會因此失敗** ——
+    它照跑，只是讀產出的那幾條規則一條都不判斷。
+    本機永遠有 dist，所以兩套關卡全綠，沒有人會發現。
+```
+
+#### 5. 量改完的效果
+
+把 `dist/` 移走，從乾淨的樹跑一次 `verify:all`：
+
+```
+掃了 187 個檔案、31 條規則。
+這次沒有東西可看的規則：1 條（csp-frame-src-mismatch）
+```
+
+**閒置從 10 條變 1 條** —— 那 9 條現在在 CI 上真的會跑。
+（剩下那一條要有影片才有主體，第 5 輪〔第四十圈〕記過。）
+
+| | 之前 | 現在 |
+|---|---|---|
+| CI 上跑得到的隱私規則 | 21／31 | **30／31** |
+| 「產出裡有沒有第三方請求」 | CI 上從來沒驗過 | 每次都驗 |
+| 那條規則的訊息 | 對 `audit:privacy` 是假的 | 分兩種後果各說各的 |
+
+`verify:all` 六道全綠、`test:tools` 44 步全過、`ci:sim` 在 HEAD 上全綠。
+
+### 待辦（不屬於這一輪）
+
+- **`needs-dist-before-build` 還是打不開 npm 的 `&&` 串。** 這次抓得到是因為
+  `check.yml` 逐一列出關卡；`deploy.yml` 只寫 `npm run verify:all` 一步，
+  那條規則把它當成「有建置」就過了。**串裡面的順序仍然沒有人守**
+  （`ci:sim` 會實際跑，但它只跑不比順序）（→ 7 建置與 CI）
+- **`NEEDS_DIST` 這份表是手寫的。** 哪一支「讀 dist」是人判斷的 ——
+  加一條讀產出的規則到別的關卡，沒有人會知道要更新它（→ 7 建置與 CI）
+- 上一輪與更早的都還在（那份「每條規則都有反例」的報告只說不擋、
+  兩份文件的例子沒有分開數、
+  `audit:privacy` 排在 `build` 前面**（這一輪修掉了）**、
+  `STRUCTURAL_IDS` 是手寫的、
+  另外五份文件還是寫「404、500」、`accept` 那些 header 沒被測過、
+  只查了 `check-content.mjs` 一個檔案、`field()` 假設 frontmatter 是第一個 `---`、
+  只比了檔名沒比路徑、識別字沒有比、`why:` 欄位沒掃、
+  `same-name-different-target` 比 `hasAccessibleName()` 窄、
+  「判斷寫兩份」沒有東西在數、
+  那 59 條「元件沒算繪過」沒有人在守、
+  「要跑起來才有」那 25 條這個方法看不到、分類判準是兩條寫死的正則、
+  同一種「當天就爛」的數字可能還在別的關卡的輸出裡、
+  偶發紅燈的共同點是 `test:units`、量離開碼不要把輸出丟掉、
+  沒有東西在守「空狀態不要自相矛盾」、英文那一半沒有人系統地讀過、
+  `tags.count_one` 與 `list.count_one` 連算繪都沒有過、
+  `csp-frame-src-mismatch` 在站上主體是 0、手動那一次沒有自動化、
+  `rss` 與 `bridge` 兩條路一次都沒跑過（→ 站主）、
+  Data API v3 那一半也沒跑過、
+  CSP 的 `frame-src` 在全部 44 頁上、
+  `related` 只驗了畫得出來、那六個欄位刪掉之後又回到沒人用過、
+  那段建議裡的 273 KB／94 KB 沒有人在守、
+  「站上 0 張內容圖」是三條待辦的共同原因、
+  那三條 a11y 的「第一次」是手動做出來的、
+  markdown 裡的原始 HTML 沒有人在擋、另外六支關卡的寫死數字沒比過、
+  `column` 跟外層 `.wrap--*` 是靠人對的、
+  「42 個用了但沒說明」要重寫或刪掉、`--w-prose`／`--w-content` 也是抄進 `sizes` 的、
+  `rule-undocumented` 只看 id 有沒有出現、
+  那張表是手寫的而 `--list-rules` 是機器的、
+  `gate-count-stale` 的判準是「同一行有 `verify:all`」、
+  `EN_COVERAGE.date` 沒有人問多久以前、組數比對只認得變少、
+  其他三支規則測試的空綠沒驗、
+  那 5 條的 `whyWarn` 還是空的（→ 站主）、
+  結構性規則沒有 `whyWarn` 欄位、`email` 是 warn 而 `google-fonts` 是 error、
+  標籤數也是一種近似、`note` 的 0 筆連續五圈、
+  那 4 個沒人用的匯出（→ 站主）、判準看名字不解析 import、
+  `CONTENT.md` 533 行（→ 站主）、判準是檔名不是用途、
+  `role="status"` 本身沒有被檢查、
+  `<details>`／`<summary>`／`<time>` 那 170 個仍然沒有規則、
+  「22 個 `--verbose` 數字」那條的數字過期了、
+  探針還是要人手貼、只跑了首頁、
+  `LOOKS_BAD` 那個正則是猜的、`verify:all` 還是 `&&` 串、
+  `ui.ts` 的 `en` 要不要改必填（→ 站主）、
+  job summary 只有站主會去看、`sync:health` 沒有接進六道關卡、
+  只比 `npm run X`、那段 git 診斷沒有測試、
+  「上界」宣稱要重量得先推（→ 站主）、
+  螢幕閱讀器仍然沒有人做過、重驗是量本機產出不是正式站、
+  `15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、
+  `example-not-real` 只看程式碼框裡的例子、
+  那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  那 9 條「維護者的事」的規則沒有文件、
+  `ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、
+  搜尋結果那 2 個連結沒有規則看過（但關卡會說出來）、
+  `check.yml` 永遠不會自己觸發（→ 站主）、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `SCHEMA_STRUCTURAL` 3 個什麼都沒擋、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 14 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  7 條 a11y 規則的邊界沒人守、
+  7 個沒人用的 token（→ 站主）、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、本機 `ahead 146, behind 3`、
+  `inlineStylesheets: always` 只到 98%、圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  `test-content-rules` 的改法檢查只看第一處、
+  `--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：8 — 視覺與版面**

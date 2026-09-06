@@ -624,7 +624,34 @@ if (minMatch) {
  * 只有 check.yml 還是 0 —— 它只在 pull_request 上觸發，而這個 repo
  * 到目前為止一個 PR 都沒有開過。）
  */
-const NEEDS_DIST = ['check:content', 'check:copy', 'check:a11y', 'check:perf', 'test:built'];
+/*
+ * `audit:privacy` 是第 7 輪（第四十一圈）加進來的。
+ *
+ * 它跟別的不一樣：**沒有 dist/ 也跑得動**，只是那 10 條讀產出的規則
+ * （`built-third-party-request`、四條 CSP、`cookie-promised-none`⋯）
+ * 會安靜地一條都不判斷 —— 而其中一條守的正是這個專案最硬的承諾。
+ *
+ * 那一課是第二十六圈的：「需要 dist 的東西排在 build 之前，本機永遠有 dist
+ * 所以兩套關卡全綠，乾淨的 runner 上才會壞」。當時修的是 `test:units`，
+ * 而 `audit:privacy` 在**兩份 workflow 上**都排在建置之前，一直沒有人看到 ——
+ * 因為它不會紅，它只是少驗 10 條。
+ */
+/**
+ * 需要 `dist/` 的步驟 → 沒有 dist 的時候會怎樣。
+ *
+ * 兩種後果差很多，而訊息要說對哪一種：多數會**當場失敗**，
+ * `audit:privacy` 不會 —— 它照跑，只是那 10 條讀產出的規則一條都不判斷。
+ * @type {Map<string, string>}
+ */
+const NEEDS_DIST_WHY = new Map([
+  ['check:content', 'fail'],
+  ['check:copy', 'fail'],
+  ['check:a11y', 'fail'],
+  ['check:perf', 'fail'],
+  ['test:built', 'fail'],
+  ['audit:privacy', 'quiet'],
+]);
+const NEEDS_DIST = [...NEEDS_DIST_WHY.keys()];
 const BUILDS = ['build', 'verify:all'];
 for (const name of files) {
   const text = await readFile(resolve(DIR, name), 'utf8');
@@ -648,7 +675,11 @@ for (const name of files) {
       'needs-dist-before-build',
       `\`npm run ${c.script}\` 需要 dist/，但它排在建置之前` +
         (firstBuild === -1 ? '（這個 workflow 裡根本沒有建置）' : '') +
-        '。乾淨的 checkout 沒有 dist/，這一步在 CI 上一定會失敗。' +
+        '。乾淨的 checkout 沒有 dist/，' +
+        (NEEDS_DIST_WHY.get(c.script) === 'quiet'
+          ? '**而這一步不會因此失敗** —— 它照跑，只是讀產出的那幾條規則一條都不判斷。' +
+            '本機永遠有 dist，所以兩套關卡全綠，沒有人會發現。'
+          : '這一步在 CI 上一定會失敗。') +
         '　改法：把這一步移到建置之後' +
         (firstBuild === -1 ? '，而這個 workflow 還得先加一步 `run: npm run build`。' : '。'),
     );

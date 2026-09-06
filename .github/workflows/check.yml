@@ -30,19 +30,23 @@ jobs:
       - name: 型別檢查
         run: npm run check
 
-      # PRIVACY_NEEDLES 是要搜尋的個資字串（本名、校名⋯⋯），一行一個。
-      # 值不能寫在 repo 裡 —— 那正是這道檢查要防的事。設成 repo secret。
-      # 沒設的話 audit 仍然會跑，但會明講「身分規則沒有執行」。
-      - name: 隱私稽核（有硬編碼的個資就擋下來）
-        run: npm run audit:privacy
-        env:
-          PRIVACY_NEEDLES: ${{ secrets.PRIVACY_NEEDLES }}
-
       - name: 對比度（WCAG，深淺兩套都算）
         run: npm run check:contrast
 
       - name: 建置
         run: npm run build
+
+      # PRIVACY_NEEDLES 是要搜尋的個資字串（本名、校名⋯⋯），一行一個。
+      # 值不能寫在 repo 裡 —— 那正是這道檢查要防的事。設成 repo secret。
+      # 沒設的話 audit 仍然會跑，但會明講「身分規則沒有執行」。
+      #
+      # 排在建置**之後**：這一支有 10 條規則讀的是 dist/（零第三方請求、
+      # 四條 CSP、cookie 承諾⋯⋯）。第 7 輪（第四十一圈）量到它原本排在建置
+      # 之前，於是那 10 條在 CI 上一次都沒跑過 —— 而本機永遠有 dist，所以看不出來。
+      - name: 隱私稽核（有硬編碼的個資就擋下來，要有 dist/ 才驗得到那 10 條）
+        run: npm run audit:privacy
+        env:
+          PRIVACY_NEEDLES: ${{ secrets.PRIVACY_NEEDLES }}
 
       - name: 無障礙靜態檢查（要有 dist/ 才能跑，所以排在建置之後）
         run: npm run check:a11y

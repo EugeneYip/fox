@@ -26,7 +26,7 @@
     "clean-images": "node scripts/strip-exif.mjs",
     "audit:privacy": "node scripts/audit-privacy.mjs",
     "astro": "astro",
-    "verify:all": "npm run check && npm run audit:privacy && npm run check:contrast && npm run build && npm run check:a11y && npm run check:perf",
+    "verify:all": "npm run check && npm run check:contrast && npm run build && npm run audit:privacy && npm run check:a11y && npm run check:perf",
     "fixtures": "node scripts/make-fixtures.mjs",
     "test:throttle": "node scripts/test-throttle.mjs",
     "test:privacy-rules": "node scripts/test-privacy-rules.mjs",
