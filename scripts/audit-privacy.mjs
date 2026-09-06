@@ -147,7 +147,21 @@ const RULES = [...STATIC_RULES, ...identityRules(identity.needles)];
  * @param {string} dir
  * @returns {AsyncGenerator<string>}
  */
-async function* walk(dir) {
+/*
+ * 在硬碟上、但不在 repo 裡的四個資料夾。
+ *
+ * 這份清單原本在兩支 walker 裡**各寫了一份**（第 5 輪〔第四十四圈〕記下的
+ * 待辦）。同一件事寫在兩個地方，改一邊不會有人說 —— 這個 repo 最常犯的
+ * 那一種。第 5 輪（第四十五圈）併成一支 walker、一份清單。
+ */
+const NOT_IN_REPO = new Set(['node_modules', 'dist', '.astro', '.git']);
+
+/**
+ * @param {string} dir
+ * @param {(name: string) => boolean} [keep] 要不要留這個檔案；預設只留 SCAN_EXT 那幾種
+ * @returns {AsyncGenerator<string>}
+ */
+async function* walk(dir, keep = (name) => SCAN_EXT.has(extname(name))) {
   let entries;
   try {
     entries = await readdir(dir, { withFileTypes: true });
@@ -157,9 +171,9 @@ async function* walk(dir) {
   for (const entry of entries) {
     const full = resolve(dir, entry.name);
     if (entry.isDirectory()) {
-      if (['node_modules', 'dist', '.astro', '.git'].includes(entry.name)) continue;
-      yield* walk(full);
-    } else if (SCAN_EXT.has(extname(entry.name))) {
+      if (NOT_IN_REPO.has(entry.name)) continue;
+      yield* walk(full, keep);
+    } else if (keep(entry.name)) {
       yield full;
     }
   }
@@ -623,6 +637,11 @@ if (existsSync(resolve(ROOT, 'dist'))) {
   }
 }
 
+/** @type {{ tracked: number, unread: number, reasons: string }|null} */
+let repoCoverage = null;
+/** unscanned-dir 已經點名過的頂層資料夾 —— 底下那條不重複報同一件事 */
+const reportedDirs = new Set();
+
 /*
  * ── 掃描的視野是一份清單，而清單不會自己長大 ─────────────
  *
@@ -636,24 +655,8 @@ if (existsSync(resolve(ROOT, 'dist'))) {
  * 而不是安靜地少掃一個會出貨的檔案。
  */
 {
-  /** @param {string} dir @returns {AsyncGenerator<string>} */
-  async function* walkAll(dir) {
-    let entries;
-    try {
-      entries = await readdir(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      const full = resolve(dir, entry.name);
-      if (entry.isDirectory()) {
-        if (['node_modules', 'dist', '.astro', '.git'].includes(entry.name)) continue;
-        yield* walkAll(full);
-      } else {
-        yield full;
-      }
-    }
-  }
+  /* 走全部的檔案（不看副檔名）—— 用的是上面同一支 walker */
+  const walkAll = (/** @type {string} */ dir) => walk(dir, () => true);
 
   /*
    * ── git 忽略掉的檔案不算 ──────────────────────
@@ -765,6 +768,7 @@ if (existsSync(resolve(ROOT, 'dist'))) {
     saw('unscanned-dir', topDirs.size);
     for (const [dir, n] of topDirs) {
       if (SCAN_DIRS.includes(dir)) continue;
+      reportedDirs.add(dir);
       findings.push({
         rel: `${dir}/`,
         lineNo: 1,
@@ -1419,6 +1423,91 @@ async function* filesToScan() {
 }
 
 /*
+ * ── 視野有多大，直接問一次 ──────────────────────
+ *
+ * 上面的 `unscanned-dir` 問的是「頂層資料夾在不在 SCAN_DIRS」——
+ * 那是一個**代理**：「在 SCAN_DIRS 裡」推得出「會被走到」，所以今天夠用。
+ * 第 5 輪（第四十四圈）留的待辦講的正是這件事：判準寫的是「頂層」，
+ * 而真正要問的是「有沒有被讀到」。
+ *
+ * 這一段直接問那個問題，而且**不重寫任何條件** ——
+ * 拿 `filesToScan()` 自己走出來的那一份，跟 `git ls-files` 相減。
+ *
+ * 第一版不是這樣寫的：我照著 `SCAN_DIRS`／`SCAN_EXT` 把判斷**重寫了一次**，
+ * 於是漏掉根目錄那一行的 `name.startsWith('.')`，把 `.env.example`
+ * 報成「稽核從來沒讀過」—— 而它其實一直都在掃。那一格印出來的當下就露餡了。
+ * 同一個教訓這一圈第 4 輪才剛犯過一次（拿表名猜欄位名）。
+ *
+ * **為什麼要擋。** 實測把根目錄那一行的 dotfile 逃生門拿掉：
+ * `.env.example` 從此不在視野裡，而 `unscanned-file-type` 抓不到它
+ *（那條只看走得到的檔案），稽核仍然印「必須修正 0」、離開碼 0。
+ * 也就是說在這一條之前，**視野少一塊是不會有人說話的**。
+ * 而 `.env.example` 正是最可能不小心放進真值的那種檔案。
+ *
+ * 導入時實測：202 個追蹤的檔案，視野涵蓋 195 個，沒讀的 7 個
+ * 全是二進位（png 5、ico 1）與 `package-lock.json`。
+ */
+{
+  /** @type {string[] | null} */
+  let tracked = null;
+  try {
+    tracked = execFileSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+      .split('\n')
+      .filter(Boolean);
+  } catch {
+    tracked = null;
+  }
+  if (tracked === null) {
+    /* 主體 0 才是實話 —— 跟 unscanned-dir 同一個處理 */
+    saw('unscanned-tracked-file', 0);
+  } else {
+    saw('unscanned-tracked-file', tracked.length);
+    /** 這支稽核自己會走到的檔案 —— 問它本人，不重寫它的條件 */
+    const seen = new Set();
+    for await (const f of filesToScan()) seen.add(relative(ROOT, f));
+    const unread = tracked.filter((f) => !seen.has(f));
+    /** @type {Map<string, number>} */
+    const byExt = new Map();
+    for (const f of unread) {
+      const ext = extname(f);
+      const k = BINARY_EXT.has(ext) ? `${ext}（二進位）` : ROOT_FILE_SKIP.has(f) ? f : `${ext || '（沒有副檔名）'} 不在 SCAN_EXT`;
+      byExt.set(k, (byExt.get(k) ?? 0) + 1);
+    }
+    repoCoverage = {
+      tracked: tracked.length,
+      unread: unread.length,
+      reasons: [...byExt].map(([k, n]) => `${k} ${n}`).join('、'),
+    };
+    for (const rel of unread) {
+      if (BINARY_EXT.has(extname(rel)) || ROOT_FILE_SKIP.has(rel)) continue;
+      /*
+       * 整個資料夾不在視野裡的那種，`unscanned-dir` 已經用更好的訊息點過名了
+       *（「這個資料夾裡有 N 個檔案被 git 追蹤」）。同一件事報兩次，
+       * 讀的人要自己判斷是不是同一件 —— 這裡拿的是那條規則**真的報出來的**
+       * 那份，不是照它的條件再推導一次。
+       */
+      if (reportedDirs.has(rel.slice(0, rel.indexOf('/')))) continue;
+      findings.push({
+        rel,
+        lineNo: 1,
+        line: '（這支稽核從來沒有讀過這個檔案）',
+        matched: rel,
+        rule: {
+          id: 'unscanned-tracked-file',
+          level: 'error',
+          why:
+            '這個檔案被 git 追蹤（也就是**在這個公開 repo 裡**），' +
+            '但 filesToScan() 走不到它 —— 每一條逐行掃語料的規則都看不見它。' +
+            '　改法：把它的副檔名加進 SCAN_EXT，或把它的資料夾加進 SCAN_DIRS；' +
+            '真的不用掃（例如二進位）就加進 BINARY_EXT，' +
+            '那份清單旁邊要寫清楚為什麼。',
+        },
+      });
+    }
+  }
+}
+
+/*
  * ── 每個隱私開關，有沒有人真的讀它 ────────────────────
  *
  * 一個沒有人讀的開關是**假的閘門**：它看起來把某件事關掉了，
@@ -1918,6 +2007,7 @@ const STRUCTURAL_IDS = [
   'built-third-party-request',
   'unscanned-file-type',
   'unscanned-dir',
+  'unscanned-tracked-file',
   'deploy-without-gates',
   'deploy-without-cname-check',
   'possible-secret',
@@ -2043,6 +2133,14 @@ const exempt = [...ALLOWLIST].filter((rel) => existsSync(resolve(ROOT, rel))).le
 console.log(
   `\n掃了 ${scanned} 個檔案（另外 ${exempt} 個在豁免名單上，沒掃）、${subjects.size} 條規則。`,
 );
+if (repoCoverage === null) {
+  console.log('  視野沒有比對：這裡不是 git repo，問不到「版控裡有哪些檔案」。');
+} else {
+  console.log(
+    `  版控裡有 ${repoCoverage.tracked} 個檔案，這支稽核的視野涵蓋 ${repoCoverage.tracked - repoCoverage.unread} 個；` +
+      `沒讀的 ${repoCoverage.unread} 個：${repoCoverage.reasons || '（無）'}`,
+  );
+}
 
 /*
  * ── 提醒與擋，各幾條？其中幾條說得出為什麼？ ────────────

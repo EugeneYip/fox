@@ -83,7 +83,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 59,700 行、3.0 MB、358 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 59,900 行、3.2 MB、359 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -59718,4 +59718,152 @@ id 打錯的話會發生什麼：`FLAKY_ENDPOINT.has(p.id)` 永遠是 false，�
   七支關卡只有兩支有 `--list-rules`、圈末索引停在第二十六圈、
   以及第二十三圈記的三件站主決定（→ 站主））
 
-**下一輪：5 — 隱私與安全**
+### 2026-09-06 — 第 5 輪（第四十五圈）：隱私與安全
+
+**第四十五圈問：這條待辦還在那裡，是因為它還成立嗎？**
+判準：**挑幾條被抄了很多圈的待辦，回去對照現在的程式 ——
+它描述的那件事今天還是真的嗎？**
+
+挑了五條。**一條是假的（早就修好了）、四條還成立**，四條裡補掉三條。
+
+#### 1. 「`audit:privacy` 排在 `build` 前面，讀 `dist/` 的規則在 CI 上一次都沒真的判斷過東西」—— **這條是假的**
+
+`check.yml` 現在是：
+
+```
+37:  run: npm run build
+47:  run: npm run audit:privacy      ← 名字就寫著「要有 dist/ 才驗得到那 10 條」
+```
+
+`deploy.yml` 跑的是 `verify:all`，裡面本來就是 `build && audit:privacy`。
+主體數也對得上：`cookie-promised-none` 與四條 `csp-*` 各 **44**（44 頁）。
+
+`git log` 說是**第 7 輪（第四十一圈）**修的（`e32a36a`，
+那一輪的標題正是「那條最硬的承諾，在 CI 上從來沒被驗過」）。
+待辦被一輪一輪抄下來，而抄的時候沒有人回去看它還成不成立 ——
+**這一圈就是為了這件事開的。**
+
+#### 2. 「那份『跳過 `node_modules`／`dist`／`.astro`／`.git`』的清單有兩份」—— 還成立，併了
+
+`audit-privacy.mjs` 的第 160 行與第 650 行各有一份一模一樣的
+`['node_modules', 'dist', '.astro', '.git']`。兩支 walker 的差別**只有
+檔案要不要過濾副檔名**，其餘一字不差。
+
+併成一支：`walk(dir, keep)`，`keep` 預設是 `SCAN_EXT`，
+`walkAll(dir)` 變成 `walk(dir, () => true)`；清單抽成 `NOT_IN_REPO`。
+併之前與併之後的數字一字不差（掃 188、`unscanned-file-type` 188、
+`unscanned-dir` 6）。
+
+#### 3. 「`unscanned-dir` 只看頂層，判準寫的是『頂層』不是『有沒有被掃到』」—— 還成立，補了一條直接問的
+
+先量：**版控裡 202 個檔案，稽核的視野涵蓋 195 個，沒讀的 7 個**
+（`.png` 5、`.ico` 1、`package-lock.json` 1）—— 一個說不出理由的都沒有。
+所以那個代理今天是對的。差別在於**在這一輪之前，那句話沒有人在算**。
+
+新規則 `unscanned-tracked-file`（error）：拿 `filesToScan()` **自己**走出來的
+那一份，跟 `git ls-files` 相減，剩下的要能用 `BINARY_EXT` 或
+`ROOT_FILE_SKIP` 解釋，不然就擋。
+
+**為什麼要擋，是量出來的。** 把根目錄那一行的 dotfile 逃生門拿掉
+（`name.startsWith('.')`），`.env.example` 從此不在視野裡 ——
+而 `unscanned-file-type` 抓不到它（那條的迴圈是 `for (const dir of SCAN_DIRS)`，
+根目錄那一層它從來沒走過），稽核仍然印「必須修正 0」、**離開碼 0**。
+`.env.example` 正是最可能不小心放進真值的那種檔案。
+
+補上之後同一個突變：`✗ .env.example:1 [unscanned-tracked-file]`、離開碼 1。
+另一個方向（`SCAN_DIRS` 拿掉 `docs`）也擋得住，而且點得出是哪 8 個檔案。
+
+**第一版是錯的，而且是同一個老毛病。** 我沒有問 `filesToScan()`，
+而是照著 `SCAN_DIRS`／`SCAN_EXT` 把判斷**重寫了一次** ——
+漏掉根目錄那行的 dotfile 逃生門，於是它把 `.env.example` 報成
+「稽核從來沒讀過」，而它其實一直都在掃。那一行印出來的當下就露餡了。
+**這一圈第 4 輪才剛犯過一次同樣的**（拿表名 `KIND` 猜欄位叫 `kind`）。
+
+還有一個地方也是問「它真的報了什麼」而不是「照它的條件推一次」：
+整個資料夾在視野外的那種，`unscanned-dir` 已經用更好的訊息點過名，
+所以這條跳過那些檔案 —— 用的是那條規則**真的加進 `reportedDirs` 的**那份。
+（第一版沒有這一段，測試當場說「這個 fixture 還順帶觸發了沒宣告的規則」。）
+
+#### 4. 「`audit:privacy` 沒有 `check:a11y` 那種 `SEVERITY` 表」—— 還成立，補了
+
+量到的現況：等級寫在每一條規則自己身上（`audit-privacy.mjs` 28 處、
+`privacy-rules.mjs` 8 處），而唯一的檢查是「同一個 id 不要有兩種等級」。
+也就是說**把一條 `error` 一致地改成 `warn`，全部都是綠的**。
+
+而 `docs/PRIVACY.md` 自己寫著「把隱私規則改寬鬆是有風險的動作」——
+那句話在這之前沒有任何東西在守。
+
+`check:a11y` 那一邊早就是這樣做的（`test-a11y-rules.mjs` 的 `SEVERITY`），
+所以這裡補的是同一個機制，不是新發明的：33 條規則的等級釘在
+`test-privacy-structural.mjs` 的 `SEVERITY` 裡，兩個方向都比
+（表上有程式沒有、程式有表上沒有、等級對不上）。
+
+那份表**刻意是手寫的** —— 降級一條規則就必須同時改它，
+而那一行會出現在 diff 裡。
+
+突變（兩個定義檔各一個）：`google-fonts` 降成 warn、`unscanned-dir` 降成 warn ——
+都是「表上是 error，程式裡是 warn」，離開碼 1。
+
+#### 5. 「`STRUCTURAL_IDS` 還是手寫的」—— 還成立，沒動
+
+現在 **25 條**（這一輪加了 `unscanned-tracked-file` 進去）。
+它有一格測試在守「跟這支腳本用到的 id 對得上」，但那一格是用正則抽的 ——
+換個寫法就抽到 0，而抽到 0 時它會說「這一格等於沒驗」卻不會擋。
+今天仍然如此。沒動：那要讓 `audit:privacy` 有 `--list-rules`，是另一件事。
+
+#### 這一輪的規則數
+
+32 → **33**（新增 `unscanned-tracked-file`）。
+`test-privacy-structural.mjs` 有一格在守「有沒有 `dist/`，規則數都一樣」，
+它自己說出 33 vs 33。
+
+#### 六道關卡
+
+`npm run verify:all` 全綠、`npm run test:tools` 44 步全通過。
+中間紅過一次：新規則跟 `unscanned-dir` 的 fixture 撞在一起
+（見第 3 節最後那段）。
+
+#### 待辦（不屬於這一輪）
+
+- **`SEVERITY` 那份表跟 `STRUCTURAL_IDS` 是同一個形狀的第二份手寫清單。**
+  兩份都在守「規則有沒有跑掉」，而兩份都要人手維護 ——
+  `audit:privacy` 有 `--list-rules` 的話兩份都能退休（→ 5 隱私與安全）
+- **`unscanned-tracked-file` 走了第二次 `filesToScan()`。** 主流程已經走過
+  一次（`possible-secret` 那一圈），這裡為了拿「走到哪些檔案」又走一次。
+  188 個檔案不痛，但那是同一件事做兩次（→ 5 隱私與安全）
+- **`repoCoverage` 那一行沒有測試。** 規則本身有 fixture，
+  但「版控裡有 202 個檔案，視野涵蓋 195 個」那一句只有突變驗過
+  （→ 5 隱私與安全）
+- **`docs/PRIVACY.md` 沒有規則清單。** 這一輪加的規則沒有寫進去 ——
+  但那不是漏，是那份文件本來就沒有那種清單（`check:copy` 的
+  `rule-not-documented` 只管文案規則）。要不要讓隱私規則也有一份
+  是站主的判斷（→ 站主）
+- 上一輪與更早的都還在（`gen-platform-docs.mjs` 沒有測試檔、
+  `test-verify-sources.mjs` 的 helper 只收 stdout、
+  「來源檢查」那一半沒有 0 筆的總結句、
+  `note` 的 `confidence` 還是 `verified`（→ 站主）、
+  `sync-feeds.mjs` 四個策略沒有匯出、`check-handle.mjs` 不能離線跑、
+  `manifest-drift` 現在是兩件事、`icons[]` 沒驗 `sizes`、
+  第二把尺依賴 `.astro/`（→ 7 建置與 CI）、
+  `git` 那 5 個指令沒人驗但不建議補子指令名檢查、
+  微網誌型平臺的退路等真的有來源那天再處理、
+  `CNAME` 的 content-type 是 `octet-stream`、
+  `--w-prose`／`--w-content` 那兩份手抄值、
+  `test-contrast` 把 `#faf6ee` 寫死在 fixture 裡、
+  `images` 還是副檔名認的、CSS 那三條沒有被 `sawTags` 涵蓋、
+  這份檔案自己的頁首也是個沒人守的數字、
+  「71～108 秒」也是一個沒人守的數字、`CONTENT.md` 現在 588 行（→ 站主）、
+  `MEASURED` 的日期沒有東西在守、`probe:served` 只量 5 頁而且寫死、
+  「雜湊資源只有 `max-age=600`」是這個主機做不到（→ 站主）、
+  其餘六支關卡也都以 `process.exit()` 收尾、
+  `test:units` 裡還有沒有別的時間相依斷言、
+  `membersOf` 只展開一層、
+  `check:content` 那一半還是只看 `syndication.json`、
+  排程跑的 `sync:health` 沒有 `--strict`（→ 站主）、
+  `CHANGE_ME` 那條路連 failures 都不加、
+  `SCHEMA_STRUCTURAL` 3 個什麼都沒擋、那 4 條什麼都沒擋的豁免（→ 站主）、
+  同一個判斷寫在四個地方、四格抽名單用的都是正則、
+  七支關卡只有兩支有 `--list-rules`、圈末索引停在第二十六圈、
+  以及第二十三圈記的三件站主決定（→ 站主））
+
+**下一輪：6 — 文案與語氣**

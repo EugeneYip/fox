@@ -384,6 +384,27 @@ const CASES = {
     files: { 'tools/notes.md': '一些筆記。\n' },
   },
 
+  /*
+   * ── 資料夾在視野裡，但這個檔案不在 ──
+   *
+   * 上面那條問的是「頂層資料夾在不在 SCAN_DIRS」。第 5 輪（第四十五圈）
+   * 補的這條問得更直接：**`filesToScan()` 到底走到了哪些檔案**，
+   * 拿它跟 `git ls-files` 相減。
+   *
+   * 這一格用的是**根目錄**的檔案，而且刻意不是 dotfile：
+   * `unscanned-file-type` 的迴圈是 `for (const dir of SCAN_DIRS)`，
+   * 根目錄那一層它從來沒走過；而根目錄那條路有一行
+   * `if (!SCAN_EXT.has(ext) && !name.startsWith('.')) continue`，
+   * 所以 `notes.toml` 兩邊都掉出去 —— 在這條規則之前沒有東西會說話。
+   *
+   *（放在 `src/` 底下的話 `unscanned-file-type` 也會響，那就分不出
+   * 是哪一條讓這一格綠的 —— 第一版就是那樣寫的，測試當場點出來。）
+   */
+  'unscanned-tracked-file': {
+    git: 'notes.toml',
+    files: { 'notes.toml': 'token = "abc"\n' },
+  },
+
   'private-file-tracked': {
     git: true,
     files: { 'src/config/identity.local.ts': "export const identity = { realName: { zh: '假名' } };\n" },
@@ -1492,6 +1513,57 @@ console.log('─'.repeat(64));
  * 這一格守的是**那一類問題**，不是那一次：id 相同就代表同一件事，
  * 同一件事不能有兩種嚴重度。
  */
+/*
+ * ── 每一條規則的嚴重度，釘在這裡 ────────────────────
+ *
+ * 第 5 輪（第四十五圈）補的。在這之前，`audit:privacy` 的等級**只寫在
+ * 每一條規則自己身上**，而唯一的檢查是「同一個 id 不要有兩種等級」——
+ * 也就是說把一條 `error` 一致地改成 `warn`，全部都是綠的。
+ *
+ * `docs/PRIVACY.md` 自己寫著「把隱私規則改寬鬆是有風險的動作」，
+ * 而那件事在這之前沒有任何東西在守。`check:a11y` 那一邊早就是這樣做的
+ *（`test-a11y-rules.mjs` 的 `SEVERITY`），這裡只是補上同一個機制。
+ *
+ * 這份表**刻意是手寫的**：降級一條規則就必須同時改這裡，
+ * 那一行會出現在 diff 裡，而那正是重點。
+ */
+/** @type {Record<string, 'error' | 'warn'>} */
+const SEVERITY = {
+  'actions-script-injection': 'error',
+  analytics: 'error',
+  'built-third-party-request': 'error',
+  'cookie-promised-none': 'error',
+  'csp-frame-host-unpromised': 'error',
+  'csp-frame-src-mismatch': 'error',
+  'csp-missing': 'error',
+  'csp-no-default-src': 'warn',
+  'csp-unsafe-inline': 'error',
+  'deploy-without-cname-check': 'error',
+  'deploy-without-gates': 'error',
+  email: 'warn',
+  'external-link-rel-broken-promise': 'error',
+  'gitignore-weakened': 'error',
+  'google-fonts': 'error',
+  'identity-value': 'error',
+  'leftover-placeholder': 'warn',
+  'possible-secret': 'error',
+  'privacy-doc-crawler-count': 'warn',
+  'privacy-doc-unwired': 'warn',
+  'privacy-switch-stale-note': 'warn',
+  'privacy-switch-unused': 'warn',
+  'private-file-in-history': 'error',
+  'private-file-tracked': 'error',
+  'raw-youtube-embed': 'warn',
+  'reveal-key-unused': 'warn',
+  'storage-documented-not-used': 'error',
+  'storage-not-documented': 'error',
+  'target-blank-no-rel': 'warn',
+  'third-party-cdn': 'warn',
+  'unscanned-dir': 'error',
+  'unscanned-file-type': 'warn',
+  'unscanned-tracked-file': 'error',
+};
+
 {
   const files = [
     'scripts/audit-privacy.mjs',
@@ -1527,6 +1599,21 @@ console.log('─'.repeat(64));
   const { out } = await audit(dir, {});
   await rm(dir, { recursive: true, force: true });
   const declared = Number(/掃了 \d+ 個檔案(?:（[^）]*）)?、(\d+) 條規則/.exec(out)?.[1] ?? 0);
+
+  /* 跟釘住的那份表對一次 —— 兩個方向都看 */
+  const wrongLevel = [...levels.entries()]
+    .filter(([id, v]) => v.size === 1 && SEVERITY[id] !== undefined && !v.has(SEVERITY[id]))
+    .map(([id, v]) => `${id}：表上是 ${SEVERITY[id]}，程式裡是 ${[...v][0]}`);
+  const notInTable = [...levels.keys()].filter((id) => SEVERITY[id] === undefined).sort();
+  const notInCode = Object.keys(SEVERITY).filter((id) => !levels.has(id)).sort();
+  const okPinned = wrongLevel.length === 0 && notInTable.length === 0 && notInCode.length === 0;
+  if (!okPinned) failed++;
+  console.log(`  ${okPinned ? '✓' : 'X'} 每一條的嚴重度跟釘住的那份表一致（${Object.keys(SEVERITY).length} 條）`);
+  if (!okPinned) {
+    for (const w of wrongLevel) console.log(`        ${w}`);
+    if (notInTable.length > 0) console.log(`        程式裡有、表上沒有：${notInTable.join('、')}`);
+    if (notInCode.length > 0) console.log(`        表上有、程式裡沒有：${notInCode.join('、')}`);
+  }
 
   const split = [...levels.entries()].filter(([, v]) => v.size > 1);
   const okOne = sites > 0 && split.length === 0 && declared > 0 && levels.size === declared;
