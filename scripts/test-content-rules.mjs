@@ -1045,6 +1045,63 @@ try {
   }
 
   /*
+   * ── 第二把尺：Astro 自己寫出來的 schema ──────────────
+   *
+   * 上面那一格驗的是「內容用過的欄位有沒有抽到」—— 只驗得到**用過的**。
+   * 宣告了但還沒有人寫過的欄位抽漏了，那一格是綠的。
+   * 第 3 輪（第四十五圈）補的第二把尺是 `.astro/collections/*.schema.json`
+   * （`astro sync` 產生的，Astro 自己從 zod 推出來的）。
+   */
+  {
+    const mkDir = async (/** @type {string} */ name, /** @type {Record<string, string>} */ extra) => {
+      const dir = await build(name, {
+        content: { 'poems/wu-yi-xiang.md': poem() },
+        dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花') },
+        extra,
+      });
+      const out = await check(dir, [`--src=${join(dir, 'src')}`, `--astro=${join(dir, 'astro.config.mjs')}`]);
+      await rm(dir, { recursive: true, force: true });
+      return out;
+    };
+    /* fixture 的內容用到哪些欄位，這份就要有 —— 不然會先掉進「抽不到內容用過的」那條路 */
+    const configTs =
+      'const poems = defineCollection({\n  schema: z.object({\n' +
+      ['title', 'lang', 'poem', 'author', 'original'].map((n) => `    ${n}: z.string(),`).join('\n') +
+      '\n  }),\n});\n';
+    const schemaJson = (/** @type {string[]} */ names) =>
+      JSON.stringify({ properties: Object.fromEntries(names.map((n) => [n, {}])) });
+
+    const missed = await mkDir('schema-second-ruler', {
+      'src/content.config.ts': configTs,
+      'astro.config.mjs': "export default { site: 'https://example.test' };\n",
+      '.astro/collections/poems.schema.json': schemaJson(['title', 'coverAlt']),
+    });
+    const okMissed = /Astro 自己的 schema 有 coverAlt，這支腳本的正則沒抽到/.test(missed);
+    if (!okMissed) failed++;
+    console.log(`  ${okMissed ? '✓' : 'X'} 正則抽漏 Astro 認得的欄位時，說自己沒查`);
+    if (!okMissed) console.log('        ' + (missed.split('\n').find((l) => l.includes('欄位使用情況')) ?? '（沒印）'));
+
+    /* 反向一：兩把尺一致時不亂講 */
+    const agree = await mkDir('schema-second-ruler-ok', {
+      'src/content.config.ts': configTs,
+      'astro.config.mjs': "export default { site: 'https://example.test' };\n",
+      '.astro/collections/poems.schema.json': schemaJson(['title', '$schema']),
+    });
+    const okAgree = !/這支腳本的正則沒抽到/.test(agree) && !/只有一把尺/.test(agree);
+    if (!okAgree) failed++;
+    console.log(`  ${okAgree ? '✓' : 'X'} 兩把尺一致時不亂講（Astro 自己那個 $schema 鍵不算欄位）`);
+
+    /* 反向二：第二把尺不在的時候，要說出來，而不是安靜地當作過關 */
+    const absent = await mkDir('schema-second-ruler-absent', {
+      'src/content.config.ts': configTs,
+      'astro.config.mjs': "export default { site: 'https://example.test' };\n",
+    });
+    const okAbsent = /欄位抽取只有一把尺/.test(absent);
+    if (!okAbsent) failed++;
+    console.log(`  ${okAbsent ? '✓' : 'X'} 第二把尺不在時說出來，不當作過關`);
+  }
+
+  /*
    * ── 「沒有任何一篇用過的欄位」這份名單 ──
    *
    * 它是靠正則從 content.config.ts 抽欄位名的，所以必須有兩件事成立：
@@ -2005,6 +2062,58 @@ console.log('─'.repeat(64));
     if (!ok) failed++;
     console.log(`  ${ok ? '\u2713' : 'X'} ${label}`);
     if (!ok) console.log('        ' + (out.split('\n').find((l) => l.includes('manifest')) ?? '（沒印）'));
+  }
+
+  /*
+   * ── manifest 裡指路的那三樣 ──────────────────────
+   *
+   * 上面比的是文字（站名、描述、顏色）。第 3 輪（第四十五圈）逐條驗待辦時
+   * 補的是**指路**的：`icons[].src`、`start_url`、`lang`。
+   * 指到不存在的東西不會有人說話 —— 這一支不掃圖片，`check:links` 也不掃
+   * manifest，而後果要到「安裝成 App」那一刻才看得到。
+   */
+  {
+    /** @param {string} name @param {Record<string, unknown>} mf @param {Record<string, string>} [extraDist] */
+    const withManifest = async (name, mf, extraDist = {}) => {
+      const dir = await build(name, {
+        ...base,
+        dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'), ...extraDist },
+        extra: { 'src/config/site.ts': siteTs, 'public/site.webmanifest': JSON.stringify(mf) },
+      });
+      const out = await check(dir, [`--src=${join(dir, 'src')}`, `--astro=${join(dir, 'astro.config.mjs')}`]);
+      await rm(dir, { recursive: true, force: true });
+      return out;
+    };
+    const good = {
+      name: '狐說八道',
+      short_name: '狐說八道',
+      description: '朗誦經典詩詞曲，用今天的話說出其中的意思。',
+      theme_color: '#faf6ee',
+      background_color: '#faf6ee',
+    };
+
+    const badIcon = await withManifest('manifest-icon', { ...good, icons: [{ src: '/nope.png' }] });
+    const okIcon = /icons 裡的 \/nope\.png 指到的東西不對/.test(badIcon);
+    if (!okIcon) failed++;
+    console.log(`  ${okIcon ? '✓' : 'X'} 圖示指到不存在的檔案時點名`);
+    if (!okIcon) console.log('        ' + (badIcon.split('\n').find((l) => l.includes('nope')) ?? '（沒印）'));
+
+    const badStart = await withManifest('manifest-start', { ...good, start_url: '/nowhere' });
+    const okStart = /start_url \/nowhere 指到的東西不對/.test(badStart);
+    if (!okStart) failed++;
+    console.log(`  ${okStart ? '✓' : 'X'} start_url 指到不存在的頁時點名`);
+    if (!okStart) console.log('        ' + (badStart.split('\n').find((l) => l.includes('start_url')) ?? '（沒印）'));
+
+    /* 反向：指到真的存在的東西時不能亂報 */
+    const okAll = await withManifest(
+      'manifest-pointers-ok',
+      { ...good, icons: [{ src: '/there.png' }], start_url: '/', scope: '/' },
+      { 'index.html': page('首頁'), 'there.png': 'x' },
+    );
+    const okQuiet = !/指到的東西不對/.test(okAll);
+    if (!okQuiet) failed++;
+    console.log(`  ${okQuiet ? '✓' : 'X'} 都指得到的時候不亂報（反向案例）`);
+    if (!okQuiet) console.log('        ' + (okAll.split('\n').find((l) => l.includes('指到')) ?? ''));
   }
 
   const broken = await run1('manifest-broken', { 'public/site.webmanifest': '{ 這不是 JSON' });

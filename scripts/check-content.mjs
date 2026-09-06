@@ -31,6 +31,7 @@
  * 就算函式對了，某個頁面繞過它一樣會洩漏。比對產出兩種都涵蓋得到。
  */
 import { readdir, readFile, stat } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { resolve, dirname, relative, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { XMLValidator } from 'fast-xml-parser';
@@ -1528,8 +1529,96 @@ servedCss += dedupedInlineStyles(built.filter((b) => b.path.endsWith('.html')).m
         how: 'color',
       },
     ];
+    /*
+     * ── manifest 裡還有三樣東西指向真的檔案 ──────────────
+     *
+     * 第 3 輪（第四十五圈）逐條驗待辦時量到的：上面那五項比的是**文字**
+     * （站名、描述、顏色），而 manifest 裡另外三樣是**指路**的 ——
+     * `icons[].src`、`start_url`、`scope`。指到不存在的東西不會有人說話：
+     * 這一支不掃圖片，`check:links` 也不掃 manifest。
+     *
+     * 後果是安裝的時候才看得到（主畫面的圖示破掉、開啟後 404），
+     * 而那正是**最不會有人回頭看**的一條路。
+     *
+     * 判準都是「它指到的東西在不在 `dist/` 裡」—— 不需要任何清單。
+     * `lang` 也一起比：拿 `start_url` 那一頁真的寫的 `<html lang>` 來對。
+     */
+    /** @type {{ what: string, why: string }[]} */
+    const pointerProblems = [];
+    let pointersChecked = 0;
+    /*
+     * manifest 從 `--astro=` 那一邊來，`dist/` 從 `--dir=` 那一邊來。
+     * 平常是同一棵樹，測試裡可以不是 —— 拿甲的 manifest 去問乙的產出，
+     * 答案沒有意義（每個圖示都會「不存在」）。所以先確認是同一棵樹。
+     */
+    const sameTree = resolve(dirname(ASTRO_CONFIG), 'dist') === DIST;
+    if (readable && sameTree) {
+      const distPath = (/** @type {string} */ u) => resolve(DIST, u.replace(/^\//, '').split(/[?#]/)[0]);
+      const icons = Array.isArray(mf.icons) ? mf.icons : [];
+      for (const icon of icons) {
+        const src = str(/** @type {any} */ (icon)?.src);
+        if (src === null) continue;
+        pointersChecked += 1;
+        if (!existsSync(distPath(src))) {
+          pointerProblems.push({
+            what: `icons 裡的 ${src}`,
+            why: '這個檔案不在產出裡 —— 安裝成 App 的時候那個圖示會是破的。',
+          });
+        }
+      }
+
+      const startUrl = str(mf.start_url);
+      if (startUrl !== null) {
+        pointersChecked += 1;
+        const asPage = startUrl.endsWith('/') ? `${startUrl}index.html` : `${startUrl}/index.html`;
+        if (!existsSync(distPath(asPage)) && !existsSync(distPath(startUrl))) {
+          pointerProblems.push({
+            what: `start_url ${startUrl}`,
+            why: '這個網址在產出裡找不到對應的頁 —— 從主畫面開啟會落在 404。',
+          });
+        }
+      }
+
+      const scope = str(mf.scope);
+      if (scope !== null && startUrl !== null) {
+        pointersChecked += 1;
+        if (!startUrl.startsWith(scope)) {
+          pointerProblems.push({
+            what: `scope ${scope}`,
+            why: `start_url（${startUrl}）不在 scope 底下 —— 一開啟就跳出 App 的範圍。`,
+          });
+        }
+      }
+
+      const mfLang = str(mf.lang);
+      if (mfLang !== null && startUrl !== null) {
+        const homePath = distPath(startUrl.endsWith('/') ? `${startUrl}index.html` : `${startUrl}/index.html`);
+        const home = built.find((b) => resolve(DIST, b.path) === homePath);
+        const htmlLang = home ? /<html[^>]*\slang="([^"]+)"/i.exec(home.text)?.[1] ?? null : null;
+        if (htmlLang !== null) {
+          pointersChecked += 1;
+          if (htmlLang !== mfLang) {
+            pointerProblems.push({
+              what: `lang ${mfLang}`,
+              why: `start_url 那一頁的 <html lang> 是 ${htmlLang} —— 兩邊講的是同一個語言，寫法要一樣。`,
+            });
+          }
+        }
+      }
+    }
+
     const compared = readable ? pairs.filter((p) => p.got !== null && p.want !== null) : [];
-    saw('manifest-drift', compared.length);
+    saw('manifest-drift', compared.length + pointersChecked);
+
+    for (const pp of pointerProblems) {
+      problems.push({
+        file: 'public/site.webmanifest',
+        id: 'manifest-drift',
+        msg:
+          `${pp.what} 指到的東西不對。\n      ${pp.why}\n` +
+          '      改法：改 public/site.webmanifest，或把那個檔案放進 public/。',
+      });
+    }
 
     if (!readable) {
       notes.push(
@@ -1784,15 +1873,61 @@ let fieldReport = '';
     );
   }
 
+  /*
+   * ── 第二把尺：Astro 自己說 schema 有哪些欄位 ──────────────
+   *
+   * 上面那兩條正則是**我寫的**，`declared` 是它們的答案。而底下兩條規則
+   * （`field-undocumented`、`guide-field-unknown`）整個站在那個答案上。
+   *
+   * 原本只有一個自我檢查：「內容真的用過的欄位，有沒有全部抽到」——
+   * 那只驗得到**內容用過的**那些。宣告了但還沒有人寫過的欄位（`related`
+   * 就是這樣的一個），抽漏了不會有任何人說話：`field-undocumented` 少查一格，
+   * 而 `guide-field-unknown` 會反過來**誣賴指南**教了一個「不存在」的欄位。
+   *
+   * 第 3 輪（第四十五圈）找到的第二把尺：`astro sync` 會把每個 collection 的
+   * zod schema 寫成 `.astro/collections/*.schema.json`。那是 **Astro 自己**
+   * 從 schema 推出來的，跟我的正則完全無關 —— 拿它來對，抽漏就會顯出來。
+   *
+   * 導入時實測：Astro 說 26 個，正則抽到 33 個（多的 7 個是
+   * `annotations`／`related` 裡面的巢狀欄位，那些也是真的可以寫的），
+   * **一個都沒漏**。所以只單向斷言「Astro 有的，正則不能沒有」。
+   *
+   * 那個目錄是產生的（在 `.gitignore` 裡），跟 `dist/` 同一種東西。
+   * 沒有它的時候不當作過關，而是說出「這一把尺不在」。
+   */
+  const collectionsDir = resolve(dirname(ASTRO_CONFIG), '.astro/collections');
+  /** @type {Set<string>} Astro 自己寫出來的欄位名 */
+  const astroFields = new Set();
+  for (const f of (await readdir(collectionsDir).catch(() => [])).filter((f) => f.endsWith('.schema.json'))) {
+    const raw = await readFile(resolve(collectionsDir, f), 'utf8').catch(() => '');
+    try {
+      for (const k of Object.keys(JSON.parse(raw)?.properties ?? {})) {
+        if (k !== '$schema') astroFields.add(k);
+      }
+    } catch {
+      /* 壞掉的 JSON 就當作這一份沒有 —— 底下會因為總數對不上而說話 */
+    }
+  }
+  const missedByRegex = [...astroFields].filter((n) => !declared.has(n) && !SCHEMA_STRUCTURAL.has(n)).sort();
+
   const unreadable = [...usedFields].filter((u) => !declared.has(u));
-  if (declared.size === 0 || unreadable.length > 0) {
+  if (declared.size === 0 || unreadable.length > 0 || missedByRegex.length > 0) {
     fieldReport =
       '\n欄位使用情況沒有檢查：content.config.ts ' +
       (declared.size === 0
         ? '讀不到或抽不到欄位。'
-        : `抽不到內容用過的 ${unreadable.join('、')}。`) +
+        : missedByRegex.length > 0
+          ? `Astro 自己的 schema 有 ${missedByRegex.join('、')}，這支腳本的正則沒抽到。`
+          : `抽不到內容用過的 ${unreadable.join('、')}。`) +
       '\n  （寧可說「沒查」，也不要印一份可能是錯的名單。）\n';
   } else {
+    if (astroFields.size === 0) {
+      notes.push(
+        '欄位抽取只有一把尺：`.astro/collections/*.schema.json` 不在，' +
+          '所以「正則有沒有抽漏」這一關這次沒有跑。\n' +
+          '    那個目錄是 `astro sync`／`astro build` 產生的 —— 先跑一次 `npm run build`。',
+      );
+    }
     /*
      * ── schema 有這個欄位，`docs/CONTENT.md` 說過嗎 ──────────
      *

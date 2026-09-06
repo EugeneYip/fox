@@ -83,7 +83,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 59,300 行、3.0 MB、356 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 59,500 行、3.0 MB、357 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -59334,4 +59334,225 @@ column 複本：CoverImage 的 column 預設值跟 --w-content 一致 ✓（46re
   `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：3 — 內容結構**
+### 2026-09-06 — 第 3 輪（第四十五圈）：內容結構
+
+**第四十五圈問：這條待辦還在那裡，是因為它還成立嗎？**
+判準：**挑幾條被抄了很多圈的待辦，回去對照現在的程式 ——
+它描述的那件事今天還是真的嗎？**
+
+挑了五條內容結構的待辦逐條回去量。
+**三條還成立（補了守衛），兩條量出來是半錯的 —— 而錯的那一半才是重點。**
+
+#### 1. 「manifest 的 `icons[]` 沒有人確認存在」—— 還成立
+
+先量：
+
+```
+/favicon.svg                 在
+/icon-192.png                在
+/icon-512.png                在
+/icon-maskable-512.png       在
+grep -c "icons" scripts/check-content.mjs   →  0
+```
+
+四個檔案都在，而**沒有任何一支腳本在看它們**。
+`manifest-drift` 是第 3 輪（第四十三圈）加的，但它比的五項全是**文字**
+（`name`、`short_name`、`description`、`theme_color`、`background_color`）；
+`check:links` 掃的是 HTML 裡的 `href`／`src`，不進 manifest。
+
+差別在後果什麼時候出現：圖示改名的話，建置不紅、頁面不變、
+要到有人**把網站加到主畫面**那一刻才看得到破圖 ——
+而那是這個站最不會有人回頭看的一條路。
+
+#### 2. 「`start_url`／`scope`／`lang` 還沒人比」—— 還成立，而且「誰是準的」量得出來
+
+原本那條待辦寫著「第三個是 `zh-Hant-TW` 而 `site.ts` 那邊寫 `zh-TW`，
+要先決定誰是準的」。這一圈的問法是「回去對照現在的程式」，所以不用決定 ——
+**量送出去的那一頁就知道了**：
+
+| 誰 | 值 |
+|---|---|
+| `public/site.webmanifest` 的 `lang` | `zh-Hant-TW` |
+| **`dist/index.html` 的 `<html lang>`** | **`zh-Hant-TW`** |
+| `dist/en/index.html` 的 `<html lang>` | `en` |
+| `src/config/site.ts` 的 `LOCALES` | `zh-TW`、`en` |
+
+manifest 跟**真的出貨的那一頁**一致。`site.ts` 的 `zh-TW` 是路徑與設定用的
+內部鍵，本來就不是 HTML 的 `lang` —— 所以沒有人寫錯，是那條待辦拿錯了對照組。
+
+於是新的比對對的是**頁面**不是設定檔：`lang` 要等於 `start_url` 那一頁
+真的寫著的 `<html lang>`。
+
+#### 3. 三樣都是「指路的」，判準是它指到的東西在不在
+
+`manifest-drift` 因此從「比五項文字」變成「比五項文字 ＋ 三樣指路的」：
+
+- 每個 `icons[].src` 要在 `dist/` 裡真的有那個檔案
+- `start_url` 要對得到一頁（`/` → `dist/index.html`）
+- `start_url` 要在 `scope` 底下，`lang` 要等於那一頁的 `<html lang>`
+
+**都不需要任何清單** —— 沒有寫死的檔名、沒有寫死的語言碼。
+`--verbose` 的主體數從 5 變成 12（5 項文字 ＋ 4 個圖示 ＋ 其餘三樣）。
+
+有一個地方要小心：manifest 從 `--astro=` 那一邊來，`dist/` 從 `--dir=`
+那一邊來。平常是同一棵樹，測試裡可以不是 —— 拿甲的 manifest 去問乙的產出，
+每個圖示都會「不存在」。第一次跑測試就是這樣紅了 5 格，
+所以先確認 `dirname(ASTRO_CONFIG)/dist === DIST` 才比。
+
+#### 4. 「schema 欄位抽取的自我檢查只驗得到內容用過的那 25 個」—— 還成立，找到第二把尺
+
+`check:content` 靠兩條正則從 `content.config.ts` 抽欄位名，而**兩條規則
+整個站在那個答案上**：`field-undocumented`（schema 有的，指南教過嗎）
+與 `guide-field-unknown`（指南教的，schema 還有嗎）。
+
+原本的自我檢查是「內容真的用過的欄位，有沒有全部抽到」——
+那只驗得到**用過的**。宣告了但還沒有人寫過的欄位（`related` 就是這樣一個）
+抽漏了不會有任何人說話：`field-undocumented` 少查一格，
+而 `guide-field-unknown` 會反過來**誣賴指南**教了一個「不存在」的欄位。
+
+第二把尺在專案裡本來就有，只是沒有人拿來用過：`astro sync` 會把每個
+collection 的 zod schema 寫成 `.astro/collections/*.schema.json`。
+那是 **Astro 自己**從 schema 推出來的，跟我寫的正則完全無關。
+
+實測：
+
+| | 幾個 | 內容 |
+|---|---|---|
+| Astro 自己說的 | 26 | 四份 schema 的 `properties` 聯集 |
+| 這支腳本的正則抽到 | 33 | 上面 26 個 ＋ 7 個巢狀欄位 |
+| **Astro 有、正則沒抽到** | **0** | —— |
+
+多出來的 7 個（`author`、`dynasty`、`form`、`gloss`、`original`、`source`、
+`term`）是 `annotations` 與 `related` 裡面的巢狀欄位，那些也是真的可以寫的，
+所以**只單向斷言**：Astro 有的，正則不能沒有。
+
+抽漏的時候不當作過關，而是走既有那條「寧可說沒查」的路 ——
+`fieldReport` 說出漏掉哪幾個，兩條下游規則因此被列進
+「這次沒有東西可看的規則」。突變驗過（把 `^\s{2,}` 改成 `^\s{6,}`）：
+
+```
+欄位使用情況沒有檢查：content.config.ts Astro 自己的 schema 有 lang、tags，這支腳本的正則沒抽到。
+這次沒有東西可看的規則（3 條）：external-missing、field-undocumented、guide-field-unknown
+```
+
+`.astro/` 是產生的（在 `.gitignore` 裡），跟 `dist/` 同一種東西。
+它不在的時候也不當作過關，而是印一句「欄位抽取只有一把尺」。
+
+#### 5. 「`docs/CONTENT.md` 裡的指令沒有任何東西在驗」—— 半錯
+
+這條是上一圈第 3 輪留的，起因是那一輪修好了一個壞掉不知道多久的 `git push`。
+量了才知道**一半早就有人在驗**：`check-doc-links.mjs` 的 `doc-command-missing`
+會拿 `package.json` 的 script 清單去對文件裡每一個 `npm run X`。
+
+把 `CONTENT.md` 的 `bash` 區塊全抽出來數：
+
+| | 幾種 | 有沒有人驗 |
+|---|---|---|
+| `npm run …` | 4 | **有**（`doc-command-missing`） |
+| `git …` | 5 | 沒有 |
+
+**而壞掉的那一個正好在沒人驗的那一半。**
+
+所以待辦要改寫，但**不是**改寫成「補一條驗 git 指令的規則」。
+當初壞的不是「`git push` 不是一個指令」—— `git push` 一直都是合法的指令，
+壞的是**步驟的順序**（少了 `pull --rebase`，撞到 `syndication.json`）。
+一條「檢查 git 子指令名字存在」的規則**當初一格都擋不下來**，
+只會多一個看起來在守、其實守不到的東西。
+
+#### 6. 「微網誌型平臺沒有標題，畫面那一端沒有人處理過」—— 半錯：沒處理，但會紅
+
+`SyndicationList.astro` 第 50 行是 `{item.title}`，沒有退路 ——
+這一半是真的。但「沒有人處理」跟「沒有人會發現」是兩件事。
+
+拿站上真的那 9 筆，把第一筆的 `title` 改成空字串，重新建置再跑 `check:a11y`：
+
+```
+check:a11y 離開碼 1
+X [empty-heading] 有一個空的 h3（內文是空的，也沒有 aria-label／aria-labelledby）
+X [empty-heading] 有一個空的 h2（內文是空的，也沒有 aria-label／aria-labelledby）
+```
+
+**六道關卡會擋下來**，空卡片上不了線。所以這不是一個安靜的洞，
+是一個會在**錯誤的地方**大聲的洞：訊息講的是標題結構，
+而真正的原因是「這個平臺本來就沒有標題這個欄位」。
+
+沒有加退路。理由是站上只有 YouTube 一個來源（而且不可以編造帳號），
+所以任何 fallback 都是**為了一個假設寫的、沒有辦法測的程式碼**，
+而現在這條路至少在上線前就會停下來。等真的有微網誌來源那天再處理。
+
+#### 突變掃描
+
+| 改哪裡 | 改成 | 結果 |
+|---|---|---|
+| `site.webmanifest` 的 `/icon-192.png` | `/icon-nope.png` | 離開碼 1，`manifest-drift` 點名 |
+| `site.webmanifest` 的 `start_url: "/"` | `"/nowhere"` | 離開碼 1，`manifest-drift` 點名 |
+| `site.webmanifest` 的 `lang` | `zh-TW` | 離開碼 1，`manifest-drift` 點名 |
+| 抽取正則 `^\s{2,}` | `^\s{6,}` | 說出「Astro 的 schema 有 `lang`、`tags`，正則沒抽到」 |
+| `syndication.json` 第一筆的 `title` | 空字串 | `check:a11y` 離開碼 1 |
+
+第二條正則（`\b(\w+):\s*z\.`）刪掉時**沒有紅** ——
+因為 `content.config.ts` 裡的欄位全都有縮排，第一條就吃得到。
+不是漏洞，是那兩條正則本來就有重疊。
+
+#### 測試
+
+`test-content-rules.mjs` 從 95 格加到 **101 格**：
+
+- 圖示指到不存在的檔案時點名
+- `start_url` 指到不存在的頁時點名
+- 都指得到的時候不亂報（反向）
+- 正則抽漏 Astro 認得的欄位時，說自己沒查
+- 兩把尺一致時不亂講（Astro 自己那個 `$schema` 鍵不算欄位）
+- 第二把尺不在時說出來，不當作過關
+
+第三格與第六格一開始是紅的，兩次都是 fixture 的問題而不是判準的問題：
+第一次是 fixture 沒有自己的 `.astro/`，第二次是 fixture 的
+`content.config.ts` 太小，先掉進「抽不到內容用過的」那條路，
+根本走不到新的那一段。
+
+#### 六道關卡
+
+`npm run verify:all` 全綠（第一次紅在 `npm run check` ——
+測試裡有一個 arrow function 的 `name` 沒寫 `@param`，隱含 `any`）。
+`npm run test:tools` 44 步全通過。
+
+#### 待辦
+
+- **`manifest-drift` 現在同時是「比文字」與「比指路」兩件事。** 12 個主體
+  混在一個規則 id 底下，紅的時候要看訊息才知道是哪一類 ——
+  要不要拆成兩條，等它真的紅過一次再說（→ 3 內容結構）
+- **`icons[]` 只驗了檔案在不在，沒有驗 `sizes` 跟真的圖對不對得上。**
+  `icon-192.png` 真的是 192×192 嗎？現在沒有人量。要量得解 PNG 的
+  IHDR，不難但要多一段（→ 3 內容結構）
+- **第二把尺依賴 `.astro/`，而那個目錄是 `.gitignore` 的。** 乾淨的 runner
+  上 `astro check` 與 `astro build` 都會產生它，所以 CI 有 ——
+  但這件事沒有東西在驗，哪天 Astro 改了輸出位置，就會安靜地退回一把尺
+  （只印一句 note，不擋）（→ 7 建置與 CI）
+- **「`git` 那 5 個指令沒有人驗」還在，但不建議補子指令名檢查**（理由見上）。
+  真的要守的話，判準得是「照著這一段跑一次會不會成功」——
+  那需要一個假的 remote，不是文件檢查的形狀（→ 3 內容結構）
+- **微網誌型平臺的退路等真的有來源那天再處理**，現在寫等於為假設寫程式
+  （→ 3 內容結構）
+- 上一輪與更早的都還在（`CNAME` 的 content-type 是 `octet-stream`、
+  `--w-prose`／`--w-content` 那兩份手抄值、
+  `test-contrast` 把 `#faf6ee` 寫死在 fixture 裡、
+  `images` 還是副檔名認的、CSS 那三條沒有被 `sawTags` 涵蓋、
+  另外 5 條的主體不是用正則數的、
+  這份檔案自己的頁首也是個沒人守的數字、
+  `box-shadow` 那兩處不算、`BG_PROPS` 還是列舉的、
+  「71～108 秒」也是一個沒人守的數字、`CONTENT.md` 現在 588 行（→ 站主）、
+  `MEASURED` 的日期沒有東西在守、`probe:served` 只量 5 頁而且寫死、
+  「雜湊資源只有 `max-age=600`」是這個主機做不到（→ 站主）、
+  四個策略都寫在 `sync-feeds.mjs` 裡沒有匯出、
+  其餘六支關卡也都以 `process.exit()` 收尾、
+  `test:units` 裡還有沒有別的時間相依斷言、
+  `membersOf` 只展開一層、`unscanned-dir` 只看頂層、
+  `check:content` 那一半還是只看 `syndication.json`、
+  `SCHEMA_STRUCTURAL` 3 個什麼都沒擋、
+  同一個判斷寫在四個地方、四格抽名單用的都是正則、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  七支關卡只有兩支有 `--list-rules`、
+  圈末索引停在第二十六圈、
+  以及第二十三圈記的三件站主決定（→ 站主））
+
+**下一輪：4 — 平臺 feed 實測**
