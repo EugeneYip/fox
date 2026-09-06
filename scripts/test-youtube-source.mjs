@@ -104,9 +104,43 @@ console.log('\nYouTube 降級層（零網路）\n' + '─'.repeat(64));
    *
    * 第 4 輪（第十七圈）之前，那一課只寫在文件裡，而她看到的是終端機。
    */
+  /*
+   * 第 4 輪（第四十圈）改了斷言的後半：原本要求訊息裡有
+   * `verify -- --patterns`，而那支探針打的是**別的頻道**。
+   * 今天實測 Google 的頻道回 200、她的回 404／500 ——
+   * 照那個指令去驗會驗出「端點沒問題」，然後推出「那就是帳號沒了」。
+   * 現在要求的是真的能用的判準：去看她的頻道頁還在不在。
+   */
   check(
-    'RSS 失敗 ＋ 沒金鑰：404 的時候要說「不要當成帳號沒了」與重驗的指令',
-    /不要當成帳號沒了/.test(err?.message) && /verify -- --patterns/.test(err?.message),
+    'RSS 失敗 ＋ 沒金鑰：404 的時候要說「不要當成帳號沒了」與能用的判準',
+    /不要當成帳號沒了/.test(err?.message) && /@FoxPoetry/.test(err?.message),
+    err?.message,
+  );
+}
+
+/*
+ * ── 500 也要走同一條路 ──────────────────────────
+ *
+ * 第 4 輪（第四十圈）：判斷原本是 `/404/.test(why)`，只認 404。
+ * 而這個端點一分鐘內可以回 404、500、404（今天實測），
+ * `verify-sources.mjs` 2026-09-05 就寫下「不只 404，500 也算」了。
+ *
+ * 剛好撞上 500 的那一次會拿到另一句話 ——
+ * 而那句話最容易被讀成「帳號沒了」，正是這個專案最貴的一課。
+ */
+{
+  const s = spies({ rssFails: true });
+  s.fetchRss = async () => {
+    throw new Error('HTTP 500（試了 7 次）');
+  };
+  /** @type {any} */
+  let err = null;
+  try {
+    await fetchYouTubeSource(SOURCE, s);
+  } catch (e) { err = e; }
+  check(
+    'RSS 失敗 ＋ 沒金鑰：**500** 也要說「不要當成帳號沒了」',
+    /不要當成帳號沒了/.test(err?.message),
     err?.message,
   );
 }
