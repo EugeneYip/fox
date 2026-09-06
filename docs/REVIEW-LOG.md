@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 55,900 行、2.9 MB、341 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 56,100 行、2.9 MB、342 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -55864,4 +55864,220 @@ manifest 壞掉時要說「沒有比對」。
   `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
-**下一輪：4 — 平臺 feed 實測**
+### 2026-09-06 — 第 4 輪（第四十三圈）：平臺 feed 實測
+
+**第四十三圈問：這個綠勾的分母是什麼？誰決定了它？**
+判準：**找一個印出 ✓ 或百分比的地方，問它的分母怎麼來的 —— 是數出來的，
+還是一份人挑的清單決定的？如果是後者，那個 ✓ 涵蓋了多少？**
+
+#### 1. 先照這一輪本來的工作實際打一次
+
+| 打的東西 | 結果 |
+|---|---|
+| `npm run verify -- --patterns`（樣板） | 11 個真的打過，**全部通過**，離開碼 0 |
+| `npm run verify`（她自己的來源） | `youtube-foxpoetry` 200 Atom **9 筆** 410ms |
+| `npm run sync:health` | 1 個來源，3 天內成功過 ✓ |
+
+`confidence` 的分布是 verified 11、lookup-required 9、documented 4，
+共 24 個平臺；11 個 `verifiedAt` 全是 `2026-09-06`（0 天前）。
+**沒有平臺改版或下架，沒有 confidence 需要改。**
+`note` 那一格照舊「合法的 feed 但一筆都沒有」，輸出自己會說。
+
+#### 2. 那三個綠勾裡，第三個的分母不是設定檔
+
+`sync:health` 印的是「**1 個來源**，全部都在 3 天內成功過 ✓」。
+那個 1 從哪來？
+
+```js
+const { total, cold } = sourceHealth(data);   // data = syndication.json
+```
+
+**只讀 `syndication.json`。** 它一次都沒有讀過 `src/config/sources.mjs` ——
+也就是說分母是「上一次同步記了誰」，不是「設定檔宣告了誰」。
+
+#### 3. 同步有兩條路會跳過一個來源，而且不留紀錄
+
+```js
+if (!platform) { say.fail(…); failures++; continue; }          // platform id 不存在
+if (source.handle === 'CHANGE_ME') { say.warn(…); continue; }  // 範本還沒填 —— 連 failures 都不加
+```
+
+直接呼叫 `syncSources()`，兩個都開著的來源：
+
+```
+宣告的來源：a-changeme、b-unknown
+syndication.json 記下的：（一個都沒有）
+failures = 1
+```
+
+排程跑的是 `node scripts/sync-feeds.mjs --verbose`（**沒有 `--strict`**），
+所以兩種都離開碼 0；接著 `npm run sync:health`（也沒有 `--strict`）
+只看 `data.sources`，於是印「⋯全部都在 3 天內成功過 ✓」。
+
+**一個填錯平臺 id、或忘了把 `CHANGE_ME` 換掉的來源，
+在這條路上從頭到尾不會有任何一句話提到它。**
+
+#### 4. 這正是那個模組自己被建出來的理由，只是往上一層
+
+`lib/sync-health.mjs` 的開頭寫著它為什麼存在：
+
+> 排程那一次是**綠的、而且安靜的**。鬧鐘存在，但從排程那條路走不到它。
+
+第 4 輪（第三十八圈）修的是「鬧鐘走不到」。這一輪是同一句話的另一半：
+**鬧鐘看得到，但那個來源不在它的視野裡。**
+
+#### 5. 改法：多收一份「設定檔宣告了誰」
+
+`sourceHealth(data, now, declared)` 多一個參數，回傳多一個 `missing`。
+`sync:health` 加 `--sources=`（預設 `src/config/sources.mjs`），
+用的是**那個檔案自己就有的** `enabledSources()` ——
+第 3 輪（第四十三圈）的報告才剛把它列進「4 個沒有人用的具名匯出」。
+**答案早就在系統裡了。**
+
+```
+  **1 個來源宣告了，但這份資料一筆紀錄都沒有**：
+    · somewhere-else —— sources.mjs 裡開著，但同步**從來沒有為它寫過任何東西**
+      （handle 還是 CHANGE_ME、或 platform id 不存在，都會走到這裡）
+
+  它們不是「冷掉了」，是從來沒進過這份資料 —— 下面那個數字看不到它們。
+```
+
+`enabled: false` 的不算。讀不到 `sources.mjs` 就印「來源清單沒有比對」，
+不安靜地只看一半。離開碼跟「冷掉」同一個規矩：預設 0，`--strict` 才擋。
+
+#### 6. 三個突變都紅
+
+| 突變 | 紅的是哪幾格 |
+|---|---|
+| `missing` 永遠是空陣列 | 3 格（點名、那句話、`--strict` 擋得住） |
+| 印出來那一段改成 `if (false)` | 2 格 |
+| 離開碼那一行拿掉 `missing` | 「`--strict` 的時候擋得住」 |
+
+反向也補了：兩邊對得上時不能亂說、關掉的來源不算、讀不到時要說「沒有比對」。
+
+順手把既有那幾格的語料收窄 —— 它們本來沒給 `--sources=`，
+於是會去比**真的**那一份，每一格都多一句跟它要驗的事無關的話。
+
+| | 之前 | 現在 |
+|---|---|---|
+| `sync:health` 的分母 | `syndication.json` 記了誰 | 加上 `sources.mjs` 宣告了誰 |
+| 填錯 platform id 的來源 | 排程全綠、健康檢查說 ✓ | 被點名（`--strict` 擋得住） |
+| 還是 `CHANGE_ME` 的來源 | 同上，而且連 failures 都不算 | 同上 |
+| `enabledSources()` | 沒有人用 | `sync:health` 在用 |
+
+`verify:all` 六道全綠、`test:tools` 44 步全過、`ci:sim` 0。
+
+**偶發紅燈今天又出現一次**：`test:tools` 第一次跑離開碼 1，
+而輸出最後一行是「44 步全部通過」—— 也就是**沒有任何一步報失敗**。
+重跑一次離開碼 0。那條待辦（「偶發紅燈的共同點是 `test:units`」）記到現在，
+這是第三次；今天多知道一件事：**失敗的不是某一步，是收尾那一段**。
+
+### 待辦（不屬於這一輪）
+
+- **`check:content` 那一半還是只看 `syndication.json`。** 同一個判斷在
+  `check:content` 也有一份（部署路徑上那一份），它有 `--syndication=`
+  但沒有來源清單 —— 這一輪只接了排程那一條路（→ 4 平臺 feed 實測）
+- **排程跑的 `sync:health` 沒有 `--strict`。** 現在它會把話說出來，但仍然
+  離開碼 0，而那句話只出現在 job summary 裡（→ 站主）
+- **`sync-feeds` 的 `CHANGE_ME` 那條路連 `failures` 都不加。** 註解寫的理由
+  是「算成失敗會讓 --strict 在正常狀態下就紅燈」—— 現在健康檢查看得到它了，
+  那條路要不要改回計數可以重新問（→ 4 平臺 feed 實測）
+- 上一輪與更早的都還在（`test-contrast` 把 `#faf6ee` 寫死在 fixture 裡、
+  manifest 的 `icons[]` 沒有人確認存在、`start_url`／`scope`／`lang` 還沒人比、
+  schema 欄位抽取的自我檢查只驗得到內容用過的那 25 個、
+  `images` 還是副檔名認的、GitHub Pages 會不會壓 `.atom`／`.rss` 沒有人量過、
+  CSS 那三條沒有被 `sawTags` 涵蓋、另外 5 條的主體不是用正則數的、
+  這份檔案自己的頁首也是個沒人守的數字、
+  `box-shadow` 那兩處不算、`BG_PROPS` 還是列舉的、
+  同一個判斷寫在四個地方、四格抽名單用的都是正則、
+  `FLAKY_ENDPOINT` 的平臺 id 沒有人比、那五份對照表只驗了單向、
+  只比資料夾名字不比 `loader` 的 `base`、`collections` 的抽取只認一種寫法、
+  那八種只是「不數」不是「不該數」、`url()` 與 `@font-face` 只掃 HTML、
+  `MEASURED` 仍是快照、
+  `CASES` 的鍵沒有反向檢查、
+  那個掃描分不出元件與動態標籤名、`writing-mode` 只有一個檔案在用、
+  `needs-dist-before-build` 打不開 npm 的 `&&` 串、
+  那份「每條規則都有反例」的報告只說不擋、兩份文件的例子沒有分開數、
+  另外五份文件還是寫「404、500」、`accept` 那些 header 沒被測過、
+  `field()` 假設 frontmatter 是第一個 `---`、
+  只比了檔名沒比路徑、識別字沒有比、`why:` 欄位沒掃、
+  `same-name-different-target` 比 `hasAccessibleName()` 窄、
+  「判斷寫兩份」沒有東西在數、
+  那 59 條「元件沒算繪過」沒有人在守、
+  「要跑起來才有」那 25 條這個方法看不到、分類判準是兩條寫死的正則、
+  同一種「當天就爛」的數字可能還在別的關卡的輸出裡、
+  偶發紅燈的共同點是 `test:units`、量離開碼不要把輸出丟掉、
+  沒有東西在守「空狀態不要自相矛盾」、英文那一半沒有人系統地讀過、
+  `tags.count_one` 與 `list.count_one` 連算繪都沒有過、
+  `csp-frame-src-mismatch` 在站上主體是 0、手動那一次沒有自動化、
+  `rss` 與 `bridge` 兩條路一次都沒跑過（→ 站主）、
+  Data API v3 那一半也沒跑過、
+  CSP 的 `frame-src` 在全部 44 頁上、
+  `related` 只驗了畫得出來、那六個欄位刪掉之後又回到沒人用過、
+  那段建議裡的 273 KB／94 KB 沒有人在守、
+  「站上 0 張內容圖」是三條待辦的共同原因、
+  那三條 a11y 的「第一次」是手動做出來的、
+  markdown 裡的原始 HTML 沒有人在擋、另外六支關卡的寫死數字沒比過、
+  `column` 跟外層 `.wrap--*` 是靠人對的、
+  「42 個用了但沒說明」要重寫或刪掉、`--w-prose`／`--w-content` 也是抄進 `sizes` 的、
+  `rule-undocumented` 只看 id 有沒有出現、
+  那張表是手寫的而 `--list-rules` 是機器的、
+  `gate-count-stale` 的判準是「同一行有 `verify:all`」、
+  `EN_COVERAGE.date` 沒有人問多久以前、組數比對只認得變少、
+  其他三支規則測試的空綠沒驗、
+  那 5 條的 `whyWarn` 還是空的（→ 站主）、
+  結構性規則沒有 `whyWarn` 欄位、`email` 是 warn 而 `google-fonts` 是 error、
+  標籤數也是一種近似、`note` 的 0 筆連續五圈、
+  那 3 個沒人用的匯出（→ 站主）、判準看名字不解析 import、
+  `CONTENT.md` 已經超過 550 行（→ 站主）、判準是檔名不是用途、
+  `role="status"` 本身沒有被檢查、
+  `<details>`／`<summary>`／`<time>` 那 170 個仍然沒有規則、
+  「22 個 `--verbose` 數字」那條的數字過期了、
+  探針還是要人手貼、只跑了首頁、
+  `LOOKS_BAD` 那個正則是猜的、`verify:all` 還是 `&&` 串、
+  `ui.ts` 的 `en` 要不要改必填（→ 站主）、
+  job summary 只有站主會去看、`sync:health` 沒有接進六道關卡、
+  只比 `npm run X`、那段 git 診斷沒有測試、
+  「上界」宣稱要重量得先推（→ 站主）、
+  螢幕閱讀器仍然沒有人做過、重驗是量本機產出不是正式站、
+  `15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、
+  `example-not-real` 只看程式碼框裡的例子、
+  那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  那 9 條「維護者的事」的規則沒有文件、
+  `ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、
+  搜尋結果那 2 個連結沒有規則看過（現在關卡會逐條說出來）、
+  `check.yml` 永遠不會自己觸發（→ 站主）、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `SCHEMA_STRUCTURAL` 3 個什麼都沒擋、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 14 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  7 條 a11y 規則的邊界沒人守、
+  7 個沒人用的 token（→ 站主）、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、本機 `ahead 159, behind 3`、
+  `inlineStylesheets: always` 只到 98%、圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  `test-content-rules` 的改法檢查只看第一處、
+  `--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：5 — 隱私與安全**

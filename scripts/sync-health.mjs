@@ -31,13 +31,15 @@
  */
 import { readFile, appendFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { fileURLToPath } from 'node:url';
-import { sourceHealth, coldLine, SYNC_STALE_DAYS } from './lib/sync-health.mjs';
+import { sourceHealth, coldLine, missingLine, SYNC_STALE_DAYS } from './lib/sync-health.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const arg = (/** @type {string} */ n) =>
   process.argv.find((a) => a.startsWith(`--${n}=`))?.slice(n.length + 3);
 const FILE = arg('file') ? resolve(String(arg('file'))) : resolve(ROOT, 'src/data/syndication.json');
+const SOURCES = arg('sources') ? resolve(String(arg('sources'))) : resolve(ROOT, 'src/config/sources.mjs');
 const STRICT = process.argv.includes('--strict');
 
 /** @type {string[]} */
@@ -63,7 +65,39 @@ try {
 say('\n同步來源健康檢查');
 say('─'.repeat(56));
 
-const { total, cold } = sourceHealth(data);
+/*
+ * ── 設定檔宣告了誰，這份資料就該記得誰 ──────────
+ *
+ * 理由寫在 lib/sync-health.mjs 那段：同步有兩條路會跳過一個來源而且
+ * 不留紀錄，於是它在這裡等於不存在。`sources.mjs` 刻意是 `.mjs`，
+ * 就是為了讓 node 腳本可以直接 import。
+ *
+ * `enabledSources()` 本來就在那個檔案裡 —— 第 3 輪（第四十三圈）的報告
+ * 還把它列進「4 個沒有人用的具名匯出」。答案早就在系統裡了。
+ */
+/** @type {string[] | null} */
+let declared = null;
+try {
+  const mod = await import(pathToFileURL(SOURCES).href);
+  const list = typeof mod.enabledSources === 'function' ? mod.enabledSources() : (mod.sources ?? []);
+  declared = list.map((/** @type {{ id: string }} */ s2) => s2.id);
+} catch {
+  declared = null;
+}
+
+const { total, cold, missing } = sourceHealth(data, Date.now(), declared);
+if (declared === null) {
+  say(`  來源清單沒有比對：讀不到 ${SOURCES}。`);
+  say('    「這份資料記了誰」看得到，「設定檔宣告了誰」看不到 —— 少一半。');
+}
+if (missing.length > 0) {
+  say(`  **${missing.length} 個來源宣告了，但這份資料一筆紀錄都沒有**：`);
+  for (const id of missing) say(`    · ${missingLine(id)}`);
+  say('');
+  say('  它們不是「冷掉了」，是從來沒進過這份資料 —— 下面那個數字看不到它們。');
+  say('  改法：npm run sync -- --verbose 跑一次，看那個來源那一行說了什麼。');
+  say('');
+}
 if (total === 0) {
   say('  這份資料裡一個來源都沒有 —— 不是「都正常」，是沒有東西可看。');
 } else if (cold.length === 0) {
@@ -81,4 +115,4 @@ if (process.env.GITHUB_STEP_SUMMARY) {
   await appendFile(process.env.GITHUB_STEP_SUMMARY, `${lines.join('\n')}\n`, 'utf8').catch(() => {});
 }
 
-process.exit(STRICT && cold.length > 0 ? 1 : 0);
+process.exit(STRICT && (cold.length > 0 || missing.length > 0) ? 1 : 0);
