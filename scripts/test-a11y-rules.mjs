@@ -921,11 +921,17 @@ try {
    * 而它的名單是從 `saw()` 的呼叫長出來的 —— 漏了呼叫的規則會**安靜地
    * 不出現在那份名單裡**，於是它的綠燈又變回「不知道是對還是空」。
    */
-  const counted = new Set([...source.matchAll(/saw\('([a-z0-9-]+)'/g)].map((m) => m[1]));
+  /*
+   * `\bsaw\w*\(` 而不是 `saw\(`：第 1 輪（第四十三圈）把逐頁那 17 條改成走
+   * `sawTags(id, re)`（同一個正則數兩次，差額就是掃不到的主體），
+   * 於是只認 `saw(` 的樣式一次漏掉 17 條 —— **那次是這一格抓到的**。
+   * 現在認的是「名字以 saw 開頭的呼叫」，再包一層也不用回來改這裡。
+   */
+  const counted = new Set([...source.matchAll(/\bsaw\w*\('([a-z0-9-]+)'/g)].map((m) => m[1]));
   const uncounted = [...declared].filter((r) => !counted.has(r));
   if (uncounted.length > 0) {
     failed += uncounted.length;
-    console.log(`\n  X 這些規則沒有呼叫 saw()：${uncounted.join('、')}`);
+    console.log(`\n  X 這些規則沒有人數它的主體（saw()／sawTags()）：${uncounted.join('、')}`);
     console.log('      沒有計數的話，「這次沒有東西可看」那份名單就會漏掉它們。');
   }
 
@@ -1400,14 +1406,17 @@ console.log('─'.repeat(64));
 }
 
 /*
- * ── 掃不到的那些連結，要數出來 ──────────
+ * ── 掃不到的那些主體，要數出來 ──────────
  *
  * 第 1 輪（第三十五圈）用第二種算法數 `<a href=`：整份 HTML 901 個，
  * 關卡的 `link-name` 說 899。差的 2 個在 `<script>` 裡 —— `strip()` 先拿掉了，
  * **899 是對的**。但那也表示前端拼出來的連結（搜尋結果）每一條規則都沒看過。
  *
- * 兩個方向：script 裡有連結時要說，沒有的時候不能亂說
- * （只驗前者的話，一句「永遠都印」也會過）。
+ * 三個方向：script 裡有東西時要說、沒有的時候不能亂說
+ * （只驗前者的話，一句「永遠都印」也會過），而且**不能只認連結** ——
+ * 第 1 輪（第四十三圈）那一版是用一條手寫的 `<a href=` 樣式在數，
+ * 於是藏在 script 裡的 `<button>` 不但沒被數到，`button-name` 還會被列進
+ * 「這次沒有東西可看的規則」，底下寫著「站上沒有這種元素」。
  */
 {
   const dir = await mkdtemp(join(tmpdir(), 'a11y-script-links-'));
@@ -1415,10 +1424,10 @@ console.log('─'.repeat(64));
 
   await writeFile(join(dir, 'index.html'), page({ body: '<p>內文。</p>' }), 'utf8');
   const quiet = await runCheck(dir);
-  const okQuiet = !/寫在 <script> 裡/.test(quiet);
+  const okQuiet = !/掃不到的主體/.test(quiet);
   if (!okQuiet) failed++;
-  console.log(`  ${okQuiet ? '\u2713' : 'X'} script 裡沒有連結時不亂說`);
-  if (!okQuiet) console.log('        ' + (quiet.split('\n').find((l) => l.includes('script')) ?? ''));
+  console.log(`  ${okQuiet ? '\u2713' : 'X'} script 裡沒有東西時不亂說`);
+  if (!okQuiet) console.log('        ' + (quiet.split('\n').find((l) => l.includes('掃不到')) ?? ''));
 
   await writeFile(
     join(dir, 'index.html'),
@@ -1426,10 +1435,25 @@ console.log('─'.repeat(64));
     'utf8',
   );
   const loud = await runCheck(dir);
-  const okLoud = /另有 1 個 <a href=…> 寫在 <script> 裡/.test(loud);
+  const okLoud = /掃不到的主體/.test(loud) && /^\s+1\s+link-name$/m.test(loud);
   if (!okLoud) failed++;
-  console.log(`  ${okLoud ? '\u2713' : 'X'} script 裡有連結時數得出來（1 個）`);
-  if (!okLoud) console.log('        ' + (loud.split('\n').find((l) => l.includes('script')) ?? '（那一行沒印）'));
+  console.log(`  ${okLoud ? '\u2713' : 'X'} script 裡有連結時數得出來（link-name 1 個）`);
+  if (!okLoud) console.log('        ' + (loud.split('\n').find((l) => l.includes('link-name')) ?? '（那一行沒印）'));
+
+  /* 不是連結的那種：藏一個 <button> 進去，它同時是「掃不到」與「閒置」 */
+  await writeFile(
+    join(dir, 'index.html'),
+    page({ body: '<p>內文。</p><script>el.innerHTML = `<button>去</button>`;</script>' }),
+    'utf8',
+  );
+  const btn = await runCheck(dir);
+  const okBtn = /^\s+1\s+button-name$/m.test(btn);
+  const okLie = /其中 1 條站上其實有這種元素[^\n]*button-name/.test(btn);
+  if (!okBtn) failed++;
+  if (!okLie) failed++;
+  console.log(`  ${okBtn ? '\u2713' : 'X'} 不是連結的也數得出來（button-name 1 個）`);
+  console.log(`  ${okLie ? '\u2713' : 'X'} 閒置名單會說「站上沒有這種元素」對這條不對`);
+  if (!okBtn || !okLie) console.log('        ' + (btn.split('\n').find((l) => l.includes('button-name')) ?? '（那一行沒印）'));
 
   await rm(dir, { recursive: true, force: true });
 }

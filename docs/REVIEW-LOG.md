@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 57,600 行、2.9 MB、338 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 55,400 行、2.9 MB、339 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -55210,4 +55210,220 @@ const BORDERISH = /^(?:border|outline)(?:-(?:top|bottom|left|right|inline|block)
 「11 條預算」「901 個連結」⋯⋯ 每一句都有一個分母，
 而下一圈要逐句問：**那個分母是誰決定的，它漏掉了什麼。**
 
-**下一輪：1 — 無障礙**
+### 2026-09-06 — 第 1 輪（第四十三圈）：無障礙
+
+**第四十三圈問：這個綠勾的分母是什麼？誰決定了它？**
+判準：**找一個印出 ✓ 或百分比的地方，問它的分母怎麼來的 —— 是數出來的，
+還是一份人挑的清單決定的？如果是後者，那個 ✓ 涵蓋了多少？**
+
+#### 1. `check:a11y` 有三個分母，兩個是推導出來的
+
+| 印出來的 | 分母是誰決定的 | 有沒有人守 |
+|---|---|---|
+| 「44 頁」 | `htmlFiles(dist)` 走遍所有 `.html` | 有 —— `find dist -name '*.html'` 也是 44 |
+| 「31 條規則」 | `--list-rules`（`RULE_IDS`），`add()` 會擋沒登記的 id | 有 —— 測試比 `CASES` 的鍵 |
+| 「另有 2 個 `<a href=…>` 寫在 `<script>` 裡」 | **一條手寫的正則** | **沒有** |
+
+第三行那句話是第三十五圈加的，用意正好是「綠燈要說出它涵蓋什麼」。
+但它自己是這樣數的：
+
+```js
+linksInScripts +=
+  (raw.match(/<a\b[^>]*\shref\s*=/gi) ?? []).length - (html.match(/<a\b[^>]*\shref\s*=/gi) ?? []).length;
+```
+
+**「掃不到的東西」由一條只認連結的樣式決定**，而它宣稱的是
+「上面每一條規則都沒有看過它們」—— 那句話講的是全部 31 條。
+
+#### 2. 實測：把 `<button>` 與 `<img>` 藏進 script 裡
+
+一頁乾淨的 HTML，搜尋結果那種寫法：
+
+```html
+<script>
+  const row = (r) => `<button class="go">${r.t}</button><img src="${r.s}">`;
+  document.getElementById('out').innerHTML = row({ t: '去', s: 'x.png' });
+</script>
+```
+
+| | 改之前 | 改之後 |
+|---|---|---|
+| 掃不到的主體 | **一個字都沒說** | `1 button-name`、`1 img-alt` |
+| 閒置名單 | 把 `button-name`、`img-alt` 列進去 | 同上，但底下多一句 |
+| 那句話 | 「它們是綠的⋯是**站上沒有這種元素**」 | 「其中 2 條站上其實有這種元素，只是寫在 script／style 裡掃不到」 |
+
+**那一頁明明有一個按鈕和一張圖。** 報告不只沒說，它還說了反話 ——
+而且是在那份專門用來講「綠燈是哪一種綠」的名單裡說的。
+
+#### 3. 改成由規則自己的樣式推導
+
+逐頁那 17 條規則本來各自寫著 `saw('x', (html.match(/…/gi) ?? []).length)`。
+改成走一個 `sawTags(id, re)`：**同一個正則數兩次**，`strip()` 過的給 `saw()`，
+整份的減掉它就是那條規則今天掃不到的數量。
+
+```js
+const sawTags = (rule, re) => {
+  const kept = (html.match(re) ?? []).length;
+  saw(rule, kept);
+  const all = (raw.match(re) ?? []).length;
+  if (all > kept) hiddenSubjects.set(rule, (hiddenSubjects.get(rule) ?? 0) + (all - kept));
+};
+```
+
+**這裡沒有清單可以漏** —— 要多守一種元素，加一條規則就好，不必回來改這裡。
+順手也少掉一份重複：`/<a\b[^>]*\shref\s*=/` 本來在這個檔案裡有四份。
+
+站上的輸出因此從一句話變成四條：
+
+```
+掃不到的主體（寫在 <script> 或 <style> 裡，strip() 在掃之前就整段拿掉了）：
+      2  blank-rel
+      2  decorative-glyph-in-name
+      2  link-name
+      2  same-name-different-target
+```
+
+**`blank-rel` 是新的。** 那 2 個前端拼出來的連結是 `target="_blank"`，
+而「新分頁要不要 `rel`」那條規則同樣沒看過它們 —— 舊的那句話只提連結，
+所以三十五圈到現在，沒有人知道被漏掉的規則其實有四條。
+
+#### 4. 三個突變都紅了
+
+| 突變 | 紅的是哪一格 |
+|---|---|
+| `if (all > kept)` 改成 `if (all > kept + 99)`（不再記） | 三格全紅 |
+| `blind` 改成永遠是空的 | 「閒置名單會說『站上沒有這種元素』對這條不對」 |
+| `sawTags` 只對含 `href` 的樣式記（＝改回舊做法） | 「不是連結的也數得出來」＋上面那格 |
+
+第三個是重點：它把舊版的行為原樣做出來，而新加的兩格會紅。
+
+#### 5. 我自己這一輪錯了三次，三次都是 repo 抓的
+
+1. **改名把一格測試打掉了。** `test-a11y-rules.mjs` 用
+   `/saw\('([a-z0-9-]+)'/` 掃原始碼確認每條規則都有人數主體 ——
+   `sawTags(` 配不到，一次報 **17 條沒有呼叫 `saw()`**。
+   那一格是對的，錯的是它的樣式；改成 `\bsaw\w*\(` 之後再包一層也不用回來改。
+   （那段註解的上面剛好寫著「規則清單**問腳本自己**，不從原始碼用正則抽」——
+   而它自己下一行就在用正則抽。）
+2. **JSDoc 寫在 `/* */` 裡。** `@param` 要 `/** */` 才算數，
+   `npm run check` 兩個 `implicitly has an 'any' type`。
+3. **`localeCompare` 沒給語言。** `test:portability` 有一格在守
+   「排序會跟著 `LANG`／`LC_ALL` 變」，掃了 151 個檔案抓到我這一行。
+   改成碼位比較。
+
+還有一件不算錯但差點變成錯：我用 `scripts/mutate.mjs` 去做**真的**修改，
+它留下一個 `check-a11y.mjs.orig`；下次有人 `--restore` 就會把這一行改回去。
+已經刪掉。**突變工具只該用來套暫時的破壞。**
+
+| | 之前 | 現在 |
+|---|---|---|
+| 「掃不到的東西」的分母 | 一條手寫的 `<a href=` 樣式 | 17 條規則自己的樣式 |
+| 站上報出來的規則 | 1 種（連結） | **4 條**（含 `blank-rel`） |
+| 藏在 script 裡的 `<button>` | 沒人說，還被說成「站上沒有」 | 數得出來，而且點名那句話不對 |
+
+`verify:all` 六道全綠、`test:tools` 44 步全過。
+
+### 待辦（不屬於這一輪）
+
+- **CSS 那三條沒有被這次的做法涵蓋。** `focus-outline-removed`、
+  `reduced-motion-blanket`、`sr-only-broken` 的主體來自另一份語料（送出去的 CSS），
+  不走 `sawTags`，所以它們沒有「掃不到的主體」這個數字（→ 1 無障礙）
+- **另外 5 條的主體不是用正則數的**（`duplicate-id`、`current-page-unmarked` 等），
+  同樣算不出盲點。`duplicate-id` 那個尤其實在：script 裡拼出來的 `id`
+  會不會撞到靜態的，這一支看不到（→ 1 無障礙）
+- **這份檔案自己的頁首也是個沒人守的數字。** 這一輪更新筆數時發現
+  「約 57,600 行」是舊的，實際 55,400 —— 筆數有數法（`grep -c`），
+  行數與大小沒有（→ 7 建置與 CI）
+- 上一輪與更早的都還在（`box-shadow` 那兩處不算、`BG_PROPS` 還是列舉的、
+  同一個判斷寫在四個地方、四格抽名單用的都是正則、
+  `FLAKY_ENDPOINT` 的平臺 id 沒有人比、那五份對照表只驗了單向、
+  只比資料夾名字不比 `loader` 的 `base`、`collections` 的抽取只認一種寫法、
+  那八種只是「不數」不是「不該數」、`url()` 與 `@font-face` 只掃 HTML、
+  `MEASURED` 仍是快照、
+  `CASES` 的鍵沒有反向檢查、
+  那個掃描分不出元件與動態標籤名、`writing-mode` 只有一個檔案在用、
+  `needs-dist-before-build` 打不開 npm 的 `&&` 串、
+  那份「每條規則都有反例」的報告只說不擋、兩份文件的例子沒有分開數、
+  另外五份文件還是寫「404、500」、`accept` 那些 header 沒被測過、
+  `field()` 假設 frontmatter 是第一個 `---`、
+  只比了檔名沒比路徑、識別字沒有比、`why:` 欄位沒掃、
+  `same-name-different-target` 比 `hasAccessibleName()` 窄、
+  「判斷寫兩份」沒有東西在數、
+  那 59 條「元件沒算繪過」沒有人在守、
+  「要跑起來才有」那 25 條這個方法看不到、分類判準是兩條寫死的正則、
+  同一種「當天就爛」的數字可能還在別的關卡的輸出裡、
+  偶發紅燈的共同點是 `test:units`、量離開碼不要把輸出丟掉、
+  沒有東西在守「空狀態不要自相矛盾」、英文那一半沒有人系統地讀過、
+  `tags.count_one` 與 `list.count_one` 連算繪都沒有過、
+  `csp-frame-src-mismatch` 在站上主體是 0、手動那一次沒有自動化、
+  `rss` 與 `bridge` 兩條路一次都沒跑過（→ 站主）、
+  Data API v3 那一半也沒跑過、
+  CSP 的 `frame-src` 在全部 44 頁上、
+  `related` 只驗了畫得出來、那六個欄位刪掉之後又回到沒人用過、
+  那段建議裡的 273 KB／94 KB 沒有人在守、
+  「站上 0 張內容圖」是三條待辦的共同原因、
+  那三條 a11y 的「第一次」是手動做出來的、
+  markdown 裡的原始 HTML 沒有人在擋、另外六支關卡的寫死數字沒比過、
+  `column` 跟外層 `.wrap--*` 是靠人對的、
+  「42 個用了但沒說明」要重寫或刪掉、`--w-prose`／`--w-content` 也是抄進 `sizes` 的、
+  `rule-undocumented` 只看 id 有沒有出現、
+  那張表是手寫的而 `--list-rules` 是機器的、
+  `gate-count-stale` 的判準是「同一行有 `verify:all`」、
+  `EN_COVERAGE.date` 沒有人問多久以前、組數比對只認得變少、
+  其他三支規則測試的空綠沒驗、
+  那 5 條的 `whyWarn` 還是空的（→ 站主）、
+  結構性規則沒有 `whyWarn` 欄位、`email` 是 warn 而 `google-fonts` 是 error、
+  標籤數也是一種近似、`note` 的 0 筆連續五圈、
+  那 4 個沒人用的匯出（→ 站主）、判準看名字不解析 import、
+  `CONTENT.md` 已經超過 550 行（→ 站主）、判準是檔名不是用途、
+  `role="status"` 本身沒有被檢查、
+  `<details>`／`<summary>`／`<time>` 那 170 個仍然沒有規則、
+  「22 個 `--verbose` 數字」那條的數字過期了、
+  探針還是要人手貼、只跑了首頁、
+  `LOOKS_BAD` 那個正則是猜的、`verify:all` 還是 `&&` 串、
+  `ui.ts` 的 `en` 要不要改必填（→ 站主）、
+  job summary 只有站主會去看、`sync:health` 沒有接進六道關卡、
+  只比 `npm run X`、那段 git 診斷沒有測試、
+  「上界」宣稱要重量得先推（→ 站主）、
+  螢幕閱讀器仍然沒有人做過、重驗是量本機產出不是正式站、
+  `15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、
+  `example-not-real` 只看程式碼框裡的例子、
+  那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  那 9 條「維護者的事」的規則沒有文件、
+  `ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、
+  搜尋結果那 2 個連結沒有規則看過（現在關卡會逐條說出來）、
+  `check.yml` 永遠不會自己觸發（→ 站主）、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `SCHEMA_STRUCTURAL` 3 個什麼都沒擋、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  `check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 14 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  7 條 a11y 規則的邊界沒人守、
+  7 個沒人用的 token（→ 站主）、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、本機 `ahead 156, behind 3`、
+  `inlineStylesheets: always` 只到 98%、圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  `test-content-rules` 的改法檢查只看第一處、
+  `--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：2 — 效能**

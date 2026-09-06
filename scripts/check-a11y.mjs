@@ -224,7 +224,7 @@ const saw = (rule, n) => subjects.set(rule, (subjects.get(rule) ?? 0) + n);
 let pageCount = 0;
 
 /*
- * ── 被 strip() 拿掉的那一塊裡，有沒有連結 ──────────
+ * ── 被 strip() 拿掉的那一塊裡，有什麼看不到 ──────────
  *
  * 第 1 輪（第三十五圈）用第二種算法數 `<a href=`：整份 HTML 是 901 個，
  * 而關卡的 `link-name` 說 899。差的 2 個在 `<script>` 裡面 ——
@@ -237,17 +237,39 @@ let pageCount = 0;
  * （它今天是對的：箭頭有 `aria-hidden`。但那是人寫對的，不是檢查出來的。）
  *
  * 所以把這個盲點數出來、印在報告上。這一支的規矩是「綠燈要說出它涵蓋什麼」，
- * 而「有幾個連結不在涵蓋範圍裡」正是那句話的另一半。
+ * 而「有幾個東西不在涵蓋範圍裡」正是那句話的另一半。
+ *
+ * **第 1 輪（第四十三圈）改掉了這個盲點自己的盲點。** 那一版另外寫了一條
+ * `/<a\b[^>]*\shref\s*=/` 去數 script 裡的連結 —— 於是「掃不到的東西」
+ * 由一條手寫的樣式決定，而它只認連結。實測：把 `<button>` 與 `<img>` 藏進
+ * 一頁的 script 裡，報告不但一個字都沒說，還把 `button-name`、`img-alt`
+ * 列進「這次沒有東西可看的規則」，底下那句話是「**站上沒有這種元素**」——
+ * 那一頁明明有。
+ *
+ * 現在改成由**規則自己的樣式**推導：`sawTags()` 同一個正則數兩次（整份的
+ * 與 strip 過的），差額就是那條規則今天看不到的數量。要加一種元素不必回來
+ * 改這裡，因為這裡沒有清單可以漏。
  */
-let linksInScripts = 0;
+/** @type {Map<string, number>} */
+const hiddenSubjects = new Map();
 
 for await (const file of htmlFiles(DIST)) {
   const rel = relative(DIST, file);
   const raw = await readFile(file, 'utf8');
   const html = strip(raw);
-  linksInScripts +=
-    (raw.match(/<a\b[^>]*\shref\s*=/gi) ?? []).length - (html.match(/<a\b[^>]*\shref\s*=/gi) ?? []).length;
   pageCount++;
+
+  /*
+   * 同一個樣式數兩次：strip 過的（規則真的看得到的）與整份的。
+   * 差額就是這條規則今天掃不到的主體 —— 見上面那段。
+   */
+  /** @param {string} rule @param {RegExp} re */
+  const sawTags = (rule, re) => {
+    const kept = (html.match(re) ?? []).length;
+    saw(rule, kept);
+    const all = (raw.match(re) ?? []).length;
+    if (all > kept) hiddenSubjects.set(rule, (hiddenSubjects.get(rule) ?? 0) + (all - kept));
+  };
 
   // ── lang ───────────────────────────────────────────
   const htmlTag = raw.match(/<html\b[^>]*>/i)?.[0] ?? '';
@@ -314,11 +336,11 @@ for await (const file of htmlFiles(DIST)) {
   }
 
   // ── 地標 ────────────────────────────────────────────
-  saw('nav-label', (html.match(/<nav\b/gi) ?? []).length);
-  saw('duplicate-landmark-name', (html.match(/<nav\b/gi) ?? []).length);
-  saw('h1', (html.match(/<h1\b/gi) ?? []).length);
-  saw('heading-order', (html.match(/<h[1-6]\b/gi) ?? []).length);
-  saw('empty-heading', (html.match(/<h[1-6]\b/gi) ?? []).length);
+  sawTags('nav-label', /<nav\b/gi);
+  sawTags('duplicate-landmark-name', /<nav\b/gi);
+  sawTags('h1', /<h1\b/gi);
+  sawTags('heading-order', /<h[1-6]\b/gi);
+  sawTags('empty-heading', /<h[1-6]\b/gi);
   /* 這四條是「每一頁都該有」，所以主體就是頁面本身 */
   saw('html-lang', 1);
   saw('title', 1);
@@ -373,7 +395,7 @@ for await (const file of htmlFiles(DIST)) {
     }
   }
 
-  saw('unnamed-region', (html.match(/<section\b/gi) ?? []).length);
+  sawTags('unnamed-region', /<section\b/gi);
   for (const m of html.matchAll(/<section\b([^>]*)>/gi)) {
     if (!attr(m[0], 'aria-label') && !attr(m[0], 'aria-labelledby')) {
       add(
@@ -548,7 +570,7 @@ for await (const file of htmlFiles(DIST)) {
    *
    * 合法的值只有 0（可聚焦、照 DOM 順序）與 -1（程式可聚焦、不進 Tab 順序）。
    */
-  saw('positive-tabindex', (html.match(/\stabindex\s*=/gi) ?? []).length);
+  sawTags('positive-tabindex', /\stabindex\s*=/gi);
   for (const m of html.matchAll(/<[a-z][a-z0-9]*\b[^>]*>/gi)) {
     const ti = attr(m[0], 'tabindex');
     if (ti === null || !/^\d+$/.test(ti.trim()) || Number(ti) <= 0) continue;
@@ -576,7 +598,7 @@ for await (const file of htmlFiles(DIST)) {
    *
    * 合法的值只有三個（`polite`／`assertive`／`off`）。
    */
-  saw('live-region-value', (html.match(/\saria-live\s*=/gi) ?? []).length);
+  sawTags('live-region-value', /\saria-live\s*=/gi);
   for (const m of html.matchAll(/<[a-z][a-z0-9]*\b[^>]*>/gi)) {
     const live = attr(m[0], 'aria-live');
     if (live === null) continue;
@@ -634,7 +656,7 @@ for await (const file of htmlFiles(DIST)) {
    * 所以是刻意寫第二份，不是漏掉 —— 兩個差別各有一格測試釘著
    * （`test-a11y-rules.mjs` 的 `svg-unnamed（title 屬性不算名字）`）。
    */
-  saw('svg-unnamed', (html.match(/<svg\b/gi) ?? []).length);
+  sawTags('svg-unnamed', /<svg\b/gi);
   for (const m of html.matchAll(/<svg\b[^>]*>([\s\S]*?)<\/svg>/gi)) {
     const openTag = m[0].slice(0, m[0].indexOf('>') + 1);
     const role = (attr(openTag, 'role') ?? '').trim().toLowerCase();
@@ -656,7 +678,7 @@ for await (const file of htmlFiles(DIST)) {
     );
   }
 
-  saw('img-alt', (html.match(/<img\b/gi) ?? []).length);
+  sawTags('img-alt', /<img\b/gi);
   for (const m of html.matchAll(/<img\b[^>]*>/gi)) {
     /*
      * `alt` 也可以**沒有值**：HTML 規定無值屬性的值就是空字串，
@@ -682,7 +704,7 @@ for await (const file of htmlFiles(DIST)) {
   }
 
   // ── 按鈕與連結的可及名稱 ─────────────────────────────
-  saw('button-name', (html.match(/<button\b/gi) ?? []).length);
+  sawTags('button-name', /<button\b/gi);
   for (const m of html.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/gi)) {
     if (!hasAccessibleName(m[0], m[2])) {
       add(
@@ -709,9 +731,9 @@ for await (const file of htmlFiles(DIST)) {
    * 符號清單刻意很短，只放「明顯是裝飾、而且不會出現在中文正文裡」的那幾個。
    */
   const DECOR_GLYPHS = /[↗↘↙↖→←↑↓✦★☆▸▾»«]/;
-  saw('link-name', (html.match(/<a\b[^>]*\shref\s*=/gi) ?? []).length);
-  saw('same-name-different-target', (html.match(/<a\b[^>]*\shref\s*=/gi) ?? []).length);
-  saw('decorative-glyph-in-name', (html.match(/<a\b[^>]*\shref\s*=/gi) ?? []).length);
+  sawTags('link-name', /<a\b[^>]*\shref\s*=/gi);
+  sawTags('same-name-different-target', /<a\b[^>]*\shref\s*=/gi);
+  sawTags('decorative-glyph-in-name', /<a\b[^>]*\shref\s*=/gi);
   for (const m of html.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)) {
     const openTag = m[0].slice(0, m[0].indexOf('>') + 1);
     if (attr(openTag, 'href') === null) continue;
@@ -786,7 +808,7 @@ for await (const file of htmlFiles(DIST)) {
   }
 
   // ── 表單標籤 ────────────────────────────────────────
-  saw('input-label', (html.match(/<(input|textarea|select)\b/gi) ?? []).length);
+  sawTags('input-label', /<(input|textarea|select)\b/gi);
   for (const m of html.matchAll(/<(input|textarea|select)\b[^>]*>/gi)) {
     const tag = m[0];
     const type = attr(tag, 'type');
@@ -824,7 +846,7 @@ for await (const file of htmlFiles(DIST)) {
 
   // ── aria 指向不存在的元素 ────────────────────────────
   const idSet = new Set(ids);
-  saw('aria-ref', (html.match(/\saria-(labelledby|describedby|controls)\s*=/gi) ?? []).length);
+  sawTags('aria-ref', /\saria-(labelledby|describedby|controls)\s*=/gi);
   for (const a of ['aria-labelledby', 'aria-describedby', 'aria-controls']) {
     for (const m of html.matchAll(new RegExp('\\s' + a + '\\s*=\\s*"([^"]+)"', 'gi'))) {
       for (const ref of m[1].split(/\s+/).filter(Boolean)) {
@@ -886,7 +908,7 @@ for await (const file of htmlFiles(DIST)) {
   }
 
   // ── 新分頁 ──────────────────────────────────────────
-  saw('blank-rel', (html.match(/<a\b[^>]*\starget\s*=\s*"_blank"/gi) ?? []).length);
+  sawTags('blank-rel', /<a\b[^>]*\starget\s*=\s*"_blank"/gi);
   for (const m of html.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)) {
     const openTag = m[0].slice(0, m[0].indexOf('>') + 1);
     if (attr(openTag, 'target') !== '_blank') continue;
@@ -1201,6 +1223,16 @@ for await (const file of htmlFiles(DIST)) {
  */
 for (const id of RULE_IDS) if (!subjects.has(id)) subjects.set(id, 0);
 
+if (hiddenSubjects.size > 0) {
+  const rows = [...hiddenSubjects.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+  console.log(
+    `\n掃不到的主體（寫在 <script> 或 <style> 裡，strip() 在掃之前就整段拿掉了）：\n` +
+      rows.map(([id, n]) => `  ${String(n).padStart(5)}  ${id}`).join('\n') +
+      `\n  這 ${rows.length} 條規則各少看了上面那麼多個。那不是漏掉，是掃不到 ——\n` +
+      '  前端拼出來的東西（站上是搜尋結果）要等使用者打字才存在。\n',
+  );
+}
+
 /*
  * ── 文件抄了一份閒置名單，而這裡每次都算得出來 ──────────
  *
@@ -1217,13 +1249,6 @@ for (const id of RULE_IDS) if (!subjects.has(id)) subjects.set(id, 0);
  * 只在掃真的 `dist/` 時比對：測試會拿 `--dir=` 指向暫存語料，
  * 那種語料的閒置名單本來就跟站上不一樣，比對它沒有意義。
  */
-if (linksInScripts > 0) {
-  console.log(
-    `\n另有 ${linksInScripts} 個 <a href=…> 寫在 <script> 裡（搜尋結果是前端拼出來的）。\n` +
-      '  這一支掃的是產出的 HTML，script 在掃之前就被拿掉了 —— 上面每一條規則都沒有看過它們。\n' +
-      '  那不是漏掉，是掃不到：那些連結要等使用者打字才存在。\n',
-  );
-}
 
 let docDrift = false;
 /* `--doc=` 是給測試用的：帶了它就比對那一份，`--dir=` 的語料才驗得到這一格 */
@@ -1489,6 +1514,19 @@ if (findings.length === 0) {
         '  它們是綠的，但那不是「檢查過而且沒問題」，是「站上沒有這種元素」。\n' +
         '  哪天內容裡出現了，這幾條才第一次真的在守。\n',
     );
+    /*
+     * 上面那句「站上沒有這種元素」有一種情況會說謊：元素在，但寫在
+     * script／style 裡，`strip()` 拿掉了。第 1 輪（第四十三圈）實測過
+     * `<button>` 藏在 script 裡的樣子 —— 那時報告兩件事都沒說。
+     */
+    const blind = idle.filter((id) => hiddenSubjects.has(id));
+    if (blind.length > 0) {
+      console.log(
+        `  其中 ${blind.length} 條站上其實有這種元素，只是寫在 script／style 裡掃不到：` +
+          `${blind.join('、')}\n` +
+          '  對這幾條來說，上面那句「站上沒有這種元素」是不對的。\n',
+      );
+    }
   }
 }
 
