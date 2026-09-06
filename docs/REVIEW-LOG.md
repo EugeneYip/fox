@@ -68,7 +68,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 53,300 行、2.7 MB、318 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 53,500 行、2.7 MB、319 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -51573,3 +51573,187 @@ X RSS 失敗 ＋ 沒金鑰：**500** 也要說「不要當成帳號沒了」
 - 第二十三圈記的三件站主決定都還在（→ 站主）
 
 **下一輪：5 — 隱私與安全**
+
+### 2026-09-06 — 第 5 輪（第四十圈）：隱私與安全
+
+**第四十圈問：這段東西，站上真的跑過嗎？**
+判準：**找出一個今天真的執行到它的地方。找不到的話，它的正確性是靠什麼保證的？**
+
+#### 1. 規則那一端早就答完了
+
+```
+這次沒有東西可看的規則：0 條　（30 條規則這一輪每一條都有東西可判斷）
+```
+
+所以問題要往別的地方問。這個專案最硬的那條承諾 ——
+**「影片要按了才會載入」** —— 是由 `VideoFacade` 扛的，
+而它**在站上一次都沒有算繪過**（第 3 輪剛量到）。
+也就是說**整條同意路徑從來沒有人走過**。
+
+#### 2. 第一次真的按下去
+
+建一頁暫存的（填 `videoUrl`），起 preview，在**乾淨的分頁**裡量：
+
+| | 結果 |
+|---|---|
+| 載入時的 iframe | **0 個** |
+| 載入時的網路請求 | **3 個，全部是 localhost** |
+| 載入時的 console | **一句都沒有** |
+| 按下去之後 | iframe 建起來，`https://www.youtube-nocookie.com/embed/…?autoplay=1&rel=0&modestbranding=1` |
+| 有沒有被 CSP 擋 | **沒有** —— `frame-src` 那一條讓它過了 |
+
+**同意路徑是對的。** 這是它第一次被走過。
+
+#### 3. 我差一點寫下一個假的資安發現
+
+第一次看 console 的時候，我用的是**這一輪前面一直在用的那個分頁**，
+裡面看到：
+
+```
+[error] Loading the image 'https://i.ytimg.com/vi_webp/…/mqdefault.webp'
+        violates "img-src 'self' data:". The action has been blocked.
+```
+
+我差一點寫成「facade 在載入時就打第三方，只是被 CSP 擋下來」——
+那會是一個很嚴重的指控。**去驗了三件事，三件都不支持它**：
+
+1. 開一個**乾淨的分頁**重跑：console **一句都沒有**，請求只有 3 個 localhost。
+2. `grep -rl ytimg dist` —— **整個產出一次都沒有**。
+3. 網路紀錄裡沒有任何 `ytimg` 的請求，那一次也沒真的送出去。
+
+那行訊息只在**按下去之後**出現，而站台自己的產出裡沒有那個字串 ——
+歸不到這個 repo 頭上。
+
+**又是同一個形狀：拿一個被污染的儀器去量。**
+上一輪是 `grep -E` 裡的 `\|`，這一輪是一個累積了半輪狀態的分頁。
+
+#### 4. 那條「兩邊要講同一個主機」的縫，本來沒有人在看
+
+按下去那條路上有兩個地方必須一致：
+
+```
+元件的 click handler：https://www.youtube-nocookie.com/embed/…
+每一頁的 CSP：       frame-src https://www.youtube-nocookie.com
+```
+
+**只要有一邊改了，讀者按下去會得到一個永遠不會出現的播放器** ——
+畫面上沒有任何錯誤，只有 console 裡一行 CSP 訊息。
+而這一輪是**手動建一頁、真的按一次**才驗到它們今天一致；那太貴，不會有人每次都做。
+
+所以加第 31 條規則 `csp-frame-src-mismatch`：在產出上把 HTML 裡
+任何 `https://主機/embed/` 抓出來（click handler 是內嵌腳本，就在同一份 HTML 裡），
+比對那一頁自己的 `frame-src`。
+
+突變驗過（把元件建的主機換成 `www.youtube.com`，CSP 不動）：
+
+```
+✗ dist/…/index.html:25  [csp-frame-src-mismatch]
+  這一頁的腳本會建一個 www.youtube.com 的 iframe，但它自己的 CSP
+  frame-src 只允許 www.youtube-nocookie.com —— 讀者按下去會得到一個
+  **永遠不會出現的播放器**，而畫面上不會有任何錯誤⋯
+```
+
+反向案例做成獨立區塊（那支測試的 `CASES` 迴圈要求每個案例都要響一條，
+「不該響」表達不出來）。
+
+**而暫存頁刪掉之後，這條規則的主體回到 0** —— 關卡自己會說：
+
+```
+這次沒有東西可看的規則：1 條（csp-frame-src-mismatch）
+```
+
+那正是這一圈在問的事：**它現在守的是一件還沒有發生的事。**
+
+| | 之前 | 現在 |
+|---|---|---|
+| 同意路徑 | 從來沒有人走過 | 走過一次，量過每一步 |
+| handler 與 CSP 的一致 | 沒有東西在比 | 每次建置都比一次 |
+| 那個一致今天成不成立 | 不知道 | **成立**（手動 ＋ 靜態都驗過） |
+
+`verify:all` 六道全綠、`test:tools` 44 步全過。
+
+### 待辦（不屬於這一輪）
+
+- **`csp-frame-src-mismatch` 在站上主體是 0**，要等第一支影片才會真的守到東西。
+  跟 `img-alt`、`CoverImage` 是同一類（→ 5 隱私與安全）
+- **手動那一次（按下去、看 iframe 與 console）沒有自動化。** 靜態那一條比的是
+  主機字串，證明不了「按下去真的會出現」（→ 5 隱私與安全）
+- **`cookie-promised-none` 與 `csp-frame-host-unpromised` 不在 `STRUCTURAL_IDS` 裡。**
+  它們靠區塊開頭的 `saw(id, 0)` 登記，dist 讀不到的時候會整條從計數裡消失
+  （我加的那條兩邊都放了）（→ 5 隱私與安全）
+- 上一輪與更早的都還在（`rss` 與 `bridge` 兩條路一次都沒跑過（→ 站主）、
+  Data API v3 那一半也沒跑過、「不只 404」寫在五個地方沒有東西在比、
+  `FLAKY_ENDPOINT` 與 `flaky` 是兩份判斷、
+  CSP 的 `frame-src` 在全部 44 頁上、
+  `related` 只驗了畫得出來、那六個欄位刪掉之後又回到沒人用過、
+  那段建議裡的 273 KB／94 KB 沒有人在守、
+  其他關卡的「改法」也可能點名不存在的東西、
+  「站上 0 張內容圖」是三條待辦的共同原因、
+  那三條 a11y 的「第一次」是手動做出來的、
+  markdown 裡的原始 HTML 沒有人在擋、另外六支關卡的寫死數字沒比過、
+  `column` 跟外層 `.wrap--*` 是靠人對的、
+  「42 個用了但沒說明」要重寫或刪掉、`--w-prose`／`--w-content` 也是抄進 `sizes` 的、
+  `rule-undocumented` 只看 id 有沒有出現、
+  那張表是手寫的而 `--list-rules` 是機器的、
+  `gate-count-stale` 的判準是「同一行有 `verify:all`」、
+  `EN_COVERAGE.date` 沒有人問多久以前、組數比對只認得變少、
+  其他三支規則測試的空綠沒驗、
+  那 5 條的 `whyWarn` 還是空的（→ 站主）、
+  結構性規則沒有 `whyWarn` 欄位、`email` 是 warn 而 `google-fonts` 是 error、
+  標籤數也是一種近似、`note` 的 0 筆連續五圈、
+  那 4 個沒人用的匯出（→ 站主）、判準看名字不解析 import、
+  `CONTENT.md` 533 行（→ 站主）、判準是檔名不是用途、
+  `role="status"` 本身沒有被檢查、
+  `<details>`／`<summary>`／`<time>` 那 170 個仍然沒有規則、
+  「22 個 `--verbose` 數字」那條的數字過期了、
+  探針還是要人手貼、只跑了首頁、
+  `LOOKS_BAD` 那個正則是猜的、`verify:all` 還是 `&&` 串、
+  `ui.ts` 的 `en` 要不要改必填（→ 站主）、
+  job summary 只有站主會去看、`sync:health` 沒有接進六道關卡、
+  只比 `npm run X`、那段 git 診斷沒有測試、
+  「上界」宣稱要重量得先推（→ 站主）、
+  螢幕閱讀器仍然沒有人做過、重驗是量本機產出不是正式站、
+  `15.74 → 7.40 → 4.94` 那一行沒有被比到、
+  `CLAUDE.md` 還有別的可查宣稱沒人比、
+  `example-not-real` 只看程式碼框裡的例子、
+  那一頁還有兩句沒被機械地對過、
+  `verify -- --patterns` 不會把日期寫回去（→ 站主）、
+  那 9 條「維護者的事」的規則沒有文件、
+  `ARCHITECTURE.md` 還有別的可量宣稱沒人對、
+  七支關卡只有兩支有 `--list-rules`、
+  搜尋結果那 2 個連結沒有規則看過（但關卡會說出來）、
+  `check.yml` 永遠不會自己觸發（→ 站主）、
+  那 67 處註解要不要改（→ 站主）、`taiwan-tai` 44 處裡真的與引用分不開、
+  workflow 只掃 step 名稱、feed 的 `.xml` 刻意不掃、dist 沒有 `.js` 語料、
+  同步回來的文字現在沒有人看、
+  圖示與 manifest 要不要算進單頁請求數（→ 站主）、
+  涵蓋範圍算不出來要讓規則自己宣告、
+  「身分規則：8 個值」不能印內容、
+  `SCHEMA_STRUCTURAL` 3 個什麼都沒擋、
+  `domain-drift` 只看三份、`rule-not-documented` 只守 id、
+  `strictReferrerPolicy: false` 那條路沒有測試、
+  `field-undocumented` 與 `guide-field-unknown` 的語料不同、
+  `check:perf` 的過期檢查只看 `why:`、
+  頁尾 `aria-current` 沒有顏色對應、`.foxfire` 的動畫在非合成分頁裡量不到、
+  我連續十一次把東西放在消費者後面、`check-handle.mjs` 沒辦法不打網路跑、
+  要不要讓列表顯示詩詞的 `title`、
+  `dispatch-target-missing` 與 `step-output-unset` 在基底上主體是 0、
+  乾淨基底上 14 條主體是 0、
+  `sync-feeds.mjs` 的輸出沒有整支測試、`base` 該排除卻抽不到、
+  7 條 a11y 規則的邊界沒人守、
+  7 個沒人用的 token（→ 站主）、`.nvmrc` 的精度、
+  `check:copy` 沒有 level 的概念、
+  schema 的必填／選填沒被選過、
+  另外四支檢查的嚴重度、
+  本機 `ahead 136, behind 3`、
+  `inlineStylesheets: always` 只到 98%、
+  圈末索引停在第二十六圈、
+  `--real-install` 成功路徑沒測試、
+  導覽列橫捲沒有視覺提示、本機 Node 低於 engines、`REVIEW-LOG.md` 那 6 處違規、
+  要不要少掉 CSS 那一趟、日常發文誰來推、雜湊資源只有 `max-age=600`、
+  `test-content-rules` 的改法檢查只看第一處、
+  `--all` 與 api／bridge 分支沒有案例、
+  `EXAMPLE-threads.md` 的檔名、`RSSHUB_BASE` 沒設）
+- 第二十三圈記的三件站主決定都還在（→ 站主）
+
+**下一輪：6 — 文案與語氣**

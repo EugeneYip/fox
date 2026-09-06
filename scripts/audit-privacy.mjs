@@ -365,6 +365,7 @@ if (existsSync(resolve(ROOT, 'dist'))) {
     .replace(/<[^>]+>/g, ' ');
   saw('cookie-promised-none', 0);
   saw('csp-frame-host-unpromised', 0);
+  saw('csp-frame-src-mismatch', 0);
   if (promisePage === '') {
     notices.push('讀不到 dist/privacy/index.html —— cookie 與影片框那兩條承諾沒有對過。');
   } else {
@@ -438,6 +439,69 @@ if (existsSync(resolve(ROOT, 'dist'))) {
           },
         });
       }
+    }
+  }
+
+  /*
+   * ── 按下去要建的那個 iframe，CSP 讓不讓它建 ────────────────
+   *
+   * 第 5 輪（第四十圈）加的。這一圈問「這段東西，站上真的跑過嗎？」——
+   * `VideoFacade` 的整條同意路徑（按下去 → 建 iframe）**在站上一次都沒跑過**，
+   * 因為到今天沒有任何一篇內容填 `videoUrl`。
+   *
+   * 那條路上有兩個地方必須講同一個主機：
+   *
+   *   元件的 click handler：`https://www.youtube-nocookie.com/embed/…`
+   *   每一頁的 CSP：       `frame-src https://www.youtube-nocookie.com`
+   *
+   * 兩邊只要有一邊改了，讀者按下去會得到**一個永遠不會出現的播放器**，
+   * 而畫面上不會有任何錯誤 —— 只有 console 裡一行 CSP 訊息。
+   * 這一輪是手動建了一頁、真的按了一次才驗到它們今天是一致的；
+   * 那個做法太貴，不會有人每次都做。所以這裡靜態地比一次。
+   *
+   * 判斷的是**產出**：把 HTML 裡任何 `https://主機/embed/` 抓出來
+   * （click handler 是內嵌腳本，所以它就在同一份 HTML 裡），
+   * 再看那一頁自己的 `frame-src` 允不允許那個主機。
+   */
+  for (const file of htmlFiles) {
+    const text = await readFile(file, 'utf8');
+    const embeds = new Set(
+      [...text.matchAll(/https:\/\/([a-z0-9.-]+)\/embed\//gi)].map((m) => m[1].toLowerCase()),
+    );
+    if (embeds.size === 0) continue;
+    const frameSrc = /frame-src([^;"']*)/i.exec(text);
+    const allowed = new Set(
+      (frameSrc?.[1] ?? '')
+        .split(/\s+/)
+        .filter((t) => t && !t.startsWith("'"))
+        .map((t) => {
+          try {
+            return new URL(t.includes('//') ? t : `https://${t}`).host.toLowerCase();
+          } catch {
+            return '';
+          }
+        })
+        .filter(Boolean),
+    );
+    for (const host of embeds) {
+      saw('csp-frame-src-mismatch', 1);
+      if (allowed.has(host)) continue;
+      findings.push({
+        rel: relative(ROOT, file),
+        lineNo: text.slice(0, text.indexOf(`https://${host}/embed/`)).split('\n').length,
+        line: `https://${host}/embed/…`,
+        matched: host,
+        rule: {
+          id: 'csp-frame-src-mismatch',
+          level: 'error',
+          why:
+            `這一頁的腳本會建一個 ${host} 的 iframe，但它自己的 CSP ` +
+            (frameSrc ? `frame-src 只允許 ${[...allowed].join('、') || '（一個主機都沒有）'}` : '沒有 frame-src') +
+            ' —— 讀者按下去會得到一個**永遠不會出現的播放器**，而畫面上不會有任何錯誤，' +
+            '只有 console 裡一行 CSP 訊息。' +
+            '　改法：把兩邊對齊 —— 改 VideoFacade 建的網址，或把那個主機加進 CSP 的 frame-src。',
+        },
+      });
     }
   }
 
@@ -1752,6 +1816,7 @@ const STRUCTURAL_IDS = [
   'reveal-key-unused',
   'privacy-doc-unwired',
   'privacy-doc-crawler-count',
+  'csp-frame-src-mismatch',
 ];
 for (const id of [...STRUCTURAL_IDS, ...RULES.map((r) => r.id)]) {
   if (!subjects.has(id)) subjects.set(id, 0);

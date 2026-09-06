@@ -219,6 +219,23 @@ const CASES = {
         + '<title>x</title></head><body><script>document.cookie = "a=1";</script></body></html>',
     },
   },
+  /*
+   * 第 5 輪（第四十圈）：click handler 建的 iframe 主機，
+   * 要跟同一頁的 `frame-src` 對得上。對不上的話讀者按下去
+   * 會得到一個永遠不會出現的播放器，而畫面上沒有任何錯誤。
+   */
+  'csp-frame-src-mismatch': {
+    files: {
+      'dist/privacy/index.html':
+        '<!DOCTYPE html><html lang="zh"><head>'
+        + '<meta http-equiv="content-security-policy" content="default-src \'none\'; frame-src https://www.youtube-nocookie.com">'
+        + '<title>隱私</title></head><body><p>不使用 cookie。影片框用的是 youtube-nocookie.com。</p></body></html>',
+      'dist/index.html':
+        '<!DOCTYPE html><html lang="zh"><head>'
+        + '<meta http-equiv="content-security-policy" content="default-src \'none\'; frame-src https://www.youtube-nocookie.com">'
+        + '<title>x</title></head><body><script>i.src=`https://www.youtube.com/embed/${r}`;</script></body></html>',
+    },
+  },
   'csp-frame-host-unpromised': {
     files: {
       'dist/privacy/index.html':
@@ -434,6 +451,30 @@ for (const [label, { files, git, check, coFires }] of Object.entries(CASES)) {
     const found = [...out.matchAll(/\[([a-z-]+)\]/g)].map((m) => m[1]);
     console.log(`      實際觸發的是：${[...new Set(found)].join('、') || '（一條都沒有）'}`);
   }
+  await rm(dir, { recursive: true, force: true });
+}
+
+/*
+ * 反向案例：click handler 建的主機**跟 CSP 對得上**的時候不要出聲。
+ *
+ * 第 5 輪（第四十圈）：少了這一格，「把規則放寬到全部不報」也會通過。
+ * （這一條做不成 CASES 的形狀 —— 那個迴圈要求每個案例都要響一條規則。）
+ */
+{
+  const csp =
+    '<meta http-equiv="content-security-policy" content="default-src \'none\'; frame-src https://www.youtube-nocookie.com">';
+  const dir = await build({
+    'dist/privacy/index.html':
+      `<!DOCTYPE html><html lang="zh"><head>${csp}` +
+      '<title>隱私</title></head><body><p>不使用 cookie。影片框用的是 youtube-nocookie.com。</p></body></html>',
+    'dist/index.html':
+      `<!DOCTYPE html><html lang="zh"><head>${csp}` +
+      '<title>x</title></head><body><script>i.src=`https://www.youtube-nocookie.com/embed/${r}`;</script></body></html>',
+  });
+  const { out } = await audit(dir);
+  const quiet = !out.includes('[csp-frame-src-mismatch]');
+  if (!quiet) failed++;
+  console.log(`  ${quiet ? '✓' : 'X'} iframe 主機跟 frame-src 對得上時不出聲（反向案例）`);
   await rm(dir, { recursive: true, force: true });
 }
 
