@@ -348,6 +348,8 @@ console.log('\n對比度檢查（WCAG 2.2）\n' + '═'.repeat(78));
 let failures = 0;
 let checked = 0;
 
+/** 兩套主題算出來的每一個比值（四捨五入到兩位）—— 底下拿去對 tokens.css 的註解 */
+const seenRatios = new Set();
 for (const [themeName, vars] of Object.entries(themes)) {
   console.log(`\n${themeName}`);
   console.log('─'.repeat(78));
@@ -381,6 +383,7 @@ for (const [themeName, vars] of Object.entries(themes)) {
     const pass = ratio >= need;
     checked++;
     if (!pass) failures++;
+    seenRatios.add(ratio.toFixed(2));
     rows.push({ ...pair, fg, bg, ratio, need, pass, missing: false });
   }
 
@@ -1115,6 +1118,92 @@ async function* walkSurf(dir) {
 
 console.log('\n' + '═'.repeat(78));
 console.log(`檢查 ${checked} 組，未達標 ${failures} 組。`);
+/*
+ * ── `tokens.css` 的註解裡寫著對比值，那些數字還對嗎 ────────────
+ *
+ * 第 8 輪（第三十七圈）加的。這一圈問「這一條規則，是誰要求的？
+ * 寫在哪份文件裡？兩邊還一致嗎？」
+ *
+ * 顏色這一支的來歷寫在 `tokens.css` 自己的註解裡 ——
+ * 「已調深到 4.94:1」、「三階的層次是 15.74 → 7.40 → 4.94」、
+ * 「rule-strong 只有 1.55:1，不能拿來用」。
+ * **那些數字是選這個顏色的理由**，下一個人要改色的時候讀的就是它們。
+ *
+ * 那段註解自己還寫著：
+ *   「後面那三個是現值，而且不必相信這行註解：
+ *     `npm run check:contrast -- --verbose` 每次都會把它們算一次印出來
+ *     （第 8 輪〔第三十四圈〕逐個對過，三個都一模一樣）。」
+ *
+ * —— 它**指得出誰能證實，而那次證實是人手做的**。
+ * 這一輪把那一步變成每次都做（跟 `check:perf` 拿自己的 `why:` 對自己量到的值
+ * 是同一個作法）。
+ *
+ * 只看寫成兩位小數的（`4.94:1`）：`4.5:1`、`3:1` 那種是**門檻**不是量到的值。
+ * 標了「舊值」或「原本」的那一行也跳過 —— 那是刻意留著的歷史
+ * （`#857c70` 的 3.81:1 就是）。
+ */
+let staleTokenDocs = 0;
+{
+  const cssPath = resolve(ROOT, 'src/styles/tokens.css');
+  const css = await readFile(cssPath, 'utf8').catch(() => null);
+  /*
+   * 先印一個段落抬頭再說話。
+   *
+   * `test-contrast` 是靠抬頭切段落的（「列印：」「fallback：」⋯⋯），
+   * 而它進了某一段就一直待到下一個抬頭 —— 第一版沒有抬頭，
+   * 於是這一段的 `✗` 被算成「列印缺漏的選擇器」。
+   */
+  console.log('\n註解裡的對比值：');
+  if (css === null) {
+    console.log('  ⚠ 讀不到 src/styles/tokens.css —— 沒有對過。');
+  } else {
+    let claims = 0;
+    /** @type {{ said: string, line: string }[]} */
+    const stale = [];
+    /*
+     * 「舊值」的標記要**跟著那個數字**，不是跟著整行。
+     *
+     * 第一版是整行跳過，而 tokens.css 有一行同時寫了兩個數字：
+     * 「實測只有 3.81:1（**那是舊值**），不合格，已調深到 4.94:1」——
+     * 於是連現值的 4.94 一起被跳過，五個宣稱只剩一個在比。
+     * 現在只看那個數字**後面**一小段有沒有標記。
+     */
+    let skipped = 0;
+    for (const line of css.split('\n')) {
+      for (const m of line.matchAll(/(\d+\.\d\d)\s*:\s*1/g)) {
+        const after = line.slice((m.index ?? 0) + m[0].length, (m.index ?? 0) + m[0].length + 14);
+        if (/舊值|原本/.test(after)) {
+          skipped += 1;
+          continue;
+        }
+        claims += 1;
+        if (!seenRatios.has(m[1])) stale.push({ said: m[1], line: line.trim().slice(0, 60) });
+      }
+    }
+    if (skipped > 0) {
+      console.log(`  （另有 ${skipped} 個標了「舊值／原本」的，刻意不比。）`);
+    }
+    if (claims === 0) {
+      console.log(
+        '  ⚠ 一個對比值都抽不到 —— **這一格沒有在守**。\n' +
+          '    那些數字是選顏色的理由，抽不到通常表示寫法變了（不是真的沒寫）。',
+      );
+    } else if (stale.length > 0) {
+      staleTokenDocs = stale.length;
+      console.log(`  ✗ 有 ${stale.length} 個對比值跟現在算出來的對不上：`);
+      for (const x of stale) {
+        console.log(`      寫「${x.said}:1」，而這次算出來的比值裡沒有這個數字`);
+        console.log(`      ${x.line}`);
+      }
+      console.log('      那些數字是**選這個顏色的理由** —— 下一個人要改色的時候讀的就是它們。');
+      console.log('      改法：npm run check:contrast -- --verbose 會把每一組算一次，照著更新那幾行；');
+      console.log('      刻意要留舊值的話，在那一行寫明「舊值」或「原本」（那種會跳過）。');
+    } else {
+      console.log(`  ${claims} 個對比值，跟這次算出來的都對得上 ✓`);
+    }
+  }
+}
+
 
 /*
  * ── 這份表是手寫的，而它不知道畫面上真的畫了什麼 ────────────
@@ -1143,4 +1232,4 @@ console.log(
     '  要重量：npm run preview，再對每個有文字的元素取 color ＋ 第一個不透明背景。\n',
 );
 
-process.exit(failures > 0 ? 1 : 0);
+process.exit(failures > 0 || staleTokenDocs > 0 ? 1 : 0);

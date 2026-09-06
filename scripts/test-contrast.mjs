@@ -100,6 +100,8 @@ function parse(out) {
   let inUnused = false;
   /* 第 8 輪（第三十三圈）加的第五段。不分開的話它的 ✗ 會被算成顏色不合格 */
   let inUndefined = false;
+  /* 第 8 輪（第三十七圈）加的第六段（tokens.css 註解裡的對比值），同理 */
+  let inTokenDoc = false;
 
   for (const line of out.split('\n')) {
     const t = line.trim();
@@ -114,6 +116,8 @@ function parse(out) {
     if (t.startsWith('涵蓋率：')) { inCoverage = true; inUnused = false; inPrint = false; inUndefined = false; continue; }
     if (t.startsWith('fallback：')) { inFallback = true; inCoverage = false; inUnused = false; inPrint = false; inUndefined = false; continue; }
     if (t.startsWith('列印：')) { inPrint = true; inCoverage = false; inFallback = false; inUnused = false; inUndefined = false; continue; }
+    /* 第 8 輪（第三十七圈）新增的段落 —— 沒有這一行的話它的 ✗ 會被算成別段的問題 */
+    if (t.startsWith('註解裡的對比值：')) { inTokenDoc = true; inPrint = false; inCoverage = false; inFallback = false; inUnused = false; inUndefined = false; continue; }
     if (!t) continue;
     if (inUndefined) {
       const mm = /^✗\s*var\((--[\w-]+)\)/.exec(t);
@@ -140,6 +144,8 @@ function parse(out) {
       if (t.startsWith('✗')) printMissing.push(t.replace(/^✗\s*/, ''));
       continue;
     }
+    /* 那一段自己有測試（底下「註解裡的對比值」那個區塊），這裡不要當成顏色問題 */
+    if (inTokenDoc) continue;
     // 顏色那一段：`✗ 位置  比值  門檻  fg on bg` / `⚠ 位置  找不到變數 …`
     if (t.startsWith('✗') || t.startsWith('⚠')) {
       const where = t.replace(/^[✗⚠]\s*/, '').split(/\s{2,}/)[0].trim();
@@ -1072,6 +1078,69 @@ console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
   if (!okNum) failed++;
   console.log(`  ${okNum ? '✓' : 'X'} 那句話帶著實測的數字（幾頁、幾種）`);
   if (!okNum) console.log('      ' + out.split('\n').filter(Boolean).slice(-4).join(' ｜ '));
+}
+
+/*
+ * ── `tokens.css` 註解裡的對比值，還跟算出來的一樣嗎 ────────────
+ *
+ * 第 8 輪（第三十七圈）加的。顏色這一支的來歷寫在 `tokens.css` 自己的註解裡
+ * （「已調深到 4.94:1」、「rule-strong 只有 1.55:1，不能拿來用」）——
+ * **那些數字是選這個顏色的理由**，下一個人要改色的時候讀的就是它們。
+ *
+ * 那段註解自己還寫著「不必相信這行註解，`--verbose` 每次都會算一次
+ * （第 8 輪〔第三十四圈〕逐個對過）」—— 指得出誰能證實，
+ * 而那次證實是**人手做的**。這一條把那一步變成每次都做。
+ */
+{
+  console.log('\n' + '─'.repeat(64));
+  const runTokens = async (/** @type {string} */ tokens) => {
+    const dir = await mkdtemp(join(tmpdir(), 'contrast-doc-'));
+    await mkdir(join(dir, 'src/styles'), { recursive: true });
+    await writeFile(join(dir, 'src/styles/tokens.css'), tokens, 'utf8');
+    await writeFile(join(dir, 'src/styles/global.css'), realGlobal, 'utf8');
+    let out = '';
+    let exit = 0;
+    try {
+      ({ stdout: out } = await run('node', [resolve(ROOT, 'scripts/check-contrast.mjs'), `--root=${dir}`]));
+    } catch (err) {
+      const e = /** @type {{ stdout?: string, code?: number }} */ (err);
+      out = String(e?.stdout ?? '');
+      exit = typeof e?.code === 'number' ? e.code : -1;
+    }
+    await rm(dir, { recursive: true, force: true });
+    return { out, exit };
+  };
+
+  const clean = await runTokens(realTokens);
+  const okClean = /個對比值，跟這次算出來的都對得上 ✓/.test(clean.out) && clean.exit === 0;
+  if (!okClean) failed++;
+  console.log(`  ${okClean ? '✓' : 'X'} 真的 tokens.css 的註解對得上（而且說得出幾個）`);
+  if (!okClean) console.log('        ' + clean.out.split('\n').filter((l) => /tokens.css/.test(l)).join(' ｜ '));
+
+  /* 註解裡的數字改掉一個 → 要擋 */
+  const wrong = await runTokens(realTokens.replace('4.94:1。', '9.99:1。'));
+  const okWrong = /寫「9.99:1」/.test(wrong.out) && wrong.exit === 1;
+  if (!okWrong) failed++;
+  console.log(`  ${okWrong ? '✓' : 'X'} 註解裡的數字跟算出來的對不上時擋得住（exit ${wrong.exit}）`);
+  if (!okWrong) console.log('        ' + wrong.out.split('\n').filter((l) => /tokens.css|9\.99/.test(l)).join(' ｜ '));
+
+  /*
+   * 標了「舊值」的那個要跳過 —— 而且是**跟著數字**跳，不是跟著整行。
+   * tokens.css 有一行同時寫了舊值與現值，整行跳過的話現值也會漏掉
+   * （第一版就是這樣，五個宣稱只剩一個在比）。
+   */
+  const okSkip = /另有 1 個標了「舊值／原本」的，刻意不比/.test(clean.out)
+    && /^\s*2 個對比值/m.test(clean.out);
+  if (!okSkip) failed++;
+  console.log(`  ${okSkip ? '✓' : 'X'} 舊值跟著數字跳過，同一行的現值照樣比（2 個比、1 個跳）`);
+  if (!okSkip) console.log('        ' + clean.out.split('\n').filter((l) => /舊值|對比值/.test(l)).join(' ｜ '));
+
+  /* 一個都抽不到要說話，不然寫法一改這一格就安靜地什麼都不比 */
+  const none = await runTokens(realTokens.replace(/(\d+\.\d\d)\s*:\s*1/g, '（略）'));
+  const okNone = /一個對比值都抽不到 —— \*\*這一格沒有在守\*\*/.test(none.out);
+  if (!okNone) failed++;
+  console.log(`  ${okNone ? '✓' : 'X'} 一個對比值都抽不到時說「這一格沒有在守」`);
+  if (!okNone) console.log('        ' + none.out.split('\n').filter((l) => /抽不到|tokens.css/.test(l)).join(' ｜ '));
 }
 
 process.exit(failed > 0 ? 1 : 0);
