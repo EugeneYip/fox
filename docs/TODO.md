@@ -122,6 +122,18 @@
 - `gate-count-stale` 會把散文讀成宣稱
 - `unbalanced-backtick` 只掃 `scan()` 進來的東西
 - 文字抽取只認單引號
+- **`check:copy` 的 `dist/` 語料只有 `.html`，還有 9 條漢字出貨在外面。**
+  第四十八圈第 6 輪量到：`src/pages/robots.txt.ts` 8 條、
+  `src/pages/rss-all.xml.ts` 1 條（feed 的說明句，訂閱的人每次都看得到）。
+  突變證明過：那一句的「臺」改成 `台`，建置過、`check:copy` 離開碼 0。
+  **不是加規則，是加語料** —— 但加 `dist/rss*.xml` 之前要先解決一件事：
+  HTML 那邊靠 class 名字（`synd__title`／`synd__summary`）把她在 YouTube
+  打的字排除掉，XML 沒有 class，那個機制搬不過去。
+  （順手量過：她 9 支影片的標題與說明共 18 段，拿真的規則掃**一條都沒命中** ——
+  所以「會湧進來」今天不成立，是事實不是保證）
+- **feed 的說明句要不要搬進 `ui.ts`。** 搬過去就進語料了，代價是新增一個
+  `en` 永遠用不到的鍵（那份 feed 是純中文的），而且 `EN_COVERAGE.pairs`
+  的基準線要跟著改。判斷不是對錯（→ 站主）
 - `SEVERITY` 那份表跟 `STRUCTURAL_IDS` 是第二份手寫清單
 - `unscanned-tracked-file` 走了第二次 `filesToScan()`
 - `repoCoverage` 那一行沒有測試
