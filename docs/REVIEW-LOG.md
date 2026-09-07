@@ -117,7 +117,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 61,900 行、3.2 MB、374 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 62,000 行、3.2 MB、375 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -61448,4 +61448,78 @@ docs/CONTENT.md 的「怎麼讓它真的上線」。推完約 80 秒會上線。
 
 `npm run verify:all` 全綠、`npm run test:tools` 44 步全通過。
 
-**下一輪：5 — 隱私與安全**
+### 2026-09-06 — 第 5 輪（第四十七圈）：隱私與安全
+
+**第四十七圈問：這一段多久沒有人碰過了？那段時間裡，它的前提變了嗎？**
+
+| 檔案 | 之後又推了 |
+|---|---|
+| `src/config/privacy.ts`、`identity.local.example.ts`、`ExternalLink.astro` | **210** |
+| `scripts/lib/identity-needles.mjs` | 202 |
+| `docs/PRIVACY.md` | 191 |
+
+#### 四個前提，四個都還成立
+
+**一、`docs/PRIVACY.md` 說稽核在看五件事** —— 那份清單寫在 191 個 commit 之前，
+而稽核從那時的十幾條長到 **33 條**。五件事各自對應的規則今天**全部都在**：
+`identity-value`、`google-fonts`／`analytics`／`third-party-cdn`、
+`raw-youtube-embed`、`target-blank-no-rel`／`external-link-rel-broken-promise`、
+`private-file-tracked`。
+
+**二、那幾個「⚠ 這個開關沒有接上」的標記還有人守。**
+把 `showBirthday` 那一格的 ⚠ 拿掉 → `privacy-doc-unwired` 響（warn，不擋）。
+
+**三、沒有 `identity.local.ts` 的時候，站不會壞。** 那是 CI 上真正的情況
+（那個檔案在 `.gitignore` 裡），而 210 個 commit 沒有人再走過一次。
+把它暫時搬走再建置：
+
+```
+建置離開碼 0 ／ about 頁上沒有 "undefined"、沒有 "null"
+check:a11y 0 ／ check:content 0
+```
+
+**四、外連的 `rel` —— `ExternalLink.astro` 210 個 commit 沒動過。**
+產出裡數：**58 個外連，58 個帶 `rel`；58 個 `target="_blank"`，
+58 個同時有 `noopener` 與 `noreferrer`。** 一個都沒漏。
+
+#### 這一輪唯一的發現是我自己的錯
+
+查第一件事的時候，我寫了一支小程式跑
+`node scripts/audit-privacy.mjs --list-rules`，把輸出當成規則 id 清單，
+然後報出來：
+
+```
+稽核現在有 26 條規則
+X 把本名、校名寫死在頁面裡        少了 identity-value
+X Google Fonts／分析／第三方 CDN  少了 google-fonts、analytics、third-party-cdn
+X 直接嵌入 YouTube iframe        少了 raw-youtube-embed
+X 外連漏掉 rel                   少了 target-blank-no-rel⋯
+X identity.local.ts 或 .env 被追蹤 少了 private-file-tracked
+```
+
+**五條全錯。** 真正的原因是：**`audit:privacy` 根本沒有 `--list-rules`** ——
+它不認得那個旗標，就當作沒看到，照常跑完整個稽核，
+而我把它那 34 行輸出當成了「26 條規則 id」。
+
+七支關卡裡只有 `check:a11y` 與 `check:workflows` 有那個旗標
+（那條待辦本來就記著）。這一輪把代價寫具體：**沒有它的時候，
+問錯的問題會拿到一個看起來像答案的東西。**
+
+改成從原始碼抽（`STRUCTURAL_IDS` ＋ `RULES` 的 id）再問一次：
+**33 條，五件事全部對得上。**
+
+**這是這一圈第三次「工具做的不是我以為的事」** ——
+前兩次是 `grep -c` 數行、`grep -rl` 配到樣式而不是標記。
+三次的共同點：**拿一個工具的輸出當答案，而沒有先確認它答的是哪個問題。**
+
+#### 沒有加 `--list-rules`
+
+它不是檢查（規則 10 不適用），但要做得把 `STRUCTURAL_IDS` 那 120 行
+搬到檔案最上面 —— 為了一個便利旗標動那麼大一塊，這一輪判斷不值得。
+代價與判準寫進 `docs/TODO.md`。
+
+#### 六道關卡
+
+`npm run verify:all` 全綠、`npm run test:tools` 44 步全通過（沒有改到程式）。
+
+**下一輪：6 — 文案與語氣**
