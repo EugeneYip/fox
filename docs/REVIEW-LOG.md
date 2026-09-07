@@ -117,7 +117,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 63,426 行、3.3 MB、397 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 63,508 行、3.4 MB、398 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -63424,3 +63424,85 @@ npm run write -- --collection=notes --title=… --slug=… --description=… --t
 試寫的那個檔案刪掉了，`git status --porcelain` 只剩 `docs/CONTENT.md` 那一處。
 
 **下一輪：4 — 平臺 feed 實測**
+
+### 2026-09-07 — 第 4 輪（第五十圈）：平臺 feed 實測
+
+**第五十圈問：照著文件做，做得完嗎？**
+
+這一支有三條寫下來的做法，其中一條**從來沒有人跑過**。三條都照著走一次。
+
+#### 一、CLAUDE.md 的「feed 掛了怎麼判斷」
+
+那一段寫得很具體：不要看別的頻道通不通，要看**她的頻道頁還在不在** ——
+`https://www.youtube.com/@FoxPoetry` 回 200，而且 canonical 指到
+`sources.mjs` 裡那個 channelId。照著打：
+
+```
+https://www.youtube.com/@FoxPoetry → 200
+<link rel="canonical" href="https://www.youtube.com/channel/UCiCJBnqbS3ECSPEM7vSmrPw"
+sources.mjs：channelId: 'UCiCJBnqbS3ECSPEM7vSmrPw'
+```
+
+一字不差。（這一輪本來就該做的那件事也順手做了：
+`npm run verify` → `✓ 200 Atom 9 筆 323ms`。）
+
+#### 二、CLAUDE.md 說「`--patterns` 那一格證明不了她的頻道沒事」
+
+照著跑一次，然後去數她的 channelId 在輸出裡出現幾次：**0 次**。
+它打的是 Medium 自己的、Astral Codex Ten、Hatena 官方、Google 的 blogspot、
+WordPress 官方部落格 —— 全部是公開樣板頻道。**那句警告今天仍然準確。**
+
+#### 三、`npm run handle <帳號名>` —— 第一次有人跑
+
+CLAUDE.md 說：「拿到帳號名之後可以用 `npm run handle <帳號名>` 一次確認它在
+哪些平臺存在，輸出會直接給可貼進 `sources.mjs` 的片段。」
+
+站上唯一公開的帳號名就是 `FoxPoetry`，所以拿它跑：
+
+```
+比對 1 個帳號名 × 19 個平臺　　　4.8 秒
+  3 個有東西，其中 1 個已經在 sources.mjs 裡
+```
+
+**輸出跟那句話講的一模一樣**：三段可以直接貼的片段，
+已經在 `sources.mjs` 裡的那一個還特別標「不用再貼一次」。
+
+而這一次跑出來的東西，正好證明了這個 repo 那條硬性限制為什麼要那樣寫：
+
+| 平臺 | 開得起來嗎 | 標題 |
+|---|---|---|
+| YouTube | ✓ | **狐說八道** —— 是她 |
+| Blogger | ✓ | **Walt & Emily** —— 一個英文詩部落格，顯然是別人 |
+| X | ✓ | **Faerie Fox Poetry** —— 名字對不上，幾乎確定不是她 |
+
+**三個裡兩個是同名的陌生人。** 沒有標題那一欄的話，照著「有東西就貼」做，
+`sources.mjs` 會多兩筆假來源 —— 而那正是 CLAUDE.md 的
+「不要編造她的平臺帳號」在擋的事。
+
+那個工具的排版也是對的：**「看標題判斷是不是她，確認之後貼進」那句話
+排在片段的前面**，不是後面。（我一開始以為警告在下面，回頭重讀才發現不是 ——
+差點把一個不存在的問題寫進紀錄。）
+
+**這一輪沒有把任何東西加進 `sources.mjs`。** 清單仍然只有一筆。
+
+#### 順帶：那支腳本檔頭舉的例子今天還是真的
+
+它的註解寫著「例如 `FoxPoetry.blogspot.com` 是存在的，但標題叫『Walt & Emily』」——
+今天跑出來一字不差。這個 repo 最常爛掉的就是文件裡的例子，而這一個沒有。
+
+#### 反貧化
+
+拿一個幾乎不可能存在的名字（`zzqx-not-a-real-handle-9174`）跑一次：
+**打勾 0 個**、結尾印「沒有明確的命中。」，而 5 個天生查不準的平臺照樣標成
+`?`（「這個平臺對任何名字都回 200」「只拿到平臺通用頁」）而不是給假的綠勾。
+所以上面那三個 ✓ 不是「它對誰都打勾」。
+
+#### 沒發現問題
+
+三條做法都走得完，而且都跟文件說的一樣。**這一輪沒有改任何東西。**
+
+#### 六道關卡
+
+`npm run verify:all` 全綠、`npm run test:tools` 44 步全通過。
+
+**下一輪：5 — 隱私與安全**
