@@ -1290,17 +1290,28 @@ if (images.length > 0 && rendered.length === 0) {
   }
 
   /*
-   * 邊界外面：`rel="icon"` 那一類與 `rel="manifest"` 也會發出請求，
-   * 而這條預算不數它們。不改判準（瀏覽器只抓一次、快取很久，
-   * 算不算「一次瀏覽的請求」可以吵），但要說出來 ——
-   * 不然「單頁請求數 2」讀起來像「這一頁只發 2 個請求」。
+   * 邊界外面：`rel="icon"` 那一類與 `rel="manifest"` 這條預算不數它們。
+   *
+   * ── 原本這裡寫「也會發出請求」，而那句話是**推測** ──────────
+   *
+   * 第 2 輪（第四十八圈）拿真的瀏覽器對 **bellafoxy.com**（不是本機）量了兩頁：
+   *
+   *   /                    2 個請求：文件 ＋ 1 個 CSS
+   *   /poems/wu-yi-xiang   3 個請求：文件 ＋ 2 個 CSS
+   *
+   * 兩頁都宣告了 4 個 `rel="icon"`／`rel="manifest"`，而**一個都沒有被抓**
+   *（`performance.getEntriesByType('resource')` 與瀏覽器的網路紀錄兩邊都是）。
+   * 瀏覽器不會在一般的頁面載入時抓宣告的圖示，manifest 也只在需要時才抓。
+   *
+   * 所以那句話改成說得出來的：**宣告了幾個**，而不是替瀏覽器決定它會不會抓。
    */
   if (reqTotals.uncountedLinks > 0) {
     empty.push(
-      `單頁請求數數不到的：${html.length} 頁合計還有 ${reqTotals.uncountedLinks} 個 ` +
+      `單頁請求數數不到的：${html.length} 頁合計宣告了 ${reqTotals.uncountedLinks} 個 ` +
         '`rel="icon"`／`rel="manifest"` 連結（平均每頁 ' +
-        `${(reqTotals.uncountedLinks / html.length).toFixed(1)} 個），也會發出請求。\n` +
-        '      它們只抓一次、快取很久，所以不算進這條預算 —— 但「2」不是這一頁請求的全部。',
+        `${(reqTotals.uncountedLinks / html.length).toFixed(1)} 個）。\n` +
+        '      抓不抓由瀏覽器決定 —— 第 2 輪（第四十八圈）在 bellafoxy.com 上量兩頁，\n' +
+        '      宣告的 4 個一個都沒被抓（一般載入時不會，manifest 要到安裝才會）。',
     );
   }
 

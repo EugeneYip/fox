@@ -1115,7 +1115,8 @@ for (const [key, value] of Object.entries(CASES)) {
     'utf8',
   );
   const loud = await check(withIcons);
-  const okLoud = /單頁請求數數不到的：1 頁合計還有 3 個/.test(loud);
+  /* 第 2 輪（第四十八圈）把「也會發出請求」改成「宣告了幾個」—— 那句話原本是推測 */
+  const okLoud = /單頁請求數數不到的：1 頁合計宣告了 3 個/.test(loud);
   if (!okLoud) failed++;
   console.log(`  ${okLoud ? '\u2713' : 'X'} 圖示與 manifest 連結會被數出來說明（3 個）`);
   if (!okLoud) console.log('        ' + (loud.split('\n').find((l) => l.includes('數不到')) ?? '（那一行沒印）'));
