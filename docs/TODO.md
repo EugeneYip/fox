@@ -169,6 +169,14 @@
   的基準線要跟著改。判斷不是對錯（→ 站主）
 - `SEVERITY` 那份表跟 `STRUCTURAL_IDS` 是第二份手寫清單
 - `unscanned-tracked-file` 走了第二次 `filesToScan()`
+- **六條隱私規則的「接線」沒有人守。** 第四十九圈第 5 輪把 33 條一條一條弄啞：
+  `analytics`、`external-link-rel-broken-promise`、`leftover-placeholder`、
+  `raw-youtube-embed`、`target-blank-no-rel`、`third-party-cdn` 弄啞之後
+  **兩套隱私測試都還是綠的**。它們的正則有人守得很細（`test-privacy-rules.mjs`
+  每條都有 `catch`／`skip`），但那一支 import 庫、不執行 `audit-privacy.mjs` ——
+  沒有人驗「稽核真的拿那些正則去掃了語料，而且把掃到的報出來」。
+  `test-privacy-structural.mjs` 的 `CASES` 涵蓋 33 條裡的 20 條。
+  說不出過去十輪裡補那六個案例會擋下哪一次（規則 10）（→ 5 隱私與安全）
 - `repoCoverage` 那一行沒有測試
 - `gen-platform-docs.mjs` 沒有測試檔
 - `test-verify-sources.mjs` 的 helper 只收 stdout
