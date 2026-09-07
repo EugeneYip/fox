@@ -154,6 +154,12 @@
   （併成兩行的話 `gate-missing-in-check` 會失去對象）
 - `gate-count-stale` 會把散文讀成宣稱
 - `unbalanced-backtick` 只掃 `scan()` 進來的東西
+- **`docs/` 讀不到的時候，`rule-not-documented` 的判準會自己縮水。**
+  第四十九圈第 6 輪用假 root 量到：拿掉 `docs/` 之後那一條從「要同時寫進
+  CLAUDE.md 與 docs/CONTENT.md」變成「寫進 CLAUDE.md 就好」，exit 0、沒有訊息；
+  而「每條規則都有反例」那一格反過來指控文件缺 4 個反例（其實是檔案不見了）。
+  跟 `--scripts=` 那條同一族：真的跑的時候 `docs/` 一定在，
+  而規則 10 也說不出過去十輪裡它會擋下哪一次（→ 6 文案與語氣）
 - 文字抽取只認單引號
 - **`check:copy` 的 `dist/` 語料只有 `.html`，還有 9 條漢字出貨在外面。**
   第四十八圈第 6 輪量到：`src/pages/robots.txt.ts` 8 條、
