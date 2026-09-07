@@ -117,7 +117,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 61,000 行、3.2 MB、366 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 61,100 行、3.2 MB、367 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -60837,4 +60837,76 @@ X 停在第 37 步／共 44 步：npm run test:ci-sim
 
 都寫進 [docs/TODO.md](TODO.md) 了（規則 9：不在紀錄裡結轉）。
 
-**下一輪：5 — 隱私與安全**
+### 2026-09-06 — 第 5 輪（第四十六圈）：隱私與安全
+
+**第四十六圈問：這一段如果拿掉，輸出會差在哪裡？**
+
+#### 拿掉兩個機制
+
+| 拿掉什麼 | 誰說話 |
+|---|---|
+| `.gitignore` 裡擋 `identity.local.ts` 的那一行 | `audit:privacy`（`gitignore-weakened`），離開碼 1 |
+| `astro.config` 的整段 CSP | `audit:privacy`（`csp-missing`）＋ `check:perf`，離開碼 1 |
+
+兩個都守得住。
+
+#### 然後量到一條邊界，而它從來沒有被說出來過
+
+先確認今天的狀態（**全程只印數量，不印值**）：
+
+- `identity.local.ts` 在、**沒有被 git 追蹤** ✓，`.gitignore` 第 17 行擋著
+- 身分規則這次有執行：8 個值，來源 `local-file`
+- `about.astro` 真的呼叫 `reveal()`（`realName`、`education`、`location`）
+- `dist/about/index.html`、`dist/en/about/index.html`、`dist/index.html`
+  各命中 **0 個** needle —— 開關全關著
+
+接著把 `privacy.ts` 的 `showRealName` 從 `false` 翻成 `true`，重新建置：
+
+```
+dist/about/index.html 命中 needle 數：1
+audit:privacy 離開碼 0 ／ 說了：reveal-key-unused（跟這件事無關的舊 warn）
+```
+
+**值真的送出去了，而這支稽核一個字都沒說。**
+
+**那不是 bug，是分工。** 身分規則掃的是 `SCAN_DIRS`
+（`src`、`scripts`、`public`、`docs`、`.github`、`.claude`）——
+`dist/` 不在裡面，`NOT_IN_REPO` 還明講跳過它。
+這支稽核守的是「個資不進 **repo**」，而 `dist/` 在 `.gitignore` 裡；
+值要不要出現在**站上**是 `privacy.ts` 那幾個開關的事，那是站主的決定。
+用稽核去擋它，等於讓那個功能不能用。
+
+#### 所以沒有加規則，加了一個數字
+
+照規則 10：說不出它在過去十輪會擋下哪一次事故 —— 因為它**不該擋**。
+但那個數字從來沒有人算過，而它是這個站**唯一真的把個資送出去的那條路**。
+
+`audit:privacy` 的「身分規則：8 個值」那一行底下多一句，只說事實、不改離開碼：
+
+```
+身分規則：8 個值，來自 identity.local.ts（8 個值）⋯
+  站上有幾個：**0 個**（讀了 dist/ 的 51 個文字檔）。privacy.ts 的開關全關著的時候就是這樣。
+```
+
+把 `showRealName` 翻成 `true` 之後：
+
+```
+  站上有幾個：**2 個**出現在產出裡（2／51 個檔案）。
+  那是 privacy.ts 的開關決定的，**不是問題**⋯⋯ 要收回去就把對應的開關關掉。
+```
+
+（2 個是因為中英兩個寫法都算一個值。）**永遠只印數量與檔案數，不印值本身。**
+
+`test-privacy-structural.mjs` 加了 3 格：dist 裡有值時數得出來、
+那不算違規、以及**沒有值時要說「0 個」**（少了最後那格，
+把判準寫成「一律印 1」也會綠）。
+
+#### 六道關卡
+
+`npm run verify:all` 全綠、`npm run test:tools` 44 步全通過。
+
+#### 這一輪新發現的待辦
+
+寫進 [docs/TODO.md](TODO.md)。
+
+**下一輪：6 — 文案與語氣**

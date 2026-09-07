@@ -1991,6 +1991,58 @@ if (identity.source === 'none') {
   }
 } else {
   console.log(`\n身分規則：${identity.needles.length} 個值，來自 ${identity.detail}`);
+  /*
+   * ── 這幾個值，現在有幾個真的在站上？ ──────────────────
+   *
+   * 第 5 輪（第四十六圈）問「這一段如果拿掉，輸出會差在哪裡」時量到的邊界：
+   *
+   *   身分規則掃的是 `SCAN_DIRS`（`src`、`scripts`、`public`、`docs`⋯⋯）——
+   *   **`dist/` 不在裡面**（`NOT_IN_REPO` 明講跳過它）。
+   *
+   * 那是對的：這支稽核守的是「個資不進 **repo**」，而 `dist/` 在 `.gitignore` 裡。
+   * 值要不要出現在**站上**，是 `privacy.ts` 那幾個開關的事 —— 那是站主的決定，
+   * 不該由稽核來擋。
+   *
+   * 實測：把 `showRealName` 從 `false` 翻成 `true`，
+   * `dist/about/index.html` 就出現 1 個值，而這支**離開碼 0、一個字都沒說**。
+   * 那不是 bug，是分工。
+   *
+   * **但那個數字沒有人算過。** 這一行只說事實、不判斷、不改離開碼：
+   * 它是這個站唯一真的把個資送出去的那條路，而站主看得到的地方沒有它。
+   * 永遠只印**數量與檔案數**，不印值本身。
+   */
+  if (identity.needles.length > 0) {
+    /** @type {Set<string>} 出現在產出裡的值（只拿來數，不印） */
+    const shipped = new Set();
+    let filesWithAny = 0;
+    let scannedBuilt = 0;
+    if (existsSync(resolve(ROOT, 'dist'))) {
+      for await (const f of walk(resolve(ROOT, 'dist'))) {
+        const text = await readFile(f, 'utf8').catch(() => '');
+        if (text === '') continue;
+        scannedBuilt += 1;
+        const hits = identity.needles.filter((n) => text.includes(n));
+        if (hits.length === 0) continue;
+        filesWithAny += 1;
+        for (const h of hits) shipped.add(h);
+      }
+    }
+    if (scannedBuilt === 0) {
+      console.log('  站上有幾個：沒有比對 —— 讀不到 dist/（先跑一次 npm run build）。');
+    } else if (shipped.size === 0) {
+      console.log(
+        `  站上有幾個：**0 個**（讀了 dist/ 的 ${scannedBuilt} 個文字檔）。` +
+          'privacy.ts 的開關全關著的時候就是這樣。',
+      );
+    } else {
+      console.log(
+        `  站上有幾個：**${shipped.size} 個**出現在產出裡（${filesWithAny}／${scannedBuilt} 個檔案）。\n` +
+          '  那是 privacy.ts 的開關決定的，**不是問題**（這支稽核守的是「不進 repo」，\n' +
+          '  而 dist/ 在 .gitignore 裡）—— 但那是這個站唯一真的把個資送出去的路，\n' +
+          '  所以把數字說出來。要收回去就把對應的開關關掉。',
+      );
+    }
+  }
 }
 
 /**

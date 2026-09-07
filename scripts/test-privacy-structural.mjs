@@ -982,6 +982,40 @@ const crawlerRow = (/** @type {string} */ text) => `| \`allowAiCrawlers\` | \`fa
     await build({ 'src/pages/about.astro': `<p>${NEEDLE}</p>\n` }),
     withNeedle,
   );
+  /*
+   * ── 「站上有幾個」那一行 ──────────────────────────
+   *
+   * 第 5 輪（第四十六圈）加的。那一輪量到的邊界：身分規則掃 `SCAN_DIRS`，
+   * 而 `dist/` **不在裡面** —— 所以把 `privacy.ts` 的開關翻成 `true`
+   * 之後值會出現在產出裡，而這支稽核離開碼 0、一個字都不說。
+   * 那不是 bug（它守的是「不進 repo」，`dist/` 在 `.gitignore` 裡），
+   * 但那個數字沒有人算過，而它是這個站唯一真的把個資送出去的路。
+   *
+   * 兩個方向都要驗：dist 裡有值要數得出來，沒有值要說「0 個」。
+   * 只驗前者的話，把判準寫成「一律印 1」也會綠。
+   */
+  const shippedYes = await audit(
+    await build({ 'dist/about/index.html': `<!DOCTYPE html><html lang="zh-Hant-TW"><body><p>${NEEDLE}</p></body></html>\n` }),
+    withNeedle,
+  );
+  const okShip1 = /站上有幾個：\*\*1 個\*\*出現在產出裡/.test(shippedYes.out);
+  if (!okShip1) failed++;
+  console.log(`  ${okShip1 ? '✓' : 'X'} 值出現在 dist/ 裡時，數得出來（而且不擋）`);
+  if (!okShip1) console.log('        ' + (shippedYes.out.split('\n').find((l) => l.includes('站上有幾個')) ?? '（沒印）'));
+
+  const okShipQuiet = shippedYes.code === 0 || !shippedYes.out.includes('[identity-value] dist/');
+  if (!okShipQuiet) failed++;
+  console.log(`  ${okShipQuiet ? '✓' : 'X'} 那不算違規（dist/ 不在 SCAN_DIRS 裡）`);
+
+  const shippedNo = await audit(
+    await build({ 'dist/about/index.html': '<!DOCTYPE html><html lang="zh-Hant-TW"><body><p>沒有東西</p></body></html>\n' }),
+    withNeedle,
+  );
+  const okShip0 = /站上有幾個：\*\*0 個\*\*/.test(shippedNo.out);
+  if (!okShip0) failed++;
+  console.log(`  ${okShip0 ? '✓' : 'X'} 產出裡沒有值時說「0 個」（反向案例）`);
+  if (!okShip0) console.log('        ' + (shippedNo.out.split('\n').find((l) => l.includes('站上有幾個')) ?? '（沒印）'));
+
   const ok3 = inNormal.out.includes('[identity-value]');
   if (!ok3) failed++;
   console.log(`  ${ok3 ? '✓' : 'X'} 一般檔案含個資：要抓`);
