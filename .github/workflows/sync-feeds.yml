@@ -1,6 +1,9 @@
 # 定時去各平臺把新文章抓回來，有變動就 commit。
 #
-# commit 之後會觸發 deploy.yml（因為推到 main），網站就自動更新了。
+# commit 之後會**明確叫一次** deploy.yml（`gh workflow run`），網站才會更新。
+# 不是靠推到 main —— GITHUB_TOKEN 推的 push 不會觸發別的 workflow，
+# 理由寫在底下「觸發部署」那一步。（第 7 輪〔第四十八圈〕：這一行原本
+# 寫「因為推到 main」，跟同一個檔案 100 行之後的說明剛好相反。）
 #
 # 需要的 secrets（Settings → Secrets and variables → Actions）：
 #   YOUTUBE_API_KEY  選填。沒有的話 YouTube 來源會被略過，其他照跑。
