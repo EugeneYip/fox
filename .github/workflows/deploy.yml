@@ -6,9 +6,27 @@
 #      （DNS 的設定見 docs/DEPLOY.md）
 name: 部署到 GitHub Pages
 
+# ── 只在「會改到 dist/」的路徑上跑 ────────────────────────────
+#
+# 2026-09-06 量到：那一天推了 12 次，每一次都跑完整套部署（約 110 秒），
+# 而其中大部分的 commit 只動到 scripts/ 與 docs/ —— 那些**不可能改到 dist/**。
+#
+# 所以這裡只認真的會影響產出的路徑。其餘的交給 check.yml
+# （它同時多了一個 push 觸發，所以那些 commit 仍然跑得到同一套關卡，
+#  只是不部署）。兩份的 paths 是互補的，而 check:workflows 有一條
+# `path-uncovered` 在守「每一個進版控的頂層路徑，至少有一份 workflow 會跑」。
 on:
   push:
     branches: [main]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'astro.config.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - '.nvmrc'
+      - '.github/**'
   # 讓 sync-feeds 更新完資料後可以觸發重新部署
   workflow_dispatch:
 

@@ -90,6 +90,29 @@
    npm run test:tools > /tmp/tt.txt 2>&1; echo "離開碼 $?"
    ```
 
+9. **待辦寫進 [docs/TODO.md](TODO.md)，不要在紀錄裡結轉。**
+
+   第 3 輪（第四十六圈）改的。在那之前，每一筆紀錄的結尾都有一段
+   「上一輪與更早的都還在（⋯）」，**原封不動抄一次** —— 抄到 60 條、44 行，
+   而且沒有人回頭看它們還成不成立（第四十五圈整整一圈在問這件事，
+   量出四條早就不成立）。
+
+   現在：紀錄裡只寫**這一輪新發現的**；處理掉的就去 `docs/TODO.md` 刪掉那一行。
+   「還成不成立」從此是 `git log docs/TODO.md` 看得到的事，
+   而每一輪省下四十幾行的複製。
+
+10. **新增一條檢查之前，要說得出它在過去十輪裡會擋下哪一次真的事故。**
+
+    說不出來就先記進 `docs/TODO.md`，不要當場加。
+
+    理由是量出來的：第 3 輪（第四十六圈）數了近 30 個 commit 動到的檔案 ——
+    `docs/` 50.4%、`scripts/` 46.3%、**`src/`（網站本體）0.8%**。
+    檢查工具已經是網站本體的 **4.3 倍**（36,648 行對 8,554 行），
+    而站上只有 6 篇內容。
+
+    「再加一條檢查」永遠是現成的工作，所以循環會一直往那裡去。
+    這一條是為了讓它停下來問一次：**這一條真的擋得到什麼嗎？**
+
 ---
 
 ## 這份檔案有多大，怎麼讀
@@ -60707,50 +60730,7 @@ X 停在第 37 步／共 44 步：npm run test:ci-sim
 
 **而這件事之所以查得到，是因為這一次留了輸出。** 所以把它寫成規則 8
 （跑關卡一律導到檔案，不要 `/dev/null`）。
-- 上一輪與更早的都還在（「拿掉會怎樣」這件事本身沒有東西在守、
-  `:focus-visible` 拿掉沒人說話（→ 站主）、`nav-label` 是 warn、
-  「`aria-current` 有沒有看得見的對應」沒有東西在守、
-  剩下那 6 個沒配到的屬性名（→ 站主）、`BORDERISH` 沒有反面案例、
-  中途早退的 `process.exit()` 14 處、沒有人在守那 21% 的緩衝區餘裕、
-  「跑完測試工作樹不能變」沒有人自動驗、
-  第四十五圈第 7 輪的 `ci:sim` 有一次紅得莫名、
-  同時跑兩份 `test-perf-budgets` 仍然會紅、
-  `membersOf` 只展開一層、`gate-count-stale` 會把散文讀成宣稱、
-  為什麼不讓 `check.yml` 直接跑三行、
-  `unbalanced-backtick` 只掃 `scan()` 進來的東西、
-  `EN_COVERAGE.pct` 仍然是手寫的 100、
-  `tags.count_one` 還是沒有證據（→ 站主）、文字抽取只認單引號、
-  `SEVERITY` 那份表跟 `STRUCTURAL_IDS` 是第二份手寫清單、
-  `unscanned-tracked-file` 走了第二次 `filesToScan()`、
-  `repoCoverage` 那一行沒有測試、`docs/PRIVACY.md` 沒有規則清單（→ 站主）、
-  `gen-platform-docs.mjs` 沒有測試檔、
-  `test-verify-sources.mjs` 的 helper 只收 stdout、
-  「來源檢查」那一半沒有 0 筆的總結句、
-  `note` 的 `confidence` 還是 `verified`（→ 站主）、
-  `sync-feeds.mjs` 四個策略沒有匯出、`check-handle.mjs` 不能離線跑、
-  `manifest-drift` 現在是兩件事、`icons[]` 沒驗 `sizes`、
-  `git` 那 5 個指令沒人驗、微網誌型平臺的退路、
-  `CNAME` 的 content-type 是 `octet-stream`、
-  `--w-prose`／`--w-content` 那兩份手抄值、
-  `test-contrast` 把 `#faf6ee` 寫死在 fixture 裡、
-  `images` 還是副檔名認的、CSS 那三條沒有被 `sawTags` 涵蓋、
-  這份檔案自己的頁首也是個沒人守的數字、
-  「71～108 秒」也是一個沒人守的數字、`CONTENT.md` 現在 588 行（→ 站主）、
-  `MEASURED` 的日期沒有東西在守、`probe:served` 只量 5 頁而且寫死、
-  「雜湊資源只有 `max-age=600`」是這個主機做不到（→ 站主）、
-  `check:content` 那一半還是只看 `syndication.json`、
-  排程跑的 `sync:health` 沒有 `--strict`（→ 站主）、
-  `CHANGE_ME` 那條路連 failures 都不加、
-  `SCHEMA_STRUCTURAL` 3 個什麼都沒擋、那 4 條什麼都沒擋的豁免（→ 站主）、
-  沒有東西在守「空狀態不要自相矛盾」、英文那一半沒有人系統地讀過、
-  `box-shadow` 算不算邊、自訂屬性帶顏色的間接層、
-  `--lh-loose` 要不要接上去（→ 站主）、
-  那個查法只看得到「值一字不差」的複本、
-  那 59 條「元件沒算繪過」沒有人在守、
-  「要跑起來才有」那 25 條這個方法看不到、
-  分類判準是兩條寫死的正則、`writing-mode` 只有一個檔案在用、
-  七支關卡只有兩支有 `--list-rules`、
-  以及第二十三圈記的三件站主決定（→ 站主））
+（結轉的待辦搬到 [docs/TODO.md](TODO.md) 了 —— 見這一輪的規則 9。）
 
 ### 2026-09-06 — 第 3 輪（第四十六圈）：內容結構
 

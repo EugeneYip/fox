@@ -29,6 +29,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { resolve, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import { deployStepsFrom, withoutComments } from './lib/deploy-steps.mjs';
 import { documentationDuty } from './lib/copy-rules.mjs';
 
@@ -71,6 +72,7 @@ const RULE_IDS = [
   'dispatch-target-missing',
   'step-output-unset',
   'gate-count-stale',
+  'path-uncovered',
   'rule-undocumented',
 ];
 
@@ -138,6 +140,95 @@ for (const n of files) {
 const scripts = new Set(
   Object.keys(JSON.parse(await readFile(resolve(ROOT, 'package.json'), 'utf8')).scripts ?? {}),
 );
+
+/*
+ * ── 每一個進版控的路徑，至少有一份 workflow 會跑 ────────────
+ *
+ * 2026-09-06 量到：那一天推了 12 次，每一次都跑完整套部署（約 110 秒），
+ * 而多數 commit 只動到 `scripts/` 與 `docs/` —— 那些不可能改到 `dist/`。
+ * 所以 `deploy.yml` 加了 `paths`（只認會影響產出的），
+ * `check.yml` 加了 push 觸發跑其餘的。
+ *
+ * **而那一刀切下去就多了一個新的洞**：兩份的 `paths` 加起來要蓋住全部，
+ * 少了誰，動到那個路徑的 commit 就**一道 CI 都不會跑** ——
+ * 而畫面上什麼都不會發生（GitHub 只會顯示「沒有符合的 workflow」）。
+ *
+ * 判準拿 `git ls-files` 的頂層路徑去問那幾份 workflow 的 `paths` ——
+ * 兩邊都不是手寫的清單。（跟 `audit:privacy` 的 `unscanned-dir` 同一個做法。）
+ */
+{
+  /** 一條 workflow 的 `paths:` 樣式認不認得這個頂層路徑 */
+  const covers = (/** @type {string} */ glob, /** @type {string} */ top) => {
+    if (glob === top) return true;
+    if (glob.startsWith(`${top}/`)) return true;
+    if (glob.startsWith('*.')) return top.endsWith(glob.slice(1));
+    return false;
+  };
+  /*
+   * 逐行走，不用一條大正則。
+   *
+   * 第一版是正則（`push:` 之後那一段），而它在真的 workflow 上配得到、
+   * 在測試的 fixture 上配不到 —— 於是那一格說「沒有比對」而不是紅。
+   * 又一次「判準是猜的」。縮排本來就是 YAML 自己的結構，照著走就好。
+   *
+   * @type {Map<string, string[]>} workflow → 它 push 的 paths
+   */
+  const pushPaths = new Map();
+  for (const [n, bare] of bareTexts) {
+    /** @type {string[]} */
+    const globs = [];
+    let inPush = false;
+    let inPaths = false;
+    for (const raw of bare.split('\n')) {
+      if (raw.trim() === '') continue;
+      const indent = raw.length - raw.trimStart().length;
+      const body = raw.trim();
+      if (indent === 0) { inPush = false; inPaths = false; continue; }
+      if (indent === 2) { inPush = body.startsWith('push:'); inPaths = false; continue; }
+      if (!inPush) continue;
+      if (indent === 4) { inPaths = body.startsWith('paths:'); continue; }
+      if (inPaths && body.startsWith('-')) {
+        const g = /-\s*'?([^'\s]+)'?/.exec(body);
+        if (g) globs.push(g[1]);
+      }
+    }
+    if (globs.length > 0) pushPaths.set(n, globs);
+  }
+  /** @type {string[] | null} */
+  let tracked = null;
+  try {
+    tracked = execFileSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+      .split('\n')
+      .filter(Boolean);
+  } catch {
+    tracked = null;
+  }
+  if (tracked === null || pushPaths.size === 0) {
+    /* 主體 0 才是實話 —— 問不到就說問不到 */
+    saw('path-uncovered', 0);
+    console.log(
+      `\n  ⚠ 路徑涵蓋沒有比對：${tracked === null ? '這裡不是 git repo' : '沒有任何 workflow 的 push 帶 paths'}。`,
+    );
+  } else {
+    const tops = [...new Set(tracked.map((f) => (f.includes('/') ? f.slice(0, f.indexOf('/')) : f)))].sort();
+    saw('path-uncovered', tops.length);
+    for (const top of tops) {
+      const who = [...pushPaths]
+        .filter(([, globs]) => globs.some((/** @type {string} */ g) => covers(g, top)))
+        .map(([n]) => n);
+      if (who.length > 0) continue;
+      add(
+        relative(ROOT, resolve(DIR, [...pushPaths.keys()][0])),
+        0,
+        'path-uncovered',
+        `版控裡有 \`${top}\`，而沒有任何一份 workflow 的 push paths 認得它 —— ` +
+          '動到那個路徑的 commit **一道 CI 都不會跑**，而畫面上什麼都不會發生。\n' +
+          `      現在有 paths 的是：${[...pushPaths].map(([n, g]) => `${n}（${g.length} 條）`).join('、')}。\n` +
+          '      改法：把它加進其中一份 —— 會改到 dist/ 的加 deploy.yml，其餘加 check.yml。',
+      );
+    }
+  }
+}
 
 for (const name of files) {
   const path = resolve(DIR, name);

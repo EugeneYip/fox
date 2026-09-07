@@ -270,6 +270,10 @@ repo 是公開的，寫進註解等於發佈它。清單上還是只有一筆，
   ```bash
   git checkout --theirs src/data/syndication.json && git add src/data/syndication.json && git rebase --continue
   ```
+- **待辦寫進 [docs/TODO.md](docs/TODO.md)** —— 那是一份會被**編輯**的清單
+  （做完就刪掉那一行，發現新的就加一行），不是在每一輪紀錄裡結轉一次。
+  第四十六圈第 3 輪改的：在那之前它是每輪原封不動抄一份，抄到 60 條、
+  而且沒有人回頭看它們還成不成立。
 - **不要把狀態留在腦袋裡。** 決定了什麼、找到什麼問題、下一步是什麼，
   都要寫進 `docs/REVIEW-LOG.md`（逐輪的完整紀錄）或 `docs/STATE.md`
   （只放「現在到哪了、接下來做什麼」——**不要把輪次紀錄抄一份過去**，

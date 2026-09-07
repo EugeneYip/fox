@@ -1,13 +1,33 @@
-# 每次 push 與 PR 都跑：型別檢查、建置、隱私稽核。
-# 目的是在推上去之前就抓到問題，而不是等網站壞了才發現。
-# 這個 workflow 只管 PR。
+# 型別檢查、建置、隱私稽核 —— 跟 deploy.yml 同一套關卡，但不部署。
 #
-# 推到 main 的時候不跑 —— deploy.yml 已經會跑同一套 verify:all，
-# 兩個都跑等於每次 push 做兩份一模一樣的工作。
-# 分工是：這裡在合併**之前**給回饋，deploy.yml 在發佈**之前**把關。
+# 分工（2026-09-06 改）：
+#
+#   deploy.yml  只在**會改到 dist/** 的路徑上跑（src/、public/、設定檔）
+#   這一份      跑其餘的路徑（scripts/、docs/、根目錄那些檔案）
+#
+# 在那之前這一份**只在 PR 上觸發**，而這個專案是直接推 main、
+# 一個 PR 都沒開過 —— 也就是說它幾乎沒有跑過，而每一次推都跑完整套部署。
+# 現在兩份的 paths 是互補的：每一個 commit 都跑得到同一套關卡，
+# 但只有真的會改到產出的才部署。
+#
+# 那個「互補」不是靠人記得：check:workflows 有一條 `path-uncovered`
+# 在守「每一個進版控的頂層路徑，至少有一份 workflow 的 paths 認得它」。
 name: 檢查
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - 'docs/**'
+      - '.claude/**'
+      - '*.md'
+      - '.editorconfig'
+      - '.env.example'
+      - '.gitattributes'
+      - '.gitignore'
+      - '.npmrc'
+      - 'LICENSE'
   pull_request:
   workflow_dispatch:
 

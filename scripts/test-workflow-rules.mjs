@@ -967,6 +967,7 @@ try {
     const TESTED_ELSEWHERE = new Map([
       ['gate-count-stale', '上面「N 道關卡」那個區塊'],
       ['rule-undocumented', '上面「規則有沒有文件」那個區塊'],
+      ['path-uncovered', '底下「每個路徑都有 workflow 跑」那個區塊（它要一個真的 git repo，CASES 的假 repo 沒有）'],
     ]);
     /*
      * ── 這份豁免清單自己也要對得上 ──────────────────────
@@ -1206,6 +1207,63 @@ try {
 }
 
 console.log('─'.repeat(64));
+/*
+ * ── 每個路徑都有 workflow 跑 ──────────────────────────
+ *
+ * `path-uncovered` 沒辦法用 CASES 的形狀測：它的判準是 `git ls-files`，
+ * 而 CASES 的假 repo 不是 git repo（那時候它只會說「沒有比對」）。
+ * 所以這裡自己做一個真的：`git init` ＋ `git add`，不需要 commit
+ *（`git ls-files` 看的是 index）。
+ *
+ * 為什麼要有這一格：第 3 輪（第四十六圈）給 `deploy.yml` 加了 `paths`
+ *（只在會改到 `dist/` 的路徑上跑），`check.yml` 加 push 跑其餘的。
+ * 那一刀切下去就多了一個新的洞 —— 兩份加起來少蓋到誰，
+ * 動到那個路徑的 commit **一道 CI 都不會跑**，而畫面上什麼都不會發生。
+ */
+{
+  console.log('\n每個路徑都有 workflow 跑\n' + '─'.repeat(64));
+  /** @param {string} name @param {string[]} deployPaths */
+  const withRepo = async (name, deployPaths) => {
+    const dir = await mkdtemp(join(tmpdir(), `fox-wf-git-${name}-`));
+    await mkdir(join(dir, '.github/workflows'), { recursive: true });
+    await mkdir(join(dir, 'tools'), { recursive: true });
+    await writeFile(join(dir, 'package.json'), JSON.stringify({ scripts: { 'verify:all': 'x', 'test:units': 'x', 'test:built': 'x' } }), 'utf8');
+    await writeFile(join(dir, '.nvmrc'), '22\n', 'utf8');
+    await writeFile(join(dir, 'tools/notes.md'), '筆記\n', 'utf8');
+    await writeFile(
+      join(dir, '.github/workflows/deploy.yml'),
+      ['name: Deploy', 'on:', '  push:', '    branches: [main]', '    paths:',
+       ...deployPaths.map((x) => `      - '${x}'`),
+       'jobs:', '  build:', '    steps:',
+       '      - run: npm run verify:all', '      - run: npm run test:units',
+       '      - run: npm run test:built', ''].join('\n'),
+      'utf8',
+    );
+    await run('git', ['init', '-q'], { cwd: dir });
+    await run('git', ['add', '-A'], { cwd: dir });
+    let out = '';
+    try {
+      ({ stdout: out } = await run('node', [resolve(ROOT, 'scripts/check-workflows.mjs'), `--root=${dir}`]));
+    } catch (err) {
+      out = String(/** @type {{ stdout?: string }} */ (err)?.stdout ?? '');
+    }
+    await rm(dir, { recursive: true, force: true });
+    return out;
+  };
+
+  const bad = await withRepo('bad', ['src/**']);
+  const okBad = /\[path-uncovered\]/.test(bad) && /版控裡有 `tools`/.test(bad);
+  if (!okBad) failed++;
+  console.log(`  ${okBad ? '✓' : 'X'} 有路徑沒被任何 workflow 蓋到時點名`);
+  if (!okBad) console.log('        ' + (bad.split('\n').find((l) => l.includes('path-uncovered')) ?? '（沒印）'));
+
+  const good = await withRepo('good', ['src/**', 'tools/**', 'package.json', '.nvmrc', '.github/**']);
+  const okGood = !/\[path-uncovered\]/.test(good);
+  if (!okGood) failed++;
+  console.log(`  ${okGood ? '✓' : 'X'} 全部蓋到時不亂報（反向案例）`);
+  if (!okGood) console.log('        ' + (good.split('\n').find((l) => l.includes('path-uncovered')) ?? ''));
+}
+
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
 process.exit(failed > 0 ? 1 : 0);
 

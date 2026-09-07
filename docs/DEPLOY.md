@@ -273,7 +273,8 @@ Pages 不能自訂回應標頭，要改只能換主機。
 | `test-file-not-run` | `scripts/` 底下的測試檔沒有任何 script 會跑到它，或 script 指到不存在的檔案 |
 | `machine-path-in-config` | 設定檔裡有只在一臺機器上成立的絕對路徑（`.npmrc` 真的踩過一次） |
 | `gate-count-stale` | 四份文件裡的「N 道關卡」跟 `npm run verify:all` 的步數對不上 |
-| `rule-undocumented` | 上面這十一條有沒有寫在這一份裡 |
+| `path-uncovered` | 版控裡有一個頂層路徑，兩份 workflow 的 `paths` 都不認得它 —— 動到它的 commit 一道 CI 都不會跑 |
+| `rule-undocumented` | 上面這十二條有沒有寫在這一份裡 |
 
 **這一支沒有排除任何一條** —— 十一條都是改 workflow 的人會撞到的東西，
 所以每一條都要出現在這張表裡。加規則的時候一起加一列，
