@@ -117,7 +117,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 62,100 行、3.2 MB、376 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 62,200 行、3.2 MB、377 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -61600,4 +61600,83 @@ docs/ARCHITECTURE.md 與 README.md 都說全站的 JavaScript 有 5 段，產出
 
 `npm run verify:all` 全綠、`npm run test:tools` 44 步全通過。
 
-**下一輪：7 — 建置與 CI**
+### 2026-09-07 — 第 7 輪（第四十七圈）：建置與 CI
+
+**第四十七圈問：這一段多久沒有人碰過了？那段時間裡，它的前提變了嗎？**
+
+**這一輪沒有改任何東西。** 兩個前提都還成立，而其中一個是**第一次在真的
+執行紀錄上驗到**的。
+
+| 檔案 | 之後又推了 |
+|---|---|
+| **`.nvmrc`、`tsconfig.json`** | **212** |
+| `scripts/ci-sim.mjs` | 127 |
+| `sync-feeds.yml` | 88 |
+
+#### 一、Node 的版本，四個地方各說一句
+
+`.nvmrc` 212 個 commit 沒動過。把四個來源一次擺出來：
+
+| 誰 | 說什麼 |
+|---|---|
+| `.nvmrc` | `22`（解析成 22.x 最新的） |
+| `package.json` 的 `engines.node` | `>=22.19.0` |
+| CI 上真的裝的 | **v22.23.2**（從 deploy 的 log 讀的） |
+| 這臺機器 | **v22.15.1** —— **低於** engines |
+| `engine-strict` | **false** |
+
+兩件事因此成立：
+
+- **CI 沒問題**（22.23.2 ≥ 22.19.0），但那是 `.nvmrc` 寫「22」剛好解析到夠新的版本，
+  **不是保證** —— 有人把它釘成 `22.15` 的話，CI 會裝一個違反 `engines` 的版本。
+- **`engines` 從來沒有被強制過**：`engine-strict` 是 `false`，
+  所以本機 v22.15.1 跑了一整個工作階段，`npm ci`／`npm ls` 一次都沒有抱怨。
+
+**而這件事有人在說**：`check:workflows` 印
+「目前的 Node 是 v22.15.1，低於 package.json 宣告的 >=22.19.0⋯要對齊的話：
+`nvm install 22.19.0`」。是 note 不是紅燈 —— 那是刻意的（本機版本落後不該擋人做事）。
+
+沒有補「`.nvmrc` 要滿足 `engines`」的檢查：`22` 解析成哪一版**靜態決定不了**
+（要問網路或 CI 的 log），而規則 10 也說不出它擋下過什麼。
+
+#### 二、那個 `workflow_dispatch` 的繞路，第一次在真的紀錄上驗到
+
+`sync-feeds.yml` 裡那段註解是這個 repo 最重要的 CI 知識之一：
+
+> 上面那個 `git push` 是用 `GITHUB_TOKEN` 做的，而 GitHub 明文規定
+> 「Events triggered by the GITHUB_TOKEN will not create a new workflow run」⋯
+> 也就是說 push 事件**不會**觸發 `deploy.yml` ——
+> 同步抓回來的新影片會躺在 repo 裡，網站永遠不更新，**而且完全沒有徵兆**。
+
+那一直是「照文件推理出來的」。這一輪去對真的執行紀錄：
+
+| sync commit（UTC） | 對應的 deploy |
+|---|---|
+| 09-05 04:08 | `workflow_dispatch` 04:08 success |
+| 09-05 15:00 | `workflow_dispatch` 15:00 success |
+| 09-06 04:15 | `workflow_dispatch` 04:15 success |
+
+**三比三，時間戳一模一樣，全部成功。** 最近 25 次 deploy 裡，
+`workflow_dispatch` 觸發的正好就是這三次。繞路**確實在用，而且確實有效**。
+
+#### 三、順手驗一件我自己兩輪前改動可能弄壞的事
+
+第 3 輪給 `deploy.yml` 加了 `paths`。`paths` 只作用在 `push` 上，
+`workflow_dispatch` 沒有那個限制 —— 所以同步那條路不受影響。
+（而且 `src/data/syndication.json` 在 `src/**` 底下，本來就在 `paths` 裡。）
+
+那是推理。**能不能被守住**才是重點，所以突變一次：
+把 `deploy.yml` 的 `workflow_dispatch` 整段拿掉 ——
+
+```
+X [dispatch-target-missing] deploy.yml 沒有宣告 workflow_dispatch，gh workflow run 叫不動它。
+離開碼 1
+```
+
+守得住。
+
+#### 六道關卡
+
+`npm run verify:all` 全綠、`npm run test:tools` 44 步全通過（沒有改到程式）。
+
+**下一輪：8 — 視覺與版面**

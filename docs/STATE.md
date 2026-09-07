@@ -7,7 +7,7 @@
 > 上線步驟在 [DEPLOY.md](DEPLOY.md)，寫作方式在 [CONTENT.md](CONTENT.md)。
 >
 > 最後更新：2026-09-06（**網站已上線：https://bellafoxy.com**，DNS 與 HTTPS 都好了；
-> **第四十七圈第 6 輪走完了**）
+> **第四十七圈第 7 輪走完了**）
 
 ---
 
@@ -203,27 +203,27 @@ git ls-files | grep -c identity.local    # 必須是 0
 
 ## 週期性檢查（loop）現在跑到哪
 
-**下一輪：第四十七圈第 7 輪 —— 建置與 CI。**
+**下一輪：第四十七圈第 8 輪 —— 視覺與版面。**（第四十七圈的最後一輪）
 
-第 6 輪（文案與語氣）：`colophon.astro` 211 個 commit 沒動過，
-而它對讀者說的**五句承諾，五句都對**（外部字型 0、`document.cookie` 0、
-CSP 44／44 頁、平臺數 24＝15／6／3、`localStorage` 真的只有兩個鍵）。
-**那三個數字是算出來的**（`${PLATFORMS.length}` 之類），所以它不會爛 ——
-211 個 commit 之後仍然對，是因為當初就沒有把它抄下來。
+第 7 輪（建置與 CI）**沒有改任何東西**，兩個前提都還成立。
 
-**`README.md` 就不是這樣**：它有一句**錯了 196 個 commit** ——
-「全站只有**四**小段增強腳本」，而 `ARCHITECTURE.md` 寫五段、`check:perf`
-每次都在驗。同一件事兩份，只有一份有人守。另外 README 裡兩處寫死
-「24 個平臺」，改成 99 之後四支檢查通通不出聲。
+**Node 的版本，四個地方各說一句**：`.nvmrc` 寫 `22`、`engines` 要 `>=22.19.0`、
+CI 真的裝 **v22.23.2**、這臺機器是 **v22.15.1**（低於宣告）。
+而 `engine-strict` 是 `false` —— **`engines` 從來沒有被強制過**，
+本機跑了一整個工作階段 `npm` 一次都沒抱怨。`check:workflows` 有印一句 note。
 
-改法是**把既有兩條檢查的語料補齊**（不是新檢查）：`check:perf` 的
-「JavaScript 有幾段」與 `gen-platform-docs --check` 的平臺數各多讀 README。
-四個方向都突變過。
+**那個 `workflow_dispatch` 的繞路，第一次在真的執行紀錄上驗到**：
+3 筆 sync commit ↔ 3 次 `workflow_dispatch` 觸發的 deploy，
+時間戳一模一樣、全部成功。那段「GITHUB_TOKEN 的 push 不會觸發 workflow」
+的知識一直是照文件推理出來的，現在有證據了。
+
+順手驗第 3 輪那個 `paths` 改動沒有弄壞同步那條路（`paths` 只作用在 `push`），
+並突變確認 `dispatch-target-missing` 守得住。
 
 做法：一次只深入一個面向（八個面向輪流），每一圈換一個**問題**去問全站。
 **還沒做的事在 [TODO.md](TODO.md)**（一份會被編輯的清單，不是結轉的）。
 
-輪替順序、每一輪的規則、以及全部 376 筆逐輪紀錄都在
+輪替順序、每一輪的規則、以及全部 377 筆逐輪紀錄都在
 [REVIEW-LOG.md](REVIEW-LOG.md) —— 接手某一輪之前先讀那份的最後一筆。
 
 > **這一節刻意只留索引。** 2026-09-04 之前這裡有 200 筆輪次摘要，
