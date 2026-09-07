@@ -257,8 +257,12 @@ repo 是公開的，寫進註解等於發佈它。清單上還是只有一筆，
   （在那之前這裡寫的是「不要 push，站主自己來 —— 這裡的帳號接不到 GitHub」，
   那句話兩件事都不對了：`gh` 是登入的，而站主要的是自動推。）
 
-  **推之前一定要先 rebase。** 排程的 `sync-feeds` 每天自己 commit 兩次
-  `src/data/syndication.json`，所以本機幾乎一定落後：
+  **推之前一定要先 rebase。** 排程的 `sync-feeds` 一天跑兩次，
+  而**最多 commit 一次** —— 第 7 輪（第二十三圈）加了「內容沒變、
+  而且今天已經同步過了就不寫檔」，所以第二次通常什麼都不做。
+  （第 4 輪〔第四十七圈〕實測：4 次排程、3 筆 commit，
+  沒 commit 的那一次正是同一個臺北日的第二次。）
+  本機仍然可能落後一筆：
 
   ```bash
   git pull --rebase origin main && git push
