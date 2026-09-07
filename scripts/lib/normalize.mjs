@@ -36,6 +36,20 @@ export function normalizeItem(item, source, platform) {
     summary: item.summary || '',
     lang: source.lang ?? 'zh-TW',
     tags: [...new Set([...(source.tags ?? []), ...(item.tags ?? [])])].slice(0, 8),
+    /*
+     * ── `thumbnail` 存下來，但**站上從來不畫它** ────────────
+     *
+     * 第 4 輪（第四十八圈）在真的網站上量到的：9 筆同步資料每一筆都有
+     * `thumbnail`（`https://i2.ytimg.com/vi/…/hqdefault.jpg`），而
+     * `dist/` 裡一個 `ytimg` 都沒有、`src/` 裡也沒有任何元件讀這個欄位。
+     *
+     * 那不是漏掉，是「零第三方請求」—— 畫出來就等於每個讀者的瀏覽器
+     * 都去 `i2.ytimg.com` 拿一張圖。`/elsewhere` 那一頁實測 0 個 `<img>`、
+     * 0 個 `iframe`。
+     *
+     * 留著的理由：那是 feed 本來就給的欄位，哪天她想自己託管縮圖時
+     * 資料已經在了。**看到這個欄位不要以為畫面上有。**
+     */
     thumbnail: item.thumbnail ?? null,
     externalId: item.externalId ?? null,
   };
