@@ -1131,7 +1131,7 @@ console.log(
  * 這一格的待辦本來寫著「要重量得先推（→ 站主）」，
  * 而那天推的權限已經下放，所以它不再是他的事，就重量了。
  */
-const MEASURED = { date: '2026-09-06', lo: -1.7, hi: -0.4, pages: 4, cmd: 'npm run probe:served' };
+const MEASURED = { date: '2026-09-07', lo: -1.7, hi: -0.4, pages: 4, cmd: 'npm run probe:served' };
 /*
  * ── 那個日期要說出「多久以前」──────────────────
  *
