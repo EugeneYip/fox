@@ -366,6 +366,45 @@ let claudeDrift = false;
 }
 
 /*
+ * ── README 也寫了平臺數，而那份沒有人在守 ──────────────
+ *
+ * 第 6 輪（第四十七圈）用「多久沒碰過、前提還在嗎」量到的：`README.md`
+ * 196 個 commit 沒有人碰，而它裡面有**兩處**寫死「24 個平臺」，
+ * 把它改成 99 之後 `check:copy`／`check:content`／`check:perf`
+ * 與這支腳本**通通不出聲**。
+ *
+ * 今天那個數字是對的 —— 但同一個檔案裡的**鄰居**已經錯了 196 個 commit
+ *（「全站只有四小段增強腳本」，實際是五段），所以「README 的數字會爛」
+ * 不是假設，是這一輪剛量到的事。
+ *
+ * 兩處都比，因為它們是兩份手抄。
+ */
+{
+  const readmeAt = new URL('../README.md', import.meta.url);
+  const text = await readFile(readmeAt, 'utf8').catch(() => '');
+  const hits = [...text.matchAll(/(\d+) 個平臺/g)];
+  if (text === '') {
+    console.log('⚠ 讀不到 README.md —— 那幾句「N 個平臺」沒有跟這裡對過。');
+  } else if (hits.length === 0) {
+    console.log('⚠ README.md 裡找不到「N 個平臺」這句 —— 這一格沒有在守。');
+    console.log('  文件換了寫法的話，這裡的樣式要跟著改。');
+    claudeDrift = true;
+  } else {
+    const wrong = hits.filter((h) => Number(h[1]) !== PLATFORMS.length);
+    if (wrong.length > 0) {
+      console.log(
+        `X README.md 有 ${hits.length} 處寫「N 個平臺」，其中 ${wrong.length} 處說的是 ` +
+          `${[...new Set(wrong.map((h) => h[1]))].join('／')}，實際是 ${PLATFORMS.length} 個。`,
+      );
+      console.log('  README 是第一次來的人看到的第一個具體數字。');
+      claudeDrift = true;
+    } else {
+      console.log(`✓ README.md 那 ${hits.length} 處「${PLATFORMS.length} 個平臺」都對得上`);
+    }
+  }
+}
+
+/*
  * ── 「已實測」要帶著日期出現在表上 ────────────────────
  *
  * 第 4 輪（第三十七圈）加的。這一圈問「這個宣稱是誰要求的？寫在哪份

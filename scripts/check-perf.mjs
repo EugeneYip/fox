@@ -937,6 +937,46 @@ if (archOverride !== undefined || !process.argv.some((a) => a.startsWith('--dir=
     }
   }
   const CN = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
+  /*
+   * ── 同一句話，README 也寫了一份 ──────────────────────
+   *
+   * 第 6 輪（第四十七圈）用「多久沒碰過、前提還在嗎」量到的：
+   * `README.md` 191 個 commit 沒有人碰，而它第 23 行寫著
+   * 「零 JavaScript 起步 —— 全站只有**四**小段增強腳本」——
+   * 而產出裡是 **5** 段，`docs/ARCHITECTURE.md` 也早就改成「五小段」了。
+   *
+   * 也就是說這件事一直有兩份，而只有一份有人在守。
+   * README 是這個 repo 的門面，那句話是第一次來的人看到的第一個具體數字。
+   *
+   * 改成兩份一起比 —— 不是新的檢查，是把既有那一條的語料補齊。
+   * README 的句子也改成同一個寫法，所以只需要一個樣式。
+   */
+  let readmeOk = false;
+  const readmePath = archOverride === undefined ? resolve(ROOT, 'README.md') : null;
+  const readme = readmePath === null ? '' : await readFile(readmePath, 'utf8').catch(() => '');
+  if (readme !== '') {
+    const rm = /JavaScript 只有([一二三四五六七八九十]|\d+)小段/.exec(readme);
+    if (!rm) {
+      staleDocs += 1;
+      console.log(
+        '\n⚠ README.md 裡找不到「全站的 JavaScript 只有N小段」那句話 —— 這一格沒有在守。\n' +
+          '  它跟 docs/ARCHITECTURE.md 講的是同一件事，兩份都要用同一個寫法才比得到。',
+      );
+    } else {
+      const rClaimed = CN[/** @type {keyof typeof CN} */ (rm[1])] ?? Number(rm[1]);
+      /* 對得上也要出聲 —— 不然「對得上」跟「這一格沒在比」長得一樣 */
+      if (rClaimed === distinct.size) readmeOk = true;
+      if (rClaimed !== distinct.size) {
+        staleDocs += 1;
+        console.log(
+          `\n✗ README.md 說全站的 JavaScript 有 ${rClaimed} 段，產出裡是 ${distinct.size} 段。\n` +
+            '      README 是第一次來的人看到的第一個具體數字。\n' +
+            '      改法：那一句與 docs/ARCHITECTURE.md 的同一句一起改。',
+        );
+      }
+    }
+  }
+
   const m = /JavaScript 只有([一二三四五六七八九十]|\d+)小段/.exec(arch);
   if (arch === '') {
     console.log('\n⚠ 讀不到 docs/ARCHITECTURE.md —— 那句「全站的 JavaScript 有幾段」沒有對過。');
@@ -954,7 +994,8 @@ if (archOverride !== undefined || !process.argv.some((a) => a.startsWith('--dir=
      */
     if (claimed === distinct.size) {
       console.log(
-        `\ndocs/ARCHITECTURE.md 說全站的 JavaScript 有 ${claimed} 段，產出裡數到 ${distinct.size} 段 ✓`,
+        `\ndocs/ARCHITECTURE.md${readmeOk ? ' 與 README.md 都說' : ' 說'}全站的 JavaScript 有 ${claimed} 段，` +
+          `產出裡數到 ${distinct.size} 段 ✓`,
       );
     }
     if (claimed !== distinct.size) {

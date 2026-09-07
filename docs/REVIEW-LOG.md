@@ -117,7 +117,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 62,000 行、3.2 MB、375 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 62,100 行、3.2 MB、376 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -61522,4 +61522,82 @@ X identity.local.ts 或 .env 被追蹤 少了 private-file-tracked
 
 `npm run verify:all` 全綠、`npm run test:tools` 44 步全通過（沒有改到程式）。
 
-**下一輪：6 — 文案與語氣**
+### 2026-09-07 — 第 6 輪（第四十七圈）：文案與語氣
+
+**第四十七圈問：這一段多久沒有人碰過了？那段時間裡，它的前提變了嗎？**
+
+| 檔案 | 之後又推了 |
+|---|---|
+| `src/config/site.ts`、`about.astro`、`colophon.astro`、`EmptyState.astro` | **211** |
+| `README.md` | **196** |
+
+#### 「關於本站」那一頁的承諾：五句，五句都對
+
+那一頁 211 個 commit 沒動過，而它是這個站對讀者說得最具體的地方。
+拿產出驗一次：
+
+| 頁面上說 | 產出裡量到 |
+|---|---|
+| 沒有載入任何外部字型 | `@font-face` **0**、CSS 裡 `url(` **0** ✓ |
+| 沒有 cookie | `document.cookie` **0** ✓ |
+| 有一道 CSP 由瀏覽器強制執行 | 44／44 頁都有 ✓ |
+| 目前登錄了 24 個平臺：15／6／3 | 資料是 24：`rss`+`hybrid` 15、`bridge` 6、`manual` 3 ✓ |
+| （`localStorage`）只存兩個值 | 真的只有兩個鍵：`fox-theme`、`fox-poem-orientation` ✓ |
+
+**而那三個數字是算出來的**，不是寫死的 —— `colophon.astro:57` 用的是
+`${PLATFORMS.length}`／`${rssish}`／`${byKind.bridge ?? 0}`。所以它不會爛。
+211 個 commit 之後仍然對，是因為當初就沒有把它抄下來。
+
+#### `README.md` 就不是這樣了
+
+**它有一句錯了 196 個 commit：**
+
+```
+- **零 JavaScript 起步** — 全站只有四小段增強腳本，關掉也能讀
+```
+
+而 `docs/ARCHITECTURE.md` 寫的是**五**小段，`check:perf` 每一次都在驗它：
+`docs/ARCHITECTURE.md 說全站的 JavaScript 有 5 段，產出裡數到 5 段 ✓`。
+
+**同一件事有兩份，而只有一份有人守。** README 是這個 repo 的門面，
+那句話是第一次來的人看到的第一個具體數字。
+
+順手量另一個：README 裡有**兩處**寫死「24 個平臺」。
+把其中一處改成 99，`check:copy`／`check:content`／`check:perf`
+與 `gen-platform-docs --check` **通通不出聲**。今天那個數字是對的 ——
+但同一個檔案裡的鄰居已經錯了 196 個 commit，所以「README 的數字會爛」
+不是假設。
+
+#### 改法：把既有的兩條檢查的語料補齊
+
+**都不是新的檢查**（規則 10 不適用），是既有那兩條各多讀一個檔案：
+
+| 檢查 | 本來讀 | 現在也讀 |
+|---|---|---|
+| `check:perf` 的「JavaScript 有幾段」 | `docs/ARCHITECTURE.md` | `README.md` |
+| `gen-platform-docs --check` 的平臺數 | `CLAUDE.md` | `README.md`（兩處都比） |
+
+README 那一句也改成跟 `ARCHITECTURE.md` 同一個寫法
+（「全站的 JavaScript 只有五小段增強腳本」），所以只需要一個樣式。
+
+對得上的時候也出聲（不然「對得上」跟「沒在比」長得一樣）：
+
+```
+docs/ARCHITECTURE.md 與 README.md 都說全站的 JavaScript 有 5 段，產出裡數到 5 段 ✓
+✓ README.md 那 2 處「24 個平臺」都對得上
+```
+
+四個方向都突變過：
+
+| 突變 | 結果 |
+|---|---|
+| README 改回「四小段」 | `✗ README.md 說⋯有 4 段，產出裡是 5 段`，離開碼 1 |
+| README 換成「幾乎沒有 JavaScript」 | `⚠ 找不到那句話 —— 這一格沒有在守`，離開碼 1 |
+| README 一處改成「99 個平臺」 | `X ⋯2 處⋯其中 1 處說的是 99`，離開碼 1 |
+| README 兩處都拿掉「N 個平臺」 | `⚠ 找不到⋯ 這一格沒有在守`，離開碼 1 |
+
+#### 六道關卡
+
+`npm run verify:all` 全綠、`npm run test:tools` 44 步全通過。
+
+**下一輪：7 — 建置與 CI**
