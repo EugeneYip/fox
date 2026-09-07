@@ -94,6 +94,11 @@ const SEARCH_PAGE = searchPage(
  */
 const REAL_SYNDICATION_SCHEMA = await readFile(resolve(ROOT, 'src/data/syndication.schema.json'), 'utf8');
 
+/* 列表頁的一個項目 —— `listing-order` 的案例與 CLEAN 的列表都用它 */
+const listItem = (/** @type {string} */ d, /** @type {boolean} */ f) =>
+  `<article><h2 class="entry__title"${f ? ' data-featured' : ''}>一篇</h2>` +
+  `<time datetime="${d}">${d}</time></article>`;
+
 /**
  * 每條規則一份假的 { content, dist }。
  * key 是規則 id，用來確認擋下來的是**那一條**。
@@ -112,6 +117,25 @@ const REAL_SYNDICATION_SCHEMA = await readFile(resolve(ROOT, 'src/data/syndicati
  * @type {Record<string, { content: Record<string, string>, dist: Record<string, string>, also?: string[], mustMention?: string[], expect?: string, noIndex?: boolean, guide?: string, extra?: Record<string, string>, args?: (dir: string) => string[] }>}
  */
 const CASES = {
+  /*
+   * ── 列表的順序 ──────────────────────────────
+   *
+   * 第 3 輪（第四十六圈）加的。那一圈問「這一段如果拿掉，輸出會差在哪裡」——
+   * 把 `getEntries()` 的 `sort` 拿掉，**dist 有 4 個檔案不一樣而沒有人說話**
+   *（`poems/index.html` 的順序，加上三篇詩頁的上一篇／下一篇）。
+   *
+   * 判準不重寫一次排序（那會變成同一個判斷寫兩份），驗的是一個**性質**：
+   * 拿掉 `data-featured` 的項目之後剩下的日期要遞減，
+   * featured 那幾個彼此之間也要遞減。
+   */
+  'listing-order': {
+    content: { 'poems/wu-yi-xiang.md': poem() },
+    dist: {
+      'poems/index.html': page(listItem('2026-08-20', false) + listItem('2026-08-28', false)),
+      'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
+    },
+  },
+
   'no-title': {
     content: { 'poems/x.md': '---\nlang: zh-TW\n---\n沒有 title 的東西。\n' },
     dist: { 'index.html': page('首頁') },
@@ -789,6 +813,16 @@ const CLEAN = {
   dist: {
     'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
     'poems/ti-chi-bi/index.html': page('題《赤壁圖》 — 折戟沉沙鐵未銷'),
+    /*
+     * 一個**排序正確**的列表頁 —— 這是 `listing-order` 的反向案例，
+     * 同時也是它在乾淨語料上的主體（沒有它，那條規則的主體是 0，
+     * 而 0 主體的綠燈證明不了任何事）。
+     * featured 那一個刻意比後面那個舊：那是對的，`featuredFirst: true`
+     * 的列表就是這樣排的。
+     */
+    'poems/index.html': page(
+      listItem('2026-08-20', true) + listItem('2026-08-28', false) + listItem('2026-08-15', false),
+    ),
     /* 索引裡有那兩篇 —— 少了它，把規則改成「一律報」也會全綠 */
     'search-index.json': JSON.stringify({
       n: 2,

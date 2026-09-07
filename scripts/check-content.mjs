@@ -1186,6 +1186,7 @@ const RULES = [
   'template-text-left',
   'field-undocumented',
   'vertical-lost',
+  'listing-order',
   'locale-list-drift',
   'domain-drift',
   'search-crosslang-mute',
@@ -1507,6 +1508,70 @@ servedCss += dedupedInlineStyles(built.filter((b) => b.path.endsWith('.html')).m
   }
 
   /*
+ * ── 列表的順序，拿掉排序之後沒有人說話 ────────────────────
+ *
+ * 第 3 輪（第四十六圈）問「這一段如果拿掉，輸出會差在哪裡」，
+ * 把 `lib/content.ts` 的零件一個一個拿掉再建置、再跑全部關卡：
+ *
+ *   草稿過濾（真的放一篇草稿進去）  dist 43 → 45 頁　check:content 抓到
+ *   語言過濾                    check:links 與 check:a11y 抓到
+ *   **getEntries 的 sort**       **dist 有 4 個檔案不一樣，而沒有人說話**
+ *   getEntries／getAllWriting 的 limit  dist 一個字都沒變（現在的內容量用不到）
+ *
+ * 那 4 個檔案是 `poems/index.html`（列表順序）與三篇詩頁
+ *（上一篇／下一篇的鄰居換了）。**讀者看得到，關卡看不到。**
+ *
+ * 判準不重寫一次排序（那會變成同一個判斷寫兩份），而是驗一個**性質**：
+ * 把標了 `data-featured` 的項目拿掉之後，剩下的日期必須遞減；
+ * 標了 featured 的那幾個彼此之間也要遞減。
+ * 這個性質對兩種列表都成立 —— `featuredFirst: true`（詩詞）
+ * 與 `false`（短札、彙整）—— 而排序一拿掉就不成立。
+ *
+ * 導入時實測：9 頁有兩個以上日期，0 頁違規；
+ * 把 sort 拿掉之後 `poems/index.html` 變成 ★09-01、08-20、08-28，抓得到。
+ */
+{
+  let listings = 0;
+  for (const b of built) {
+    if (!b.path.endsWith('.html')) continue;
+    /*
+     * `data-featured` 標在**標題**上，而標題在同一個項目裡排在 `<time>` 前面。
+     * 所以往回看的範圍是「上一個 `<time>` 結束的地方」到「這一個 `<time>` 開始」——
+     * 那一段裡剛好只有這一個項目的標題。
+     *
+     * 第一版往回看固定 600 字元，那是**猜的**：站上的項目夠長所以看起來對，
+     * 而測試的 fixture 項目短，第二個項目就看到了第一個的 `data-featured`。
+     * 測試當場紅了 —— 這一圈第 2 輪也是同一種錯（判準是猜的，不是問出來的）。
+     */
+    /** @type {{ d: string, f: boolean }[]} */
+    const items = [];
+    let prevEnd = 0;
+    for (const m of b.text.matchAll(/<time[^>]*datetime="([0-9-]+)"[^>]*>/g)) {
+      const at = /** @type {number} */ (m.index);
+      items.push({ d: m[1], f: /data-featured/.test(b.text.slice(prevEnd, at)) });
+      prevEnd = at + m[0].length;
+    }
+    if (items.length < 2) continue;
+    listings += 1;
+    const desc = (/** @type {string[]} */ a) => a.every((v, i) => i === 0 || a[i - 1] >= v);
+    const plain = items.filter((x) => !x.f).map((x) => x.d);
+    const feat = items.filter((x) => x.f).map((x) => x.d);
+    if (desc(plain) && desc(feat)) continue;
+    problems.push({
+      file: b.path,
+      id: 'listing-order',
+      msg:
+        '這一頁的日期不是由新到舊：' +
+        items.map((x) => (x.f ? '★' : '') + x.d).join('　') +
+        '\n      （★ 是 data-featured。判準是：拿掉 featured 之後剩下的要遞減，' +
+        'featured 彼此之間也要遞減。）\n' +
+        '      改法：列表的順序是 src/lib/content.ts 的 getEntries()／getAllWriting() 排的 —— 去看那裡。',
+    });
+  }
+  saw('listing-order', listings);
+}
+
+/*
    * ── 站名、描述、主題色，manifest 裡還有一份 ──────────
    *
    * `public/site.webmanifest` 是**手寫的靜態檔**（不是產生的），裡面有：
@@ -2446,6 +2511,7 @@ const NOT_A_WRITER_RULE = new Map([
   ['locale-dead-end', '報的是產出的空狀態頁，改法在版面不在內容'],
   ['search-crosslang-mute', '報的是產出的搜尋頁，改法在那一頁的程式'],
   ['vertical-lost', '報的是全站 CSS'],
+  ['listing-order', '報的是列表頁的排序，那是 lib/content.ts 的事不是內容的事'],
   ['domain-drift', '報的是三份設定檔（site.ts／astro.config／CNAME）'],
   ['manifest-drift', '報的是 public/site.webmanifest 與 site.ts，不是她寫的內容'],
   ['locale-list-drift', '報的是設定檔裡的語言清單'],
