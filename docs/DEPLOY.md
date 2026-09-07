@@ -257,9 +257,12 @@ Pages 不能自訂回應標頭，要改只能換主機。
 ### 改 workflow 之前：`npm run check:workflows` 守的十一件事
 
 三份 workflow（`check.yml`、`deploy.yml`、`sync-feeds.yml`）沒有第二個人在看 ——
-`npm run ci:sim` 只模擬 `deploy.yml`，而 `check.yml` 到今天在 GitHub 上
-**一次都沒跑過**（它只在 `pull_request` 上觸發，這個專案是直接推 `main`）。
-所以底下這十一條是它們唯一的守門人：
+`npm run ci:sim` 只模擬 `deploy.yml`。所以底下這十二條是它們唯一的守門人。
+
+（`check.yml` 原本**一次都沒跑過**：它只在 `pull_request` 上觸發，
+而這個專案是直接推 `main`、一個 PR 都沒開過。第四十六圈第 3 輪改了 ——
+現在它跟 `deploy.yml` 的 `paths` 互補：會改到 `dist/` 的走部署，
+其餘走檢查。改完之後連三輪只跑檢查、沒有部署，每次 94～98 秒。）
 
 | id | 它擋的是 |
 |---|---|

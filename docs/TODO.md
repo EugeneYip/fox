@@ -43,6 +43,9 @@
 
 ## 工具與檢查
 
+- **文件講的「事實」沒有人在守。** 第四十六圈第 7 輪修了三處已經不成立的
+  說法（三個地方都寫著 `check.yml` 一次都沒跑過）。`check:workflows` 守的是
+  「規則有沒有寫進文件」，不守「文件講的事實對不對」
 - **「站上有幾個個資」那一行只在本機準。** 它讀 `dist/`，而 CI 上跑
   `audit:privacy` 的時候用的是 `PRIVACY_NEEDLES`，值跟本機的不一定同一組
   （第四十六圈第 5 輪加的）
@@ -55,9 +58,10 @@
 - 「跑完測試工作樹不能變」沒有人自動驗
 - 第四十五圈第 7 輪的 `ci:sim` 有一次紅得莫名
 - 同時跑兩份 `test-perf-budgets` 仍然會紅
-- `membersOf` 只展開一層
+- **`membersOf` 只展開一層** —— 第四十六圈第 7 輪量到它的實際後果：
+  正因為展不開複合 script，`check.yml` 才必須逐一列出八道關卡
+  （併成兩行的話 `gate-missing-in-check` 會失去對象）
 - `gate-count-stale` 會把散文讀成宣稱
-- 為什麼不讓 `check.yml` 直接跑三行
 - `unbalanced-backtick` 只掃 `scan()` 進來的東西
 - 文字抽取只認單引號
 - `SEVERITY` 那份表跟 `STRUCTURAL_IDS` 是第二份手寫清單

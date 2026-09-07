@@ -117,7 +117,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 61,200 行、3.2 MB、368 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 61,300 行、3.2 MB、369 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -60978,4 +60978,74 @@ zh「跳到主要內容」／en「Skip to content」），重新建置：
 
 `npm run verify:all` 全綠、`npm run test:tools` 44 步全通過（都沒有改到程式）。
 
-**下一輪：7 — 建置與 CI**
+### 2026-09-06 — 第 7 輪（第四十六圈）：建置與 CI
+
+**第四十六圈問：這一段如果拿掉，輸出會差在哪裡？**
+
+#### 一、上一輪那個 `paths` 改動，實際效果量到了
+
+第 3 輪把 `deploy.yml` 改成只在會改到 `dist/` 的路徑上跑、
+`check.yml` 加 push 觸發跑其餘的。三輪之後的 GitHub 紀錄：
+
+| commit | 跑了哪一份 | 秒 |
+|---|---|---|
+| 第 6 輪（只動 `docs/`） | **只有「檢查」** | 98 |
+| 第 5 輪（動 `docs/`＋`scripts/`） | **只有「檢查」** | 94 |
+| 第 4 輪（只動 `docs/`） | **只有「檢查」** | 96 |
+| 循環調整（動到 `.github/`） | 兩份都跑 | 110／102 |
+
+**連三輪沒有部署** —— 在那之前這三次都會是完整的部署並重新發佈網站。
+
+#### 二、把 CI 的步驟一個一個拿掉
+
+| 拿掉什麼 | 誰說話 |
+|---|---|
+| `deploy.yml` 的 `test:units` | `gate-not-on-deploy-path`，離開碼 1 |
+| `deploy.yml` 的 `verify:all` | `gate-not-on-deploy-path` ＋ `needs-dist-before-build` |
+| `deploy.yml` 的 `test:built` | `gate-not-on-deploy-path` |
+| `check.yml` 的 `audit:privacy` | `gate-missing-in-check` |
+| `check.yml` 的 `check:a11y` | `gate-missing-in-check` |
+| `deploy.yml` 整段 CNAME 檢查 | `audit:privacy` 的 `deploy-without-cname-check` |
+
+**六個，六個都有人說話。** 這一半沒發現問題。
+
+（第一次量 CNAME 那一格時我只刪掉 `- name:` 那一行，結果報的是
+`duplicate-key` —— 那是**我把 YAML 弄壞了**，不是規則說錯話。
+整段刪掉才是對的探針。）
+
+#### 三、「為什麼不讓 `check.yml` 直接跑三行了事？」—— 有答案了
+
+這條問題掛了好幾圈。做一次就知道：把 `check.yml` 那 8 步併成 2 行
+（`verify:all` ＋ `test:tools`），`check:workflows` 離開碼 1：
+
+```
+X [gate-missing-in-check] 部署路徑上會跑 npm run test:units，但 check.yml 沒有跑它。
+  check.yml 是逐一列出關卡的（為了在 GitHub 上看得出哪一道紅）
+```
+
+**答案是：可以併，但那條規則的判準就是「逐一列出」。** 兩種形式在這個
+repo 裡是刻意並存的 —— `deploy.yml` 用三行（求快），`check.yml` 逐一列出
+（在 GitHub 的介面上看得出是哪一道紅）。要併的話得先讓 `membersOf`
+展開複合 script（那是另一條待辦），不然那條規則會安靜地失去對象。
+
+**這條待辦結掉了**，從 `docs/TODO.md` 刪掉。
+
+#### 四、順手修掉三處已經不成立的說法
+
+`paths` 改完之後，三個地方還寫著 `check.yml`「一次都沒跑過」：
+
+| 哪裡 | 原本寫 |
+|---|---|
+| `docs/DEPLOY.md:259` | 「`check.yml` 到今天在 GitHub 上**一次都沒跑過**」 |
+| `check-workflows.mjs` 的檔頭 | 「check.yml　不會自己跑（只在 PR 與手動觸發上啟動）」 |
+| `check-workflows.mjs` 的收尾訊息 | 「`check.yml` **不會自己跑**⋯要自己跑一次：`gh workflow run`」 |
+
+三處都改成現在的分工。**這正是第 3 輪那個改動的代價**：
+改了觸發方式，而三份文件裡關於它的描述沒有人在守
+（`check:workflows` 守的是規則有沒有文件，不守文件講的事實對不對）。
+
+#### 六道關卡
+
+`npm run verify:all` 全綠、`npm run test:tools` 44 步全通過。
+
+**下一輪：8 — 視覺與版面**

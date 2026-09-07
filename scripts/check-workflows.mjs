@@ -97,12 +97,12 @@ if (process.argv.includes('--list-rules')) {
  *
  * （這裡原本寫「8 次」「2 次」。第 7 輪〔第四十圈〕同一天再數是 9 與 3 ——
  *   那種數字寫下來的那一刻就開始爛，所以只留「有沒有跑過」。）
- *   check.yml        不會自己跑（只在 PR 與手動觸發上啟動）
- *                    —— 第 7 輪（第四十四圈）手動觸發過一次，12 步全綠
+ *   check.yml        會自己跑（2026-09-06 第四十六圈第 3 輪改的）
  *
- * 前兩份現在有真的執行紀錄可以對照了。`check.yml` 沒有 ——
- * 它只在 `pull_request` 與 `workflow_dispatch` 上觸發，而這個專案
- * 是站主直接推 main，不開 PR。所以它到今天仍然只有這支腳本在守。
+ * `check.yml` 原本只在 `pull_request` 與 `workflow_dispatch` 上觸發，
+ * 而這個專案是直接推 main、一個 PR 都沒開過 —— 所以它幾乎沒跑過。
+ * 現在它跟 `deploy.yml` 的 `paths` 是互補的：會改到 `dist/` 的走部署，
+ * 其餘（`scripts/`、`docs/`⋯⋯）走這一份。三份都有真的執行紀錄可以對照了。
  *
  * @type {Map<string, number>}
  */
@@ -1040,10 +1040,10 @@ if (problems.length === 0) {
        * 所以那個 0 也是會爛的數字，只是爛得比別的慢。改成寫**性質**：
        * 它不會自己跑（沒有人開 PR），要跑得手動觸發。
        */
-      '  （`check.yml` **不會自己跑** —— 它只在 PR 與手動觸發上啟動，\n' +
-      '   而這個專案是直接推 main。2026-09-06 手動觸發過一次，12 個步驟全綠。\n' +
-      '   要自己跑一次：gh workflow run check.yml --repo EugeneYip/fox\n' +
-      '   另外兩份都會自己跑；次數每推一次就變，要看就用上面那個指令。）\n',
+      '  （三份都會自己跑。`check.yml` 與 `deploy.yml` 的 `paths` 是互補的：\n' +
+      '   會改到 dist/ 的走部署，其餘走檢查 —— 第四十六圈第 3 輪改的，\n' +
+      '   在那之前 check.yml 只在 PR 上觸發，而這個專案一個 PR 都沒開過。\n' +
+      '   次數每推一次就變，要看就用上面那個指令。）\n',
   );
   process.exit(0);
 }
