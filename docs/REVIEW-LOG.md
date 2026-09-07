@@ -117,7 +117,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 62,800 行、3.2 MB、382 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 62,183 行、3.3 MB、383 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -62076,3 +62076,108 @@ canonical 是 `…/channel/UCiCJBnqbS3ECSPEM7vSmrPw`，
 `npm run verify:all` 全綠、`npm run test:tools` 44 步全通過。
 
 **下一輪：5 — 隱私與安全**
+
+### 2026-09-07 — 第 5 輪（第四十八圈）：隱私與安全
+
+**第四十八圈問：站上真的看得到的東西，我們量過幾成？**
+
+隱私這一支的承諾**寫在讀者看得到的那一頁上**（`/privacy`）。
+`audit:privacy` 一直是拿**產出的文字**去對那些承諾 —— 這一輪換另一端：
+開一個真的瀏覽器，在 `bellafoxy.com` 上量**瀏覽器實際做了什麼、存了什麼**。
+
+#### 那一頁承諾了八件事，逐條在瀏覽器上量
+
+| 承諾 | repo 那一端誰在守 | 瀏覽器這一端量到 |
+|---|---|---|
+| 不使用 cookie | `cookie-promised-none` | 5 頁、按過兩個鈕之後，`document.cookie` 仍是**空的** |
+| 不用分析服務 | `analytics` | ↓ |
+| 不用外部字型／CDN／圖片 | `google-fonts` 等三條 | 5 頁的 resource entries **全部同源**，一次都沒有外送 |
+| 不嵌入自動載入的第三方 | `raw-youtube-embed` | 0 個 iframe |
+| localStorage 只有兩項 | `storage-not-documented` 等兩條 | 進站是 **0 項**；按過主題鈕與方向鈕之後正好 `fox-theme`、`fox-poem-orientation`，沒有第三個 |
+| CSP 會拒絕外部腳本 | `csp-missing` 等三條 | **見下** |
+| 對外連結一律 noreferrer | `external-link-rel-broken-promise` | `/elsewhere/youtube` 的 10 個外連，rel 全是 `noopener noreferrer` |
+| 影片按了才載入 youtube-nocookie | `csp-frame-host-unpromised` | **站上今天沒有任何影片框**（0 `videoUrl`、0 facade、0 iframe） |
+
+sessionStorage、IndexedDB、CacheStorage、Service Worker 也一起量了：**全空**。
+讀 localStorage 那把尺先證明過會失敗 —— 自己塞一個 `__probe__` 進去讀得到，
+刪掉又回到原本那些。
+
+#### 一、CSP 是真的在執行的，而且擋在送出請求之前
+
+那一頁對讀者說「你的瀏覽器會直接拒絕它，而不是安靜地送出請求」。
+在站上掛一個 `securitypolicyviolation` 監聽器，然後真的塞：
+
+| 塞什麼 | 結果 |
+|---|---|
+| `<script src="https://example.com/probe.js">` | `script-src-elem` 違規，`disposition: enforce` |
+| `fetch('https://example.com/')` | `connect-src` 違規，`TypeError: Failed to fetch` |
+| **對照組**：`<script src="/_astro/does-not-exist.js">` | **沒有違規** —— 它真的去要了，拿到 404 |
+
+對照組那一格是重點：它證明這把尺分得出「CSP 擋的」與「網路層的事」。
+而網路紀錄裡 `example.com` **一筆請求都沒有** —— 是拒絕，不是失敗。
+
+#### 二、而那道防線覆蓋不到它自己前面的東西
+
+那個 CSP 是用 `<meta http-equiv>` 送的（GitHub Pages 設不了 header）。
+meta 形式的 CSP 只管**它自己後面**的東西 —— 而這個站的 `<head>` 裡，
+CSP 前面有兩個 `<script>`（44 頁全部都是 2 個）。
+
+三個方向量過，互相對得起來：
+
+| 量什麼 | 量到 |
+|---|---|
+| CSP **之前**那兩段腳本的雜湊在不在 `script-src` 清單裡 | **0／2 不在** |
+| CSP **之後**那兩段 module 腳本呢（判準能不能成功） | **2／2 都在** |
+| 那段主題初始化到底跑了沒 | 跑了 —— 站上 `data-js` 有設，而原始 HTML 沒有 |
+| 在同一頁**動態**插一段沒有雜湊的 inline script | 擋掉，`script-src-elem` 違規 |
+
+第二列是這一輪的反貧化：如果連 meta 之後的也對不上，那只證明我雜湊算錯了。
+
+所以那個順序**是撐著的，不是剛好**：`is:inline` 的腳本 Astro 不算雜湊
+（`astro.config.mjs` 的註解原本寫「會自己算出**所有** inline script 的雜湊」），
+所以有人為了「讓它也受 CSP 管」而把它搬到 meta 後面，會**當場擋掉** ——
+而那一段擋掉的後果第 2 輪（第十圈）量過：琵琶行節錄第一次繪製會跳 434px。
+
+反過來說，`/privacy` 那句「萬一哪天有人不小心放進一段外部腳本，
+你的瀏覽器會直接拒絕它」，**對那個位置不成立**。
+
+**但真的塞一次，還是被擋下來了**，只是被另一層擋的：在 `Base.astro`
+那段腳本前面加一個 `src="https://cdn.example.com/x.js"`，建置照樣過（離開碼 0），
+`audit:privacy` 的 `built-third-party-request` 離開碼 **1**。
+所以「不小心引進外部腳本」這個真的會發生的情況有人守；CSP 蓋不到的
+只剩「自己寫的 inline 腳本放在那個位置」—— 這個 repo 只有一個作者。
+
+沒有補檢查（規則 10：說不出過去十輪裡它會擋下哪一次）。
+補的是**為什麼**：`Base.astro` 與 `astro.config.mjs` 各一段。
+
+#### 三、主機一個安全 header 都沒送
+
+`astro.config.mjs` 的註解寫著「frame-ancestors 在 meta 裡不生效，
+要靠 GitHub Pages 自己送的 X-Frame-Options」。**去打了一次，它沒有送。**
+
+| | x-frame-options | HSTS | referrer-policy | x-content-type-options | CSP header |
+|---|---|---|---|---|---|
+| `bellafoxy.com` | — | — | — | — | — |
+| `github.com`（對照） | deny | 有 | 有 | nosniff | 有 |
+| `google.com`（對照） | SAMEORIGIN | — | — | — | — |
+
+HEAD 與 GET 各查一次，都是 0；同一個查法對 `github.com` 查得到 5 個。
+所以現況是**任何網站都可以把這個站框起來**，而在 GitHub Pages 上沒得補。
+那句註解改掉了 —— 它把「我們控制不了」寫成了「有人在做」。
+
+（順手量到的好消息：`http://` → `https://` 是 301，`www.` → 頂網域也是 301，
+不存在的路徑回真的 404 而且照樣帶 CSP。）
+
+#### 四、稽核自己那張清單有兩行過期了
+
+`audit-privacy.mjs` 裡有一張「那一頁承諾了什麼、誰在守」的對照表，
+最後兩行寫著「**不使用 cookie** —— 沒有人在守」「**影片框用 youtube-nocookie.com**
+—— 沒有人在守」。而**補它們的程式就在那段註解底下十行**
+（`cookie-promised-none`、`csp-frame-host-unpromised`）。
+讀那張表的人會以為那兩條是開著的。改成「本來沒有人在守，底下這一段就是補它的」。
+
+#### 六道關卡
+
+`npm run verify:all` 全綠、`npm run test:tools` 44 步全通過。
+
+**下一輪：6 — 文案與語氣**

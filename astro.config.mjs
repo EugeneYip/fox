@@ -73,12 +73,21 @@ export default defineConfig({
    * 開了 CSP 之後它變成**瀏覽器強制執行**的規則：就算哪天有人不小心
    * 引進一段外部腳本，瀏覽器會直接拒絕載入，而不是安靜地送出請求。
    *
-   * Astro 會自己算出所有 inline <script> 與 <style> 的 SHA-256 雜湊，
+   * Astro 會算 inline <script> 與 <style> 的 SHA-256 雜湊放進來，
    * 所以不需要 'unsafe-inline'。靜態輸出會以 <meta http-equiv> 的形式送出
    * （GitHub Pages 沒辦法設 HTTP header）。
    *
+   * **`is:inline` 的不算。** 第 5 輪（第四十八圈）量到 0／2：Base.astro 那段
+   * 主題初始化與那段 JSON-LD 的雜湊都不在清單裡，而這個 meta 之後的兩個
+   * module 腳本都在。它們照樣跑，是因為 meta 形式的 CSP 只管**它自己後面**
+   * 的東西 —— 也就是說那個順序是撐著的，不是剛好。詳見 Base.astro 的註解。
+   *
    * 注意 meta 形式的限制：frame-ancestors、report-uri、sandbox 不生效。
-   * 前者要靠 GitHub Pages 自己送的 X-Frame-Options，我們控制不了。
+   * frame-ancestors 這裡本來寫「要靠 GitHub Pages 自己送的 X-Frame-Options」——
+   * 第 5 輪（第四十八圈）實測：**這個主機一個安全 header 都沒送**
+   * （x-frame-options、HSTS、referrer-policy、x-content-type-options 都沒有；
+   * 同一個查法對 github.com 查得到 5 個）。所以現況是任何網站都可以把這個站
+   * 框起來，而在 GitHub Pages 上沒得補。
    */
   security: {
     csp: {

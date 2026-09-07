@@ -38,6 +38,15 @@
 - 排程跑的 `sync:health` 沒有 `--strict`
 - 那 4 條什麼都沒擋的豁免
 - `--lh-loose` 要不要接上去
+- **`/privacy` 說「唯一的例外是你按下播放之後的影片框」，而站上今天沒有影片框。**
+  第四十八圈第 5 輪量到：0 個 `videoUrl`、0 個 facade、0 個 `iframe`，
+  連帶 `csp-frame-src-mismatch` 這一輪主體是 0（沒有真的框可以對）。
+  那句話不是錯的，但它描述的是一個還不存在的東西 —— 要不要改成條件句是判斷
+- **主機一個安全 header 都沒送。** 第四十八圈第 5 輪實測 `bellafoxy.com`：
+  x-frame-options、HSTS、referrer-policy、x-content-type-options、CSP header
+  **一個都沒有**（同一個查法對 `github.com` 查得到 5 個）。
+  所以任何網站都可以把這個站框起來。在 GitHub Pages 上沒得補，
+  跟「雜湊資源只有 `max-age=600`」是同一類
 
 ## 卡住最久、而且價值最高的三件（都需要站主）
 
@@ -142,6 +151,11 @@
 - `check:content` 那一半還是只看 `syndication.json`
 - `CHANGE_ME` 那條路連 failures 都不加
 - `SCHEMA_STRUCTURAL` 3 個什麼都沒擋
+- **CSP meta 之前那兩個 `<script>` 沒有東西在數。** 第四十八圈第 5 輪量到
+  44 頁全部是 2 個，而 meta 形式的 CSP 只管它自己後面的東西 ——
+  多出來的第三個就是放在 CSP 管不到的位置。判準很好寫（數 meta 之前的
+  `<script>`），但**說不出過去十輪裡它會擋下哪一次**（規則 10），
+  而且會發生的那種（外部 `src`）已經有 `built-third-party-request` 守著
 - 沒有東西在守「空狀態不要自相矛盾」
 - **`tags.count_one` 仍然沒有證據**（第四十八圈第 3 輪在站上量：
   `list.count_one` 的中文與 `list.otherLang_one` 的英文都真的算繪出來了，

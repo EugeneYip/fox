@@ -6,8 +6,8 @@
 > 這裡只寫「現在的狀態」與「接下來做什麼」。設計理由在 [ARCHITECTURE.md](ARCHITECTURE.md)，
 > 上線步驟在 [DEPLOY.md](DEPLOY.md)，寫作方式在 [CONTENT.md](CONTENT.md)。
 >
-> 最後更新：2026-09-06（**網站已上線：https://bellafoxy.com**，DNS 與 HTTPS 都好了；
-> **第四十八圈第 4 輪走完了**）
+> 最後更新：2026-09-07（**網站已上線：https://bellafoxy.com**，DNS 與 HTTPS 都好了；
+> **第四十八圈第 5 輪走完了**）
 
 ---
 
@@ -203,26 +203,32 @@ git ls-files | grep -c identity.local    # 必須是 0
 
 ## 週期性檢查（loop）現在跑到哪
 
-**下一輪：第四十八圈第 5 輪 —— 隱私與安全。**
+**下一輪：第四十八圈第 6 輪 —— 文案與語氣。**
 
-第 4 輪（平臺 feed 實測）這次問的是讀者那一端：同步回來的九筆在頁面上長什麼樣。
+第 5 輪（隱私與安全）換到讀者那一端：`/privacy` 對讀者承諾了八件事，
+`audit:privacy` 一直是拿產出的**文字**去對，這次開一個真的瀏覽器在站上量
+**瀏覽器實際做了什麼**。八條全部對得上：cookie 空的、5 頁的請求全部同源、
+localStorage 進站是 0 項、按過兩個鈕之後正好是那兩個鍵、外連 rel 全是
+`noopener noreferrer`；sessionStorage／IndexedDB／CacheStorage／SW 全空。
 
-**那九個站外連結，第一次有人按過。** `check:links` 只守站內（1263 個），
-站外的九個從來沒有人檢查 —— 影片下架就是九個死連結而沒有徵兆。
-判準用 oEmbed（`/watch?v=` 對下架影片也回 200，分不出來），**9／9 全部 200**；
-而且先確認那把尺會失敗（不存在的 id → 400）。頻道也用 CLAUDE.md 的判準驗過：
-canonical 跟 `sources.mjs` 的 channelId 一字不差。
+**CSP 是真的在執行的**：塞一個外部腳本 → `script-src-elem` 違規，
+而網路紀錄裡那個網域**一筆請求都沒有**（對照組：同源的 404 腳本沒有違規）。
 
-**頁面上**：9 個項目、0 個 `iframe`、0 個 `<img>`、「上次同步」對得上 `generatedAt`。
+**但它覆蓋不到自己前面的東西。** CSP 是 `<meta>` 送的，而 `<head>` 裡它前面
+有兩個 `<script>`（44 頁都是 2 個），雜湊 **0／2 不在清單裡**（meta 之後的
+**2／2 都在**）。所以那個順序是撐著的：搬到 meta 後面會被當場擋掉。
+真的塞一個外部 `src` 進去試過 —— 建置照樣過，`built-third-party-request`
+離開碼 1，所以會發生的那種情況有人守。沒補檢查，補的是為什麼。
 
-**而那九筆各自帶著一張 `thumbnail`，站上一次都沒畫** —— `dist/` 裡一個 `ytimg`
-都沒有、也沒有元件讀它。那不是漏掉，是零第三方請求（也解釋了站上 `<img>` 為什麼是 0）。
-留著是對的，但原始碼沒寫為什麼 —— 在 `normalize.mjs` 補上了。
+**主機一個安全 header 都沒送**（x-frame-options、HSTS、referrer-policy、
+x-content-type-options、CSP header 全都沒有；同一個查法對 `github.com`
+查得到 5 個）。註解原本寫「要靠 GitHub Pages 自己送的 X-Frame-Options」——
+把「我們控制不了」寫成了「有人在做」，改掉了。
 
 做法：一次只深入一個面向（八個面向輪流），每一圈換一個**問題**去問全站。
 **還沒做的事在 [TODO.md](TODO.md)**（一份會被編輯的清單，不是結轉的）。
 
-輪替順序、每一輪的規則、以及全部 382 筆逐輪紀錄都在
+輪替順序、每一輪的規則、以及全部 383 筆逐輪紀錄都在
 [REVIEW-LOG.md](REVIEW-LOG.md) —— 接手某一輪之前先讀那份的最後一筆。
 
 > **這一節刻意只留索引。** 2026-09-04 之前這裡有 200 筆輪次摘要，

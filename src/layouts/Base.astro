@@ -142,6 +142,23 @@ const alternates = LOCALES.filter((l) => availableLocales.includes(l)).map((l) =
       註解寫在這裡而不是腳本裡面 —— `is:inline` 的內容不會被壓縮，
       第一版把這段說明放進腳本，每頁內嵌 JS 從 2.3 KB 變成 2.8 KB（預算 94%）。
     */}
+    {/*
+      ── 它在 CSP 那個 meta 的**前面**，而那是撐著的，不是順序剛好 ──────────
+
+      第 5 輪（第四十八圈）從瀏覽器那一端量的。Astro 的 CSP 會把內嵌腳本
+      逐個算雜湊放進 `script-src`，但 **`is:inline` 的不算**：這一段與上面
+      那段 JSON-LD 的雜湊都不在清單裡，而 meta 之後那兩個 module 腳本都在
+      （量到 0／2 對 2／2）。
+
+      CSP 用 `<meta>` 送的時候只管**它自己後面**的東西，所以這一段照樣跑
+      （站上 `data-js` 有設就是它跑過了）。反過來說：有人為了「讓它也受
+      CSP 管」而把它搬到 meta 後面，它會被當場擋掉 —— 實測在同一頁動態插
+      一段沒有雜湊的 inline script，瀏覽器回 `script-src-elem` 違規、不執行。
+
+      所以 /privacy 那句「外部腳本你的瀏覽器會直接拒絕它」，對這個位置
+      **不成立**。守著這裡的是 `audit:privacy` 的 `built-third-party-request`
+      （實測：在這裡塞一個外部 src，建置照樣過，稽核離開碼 1）。
+    */}
     <script is:inline>
       (() => {
         document.documentElement.dataset.js = '';

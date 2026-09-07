@@ -374,12 +374,13 @@ if (existsSync(resolve(ROOT, 'dist'))) {
    *   localStorage 只有兩項      storage-not-documented、storage-documented-not-used ✓
    *   宣告 CSP 只載自己的網域    csp-missing、csp-no-default-src、csp-unsafe-inline ✓
    *   外部連結一律 noreferrer    external-link-rel-broken-promise ✓（第三十四圈加的）
-   *   **不使用 cookie**          —— 沒有人在守
-   *   **影片框用 youtube-nocookie.com**  —— 沒有人在守
+   *   **不使用 cookie**          —— 本來沒有人在守，底下這一段就是補它的
+   *   **影片框用 youtube-nocookie.com**  —— 同上
    *
-   * 兩條都是真的（今天 `document.cookie` 在產出裡 0 次、
+   * 那兩條當時都是真的（`document.cookie` 在產出裡 0 次、
    * CSP 的 `frame-src` 就是 `https://www.youtube-nocookie.com`），
-   * 但**沒有東西讓它們保持為真**。
+   * 但**沒有東西讓它們保持為真** —— 所以有了 `cookie-promised-none`
+   * 與 `csp-frame-host-unpromised`（就在這段註解底下）。
    *
    * 影片那一條特別值得守：`VideoFacade` 到今天**一次都沒有算繪過**
    * （站上還沒有影片），所以那段組網址的程式沒有人跑過。
