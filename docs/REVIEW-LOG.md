@@ -117,7 +117,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 62,600 行、3.2 MB、380 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 62,700 行、3.2 MB、381 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -61934,4 +61934,80 @@ X [dispatch-target-missing] deploy.yml 沒有宣告 workflow_dispatch，gh workf
 `npm run verify:all` 全綠、`npm run test:tools` 44 步全通過
 （中間紅過一次：那句說明改了字面，而測試在比字面 —— 一起改）。
 
-**下一輪：3 — 內容結構**
+### 2026-09-07 — 第 3 輪（第四十八圈）：內容結構
+
+**第四十八圈問：站上真的看得到的東西，我們量過幾成？**
+
+**這一輪沒有改任何東西。** 量的是**真的網站**（`bellafoxy.com`）上
+讀者會看到的內容結構：數字對不對、空的時候說什麼、跨語言怎麼接。
+
+#### 一、列表頁說的數字，跟真的畫出來的一樣
+
+| 頁 | 頁面上說 | 真的畫出幾筆 |
+|---|---|---|
+| `/writing` | 共 1 篇 | 1 |
+| `/notes` | 共 1 篇 | 1 |
+| `/poems` | 共 3 篇 | 3 |
+| `/archive` | 共 5 篇 | 5 |
+| `/tags` | 共 14 個標籤 | 14 |
+| `/elsewhere` | 共 9 篇 | 9 |
+| `/elsewhere/youtube` | 共 9 篇 | 9 |
+
+**七頁全部對得上。**
+
+（第一次量的時候 `/archive` 與 `/tags` 都顯示「0 筆」，差點寫成「數字對不上」——
+那是**我的選擇器**只認 `article`／`.entry`，而那兩頁用的是 `<ol><li>`。
+先去看那一頁的標記才是對的：`/archive` 有 5 個 `<li>`、5 個 `<time>`、
+5 個連到內容的連結。這一圈第三次靠「先確認工具答的是哪個問題」擋下假發現。）
+
+#### 二、英文那一側是空的，而它說得很好
+
+站上六篇內容全部是 `zh-TW`，所以英文的列表頁**應該**是空的。實際看到的是：
+
+```
+Poems
+One poem at a time: the original, some notes, a plain retelling…
+Nothing here yet.
+There are 3 entries in Chinese →
+```
+
+不是一片空白，也不是壞掉的樣子 —— 它說了「這裡還沒有」，
+然後告訴讀者中文那邊有幾篇、並給一個連結。
+
+**單複數也對**：`/en/writing` 與 `/en/notes` 各只有一篇，寫的是
+「There **is 1 entry** in Chinese」；`/en/poems` 是「There **are 3 entries**」。
+那是 `list.otherLang_one` 這個**動態查表**的鍵在站上真的算繪出來了 ——
+待辦上「`_one` 系列連算繪都沒有過」那一條，英文這一半現在有證據了。
+
+順帶把另外兩個一起量：
+
+| 鍵 | 站上有沒有 |
+|---|---|
+| `list.count_one`（zh「共 1 篇」） | **有** —— `/writing`、`/notes`、`/tags/雜記` |
+| `list.otherLang_one`（en） | **有** —— `/en/writing`、`/en/notes` |
+| `tags.count_one`（「共 1 個標籤」／「1 tag」） | **還是 0** —— 要有一篇只掛一個標籤的內容 |
+
+#### 三、五個跨語言連結裡，有一個指到別的地方
+
+| 英文頁 | 那句話與去處 | 中文對應頁 |
+|---|---|---|
+| `/en/poems` | There are **3** entries → `/poems` | 共 3 篇 ✓ |
+| `/en/writing` | There is **1** entry → `/writing` | 共 1 篇 ✓ |
+| `/en/notes` | There is **1** entry → `/notes` | 共 1 篇 ✓ |
+| `/en/archive` | There are **5** entries → `/archive` | 共 5 篇 ✓ |
+| **`/en/tags`** | There are **5** entries → **`/archive`** | 共 **14 個標籤** |
+
+去看原始碼：列表那三頁走的是 `ListPage.astro` 的通用寫法
+（指到自己的對應頁），而**首頁、彙整、標籤**三處各自寫死了 `/archive`。
+首頁與彙整說得通；**標籤是唯一一個「有對應頁卻沒用」的**。
+
+**沒有改。** 把英文讀者送到 `/tags`（14 個中文標籤名）不見得比送到 `/archive`
+（有標題有日期的清單）好 —— 那是「對英文讀者哪一個比較有用」的判斷，
+不是對錯。原始碼裡也沒有註解說明選了哪一個，所以連「這是刻意的」都不確定。
+記進 `docs/TODO.md`，標成站主的判斷。
+
+#### 六道關卡
+
+`npm run verify:all` 全綠、`npm run test:tools` 44 步全通過（沒有改到程式）。
+
+**下一輪：4 — 平臺 feed 實測**
