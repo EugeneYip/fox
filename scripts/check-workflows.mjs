@@ -840,7 +840,16 @@ console.log('\n建置管線檢查\n' + '─'.repeat(56));
  * （第一版就是這樣，明明比了 4 句卻印 0）。第十次犯同一個形狀。
  */
 {
-  const CLAIM_DOCS = ['CLAUDE.md', 'AGENTS.md', 'docs/DEPLOY.md', 'docs/STATE.md'];
+  /*
+   * README.md 是第 7 輪（第五十圈）加的。
+   *
+   * 那一圈問「照著文件做，做得完嗎」，而 README 的指令表寫著
+   * 「`npm run verify:all` —— 一次跑完五道關卡（型別／隱私／對比／建置／無障礙／效能）」
+   * ——**同一行的括號裡就列了六個**。這一條規則的整個用途就是抓這個，
+   * 而它看不到，只因為 README 不在這份清單裡。
+   * （同一個檔案第 5 輪〔第四十七圈〕也過期過一次：「四小段」而實際五段。）
+   */
+  const CLAIM_DOCS = ['CLAUDE.md', 'AGENTS.md', 'docs/DEPLOY.md', 'docs/STATE.md', 'README.md'];
   const CN = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
   const pkgRaw = await readFile(resolve(ROOT, 'package.json'), 'utf8').catch(() => null);
   /** `verify:all` 真的有幾步 */
@@ -894,9 +903,9 @@ console.log('\n建置管線檢查\n' + '─'.repeat(56));
           i + 1,
           'gate-count-stale',
           `這裡寫「${m[1]}道關卡」，而 package.json 的 verify:all 有 ${actual} 步。\n` +
-            `      同一個數字在 ${CLAIM_DOCS.length} 份文件裡各寫了一次 —— 加一道關卡就會同時錯四份，\n` +
+            `      同一個數字在 ${CLAIM_DOCS.length} 份文件裡各寫了一次 —— 加一道關卡就會同時錯 ${CLAIM_DOCS.length} 份，\n` +
             '      而它已經過期過一次了（CLAUDE.md 自己還留著「原本這裡寫五道」那一行）。\n' +
-            `      改法：把那句話的數字改成 ${actual}，四份都要改（這一條會把沒改到的都點出來）。`,
+            `      改法：把那句話的數字改成 ${actual}，${CLAIM_DOCS.length} 份都要改（這一條會把沒改到的都點出來）。`,
         );
       }
     }

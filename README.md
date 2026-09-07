@@ -39,7 +39,7 @@ npm run dev        # http://localhost:4321
 | `npm run dev` | 開發伺服器 |
 | `npm run build` | 建置到 `dist/` |
 | `npm run preview` | 預覽建置結果 |
-| `npm run verify:all` | **一次跑完五道關卡**（型別／隱私／對比／建置／無障礙／效能） |
+| `npm run verify:all` | **一次跑完六道關卡**（型別／隱私／對比／建置／無障礙／效能） |
 | `npm run check` | TypeScript 型別檢查 |
 | `npm run check:contrast` | WCAG 對比度（讀 tokens.css，深淺兩套） |
 | `npm run check:a11y` | 無障礙靜態檢查（掃 dist/） |

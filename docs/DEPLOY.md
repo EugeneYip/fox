@@ -254,7 +254,7 @@ Pages 不能自訂回應標頭，要改只能換主機。
 本機 Node 比這舊的話，`npm install` 會出現 EBADENGINE 警告。
 目前實測在 22.15.1 上建置仍然正常，但那是運氣不是保證；有空的話升上去。
 
-### 改 workflow 之前：`npm run check:workflows` 守的十一件事
+### 改 workflow 之前：`npm run check:workflows` 守的十二件事
 
 三份 workflow（`check.yml`、`deploy.yml`、`sync-feeds.yml`）沒有第二個人在看 ——
 `npm run ci:sim` 只模擬 `deploy.yml`。所以底下這十二條是它們唯一的守門人。
@@ -279,7 +279,7 @@ Pages 不能自訂回應標頭，要改只能換主機。
 | `path-uncovered` | 版控裡有一個頂層路徑，兩份 workflow 的 `paths` 都不認得它 —— 動到它的 commit 一道 CI 都不會跑 |
 | `rule-undocumented` | 上面這十二條有沒有寫在這一份裡 |
 
-**這一支沒有排除任何一條** —— 十一條都是改 workflow 的人會撞到的東西，
+**這一支沒有排除任何一條** —— 十二條都是改 workflow 的人會撞到的東西，
 所以每一條都要出現在這張表裡。加規則的時候一起加一列，
 不然 `check:workflows` 自己會擋下來。
 
