@@ -28,7 +28,7 @@
  *
  * 走 npm 的話**要加 `--`**，不然 npm 會把旗標吃掉。
  */
-import { writeFile, mkdir, access } from 'node:fs/promises';
+import { writeFile, mkdir, access, readFile } from 'node:fs/promises';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline/promises';
@@ -230,9 +230,26 @@ async function main() {
   console.log('  1. 打開那個檔案，把內容寫進去');
   console.log('  2. npm run dev      在瀏覽器上看');
   console.log('  3. npm run verify:all && npm run test:tools    兩個都綠才算好');
+  /*
+   * ── 那個秒數去問 docs/CONTENT.md，不要自己記一份 ──────────
+   *
+   * 上面那段註解寫著「同一份步驟寫在兩個地方，遲早會有一邊過期」——
+   * **而這一行自己就是那樣過期的。** 這支腳本 191 個 commit 沒有人碰過，
+   * 裡面寫「約 80 秒」；而第 7 輪（第四十四圈）重量過六次部署，
+   * `docs/CONTENT.md` 早就改成「實測 71～108 秒」。
+   *
+   * 第 3 輪（第四十七圈）用「多久沒碰過、前提還在嗎」找到的。
+   * 改成去讀那一份 —— 這樣就只有一個地方記得那個數字。
+   * 讀不到就只指路，不編一個數字出來。
+   */
+  const guide = await readFile(resolve(ROOT, 'docs/CONTENT.md'), 'utf8').catch(() => '');
+  const secs = /實測\s*(\d+)～(\d+)\s*秒/.exec(guide);
   console.log('  4. 上面三步都只發生在這臺電腦上。要讓 bellafoxy.com 上真的有');
   console.log('     這一頁，還要 git add／commit／push —— 步驟寫在');
-  console.log('     docs/CONTENT.md 的「怎麼讓它真的上線」。推完約 80 秒會上線。\n');
+  console.log(
+    '     docs/CONTENT.md 的「怎麼讓它真的上線」。' +
+      (secs ? `推完約 ${secs[1]}～${secs[2]} 秒會上線。\n` : '那裡也寫著推完多久會上線。\n'),
+  );
 }
 
 await main();
