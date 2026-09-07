@@ -33,6 +33,23 @@ npm run write
 下面幾節寫的是那個檔案裡每一個欄位的意思 —— 手寫也可以，
 `npm run write` 只是省掉記格式。
 
+### 沒有終端機可以打字的時候（給代理人用的）
+
+上面那條路是**問答式的**，需要一個真的終端機。把答案用管線餵進去**不行** ——
+第 3 輪（第五十圈）實測：它問完第一題就掛掉，離開碼 13，
+而畫面上印的是 Node 的 `Detected unsettled top-level await`，
+看不出原因其實是「stdin 沒有下一行了」。
+
+同樣的問題全部改成旗標就會了：
+
+```bash
+npm run write -- --collection=notes --title=標題 --slug=url-slug   --description=一句話說明 --tags=標籤一,標籤二
+```
+
+`--collection`、`--title`、`--slug` 三個都給齊，它就不問問題直接寫檔
+（其餘欄位有預設值：日期是今天、`draft: true`）。
+產出跟問答那條路一模一樣。
+
 
 ## 每個檔案長什麼樣
 

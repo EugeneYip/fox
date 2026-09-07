@@ -117,7 +117,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 63,352 行、3.3 MB、396 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 63,426 行、3.3 MB、397 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -63350,3 +63350,77 @@ search-index.json：14 筆、gzip 5964 B → 每筆 426 B　文件寫「426 B」
 `astro.config.mjs` 的突變 `--restore` 還原並重建，`git status` 只剩註解那一處改動。
 
 **下一輪：3 — 內容結構**
+
+### 2026-09-07 — 第 3 輪（第五十圈）：內容結構
+
+**第五十圈問：照著文件做，做得完嗎？**
+
+這一支要照著走的東西很明確：**`npm run write`** ——
+CLAUDE.md 說那是站主 2026-09-03 要的「她自己就能發文」那條路，
+`docs/CONTENT.md` 的第一節就叫「最快的開始方式」，內容只有一行指令。
+
+#### 照著做的結果：第二題就掛了
+
+```
+$ npm run write
+開一篇新的 —— 每一題直接按 Enter 就用預設值。
+要寫哪一種？poems（詩詞）／notes（短札）／posts（文章）（預設 notes）：標題：
+Warning: Detected unsettled top-level await at …/new-entry.mjs:255
+離開碼 13
+```
+
+它問完第一題、印出第二題，然後死掉。畫面上那句話是 Node 的內部警告 ——
+**看不出真正的原因是「stdin 沒有下一行了」**。
+
+第二個獨立的例子：不經過 `npm run`，直接 `node scripts/new-entry.mjs`，
+**一模一樣的離開碼 13、一模一樣的訊息**。所以不是 npm 那一層的事。
+
+#### 這是文件的問題還是我的問題？兩者都有一點
+
+那一節寫的是**問答式**的路，而問答需要一個真的終端機。我是把答案用管線餵進去的
+—— 嚴格說不是「照著做」，是「照著做的代理人版本」。所以這一半跟第 1 輪的
+VoiceOver 是同一種：**那條路需要一個人。**
+
+但這一格跟 VoiceOver 有個關鍵差別：**這個專案有另一條路，而且它是通的。**
+
+```
+npm run write -- --collection=notes --title=… --slug=… --description=… --tags=…
+→ 離開碼 0
+→ 寫好了：src/content/notes/c50r3-trial.md
+```
+
+三個必要旗標給齊就不問問題，其餘有預設（日期今天、`draft: true`）。
+產出的檔案 frontmatter 正確，`check:content` 綠的。
+
+#### 而那條路**一個字都沒有寫在文件裡**
+
+去找 `--collection=` 出現在哪裡：
+
+| 檔案 | 有沒有 |
+|---|---|
+| `docs/CONTENT.md` | **沒有** |
+| `CLAUDE.md`、`AGENTS.md`、`README.md` | **沒有** |
+| `docs/REVIEW-LOG.md` | 有 —— 三處，都是輪次紀錄裡順手記的 |
+
+也就是說：**唯一寫下來的地方是六萬三千行的輪次紀錄。**
+而這個 repo 的第一句話是「隨時可能換人（或換 AI）接手」——
+接手的代理人照著 `docs/CONTENT.md` 走，會撞上那個 exit 13，
+然後沒有任何線索告訴他還有第二條路。
+
+補進 `docs/CONTENT.md` 的「最快的開始方式」底下，
+連同那個 exit 13 長什麼樣（免得下一個人以為是自己壞掉）。
+
+#### 順帶驗到的：那條路自己會說接下來要做什麼
+
+寫完之後它印的四步（打開檔案寫、`npm run dev` 看、
+`verify:all && test:tools` 兩個都綠、然後才 git push）跟
+`docs/CONTENT.md` 的「怎麼讓它真的上線」對得上，
+而且「約 71～108 秒會上線」那個數字是第 5 輪（第四十七圈）改成去讀文件的
+—— 不是寫死的。這一輪順手確認它還是活的。
+
+#### 六道關卡
+
+`npm run verify:all` 全綠、`npm run test:tools` 44 步全通過。
+試寫的那個檔案刪掉了，`git status --porcelain` 只剩 `docs/CONTENT.md` 那一處。
+
+**下一輪：4 — 平臺 feed 實測**
