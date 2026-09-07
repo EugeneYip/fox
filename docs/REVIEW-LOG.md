@@ -61675,6 +61675,17 @@ X [dispatch-target-missing] deploy.yml 沒有宣告 workflow_dispatch，gh workf
 
 守得住。
 
+**而寫這一段的時候，排程自己把推理變成了量測。** 09-07 04:14 UTC
+的排程跑了、commit 了（我 rebase 的時候撞到那一筆），
+而**那是加了 `paths` 之後的第一次同步**：
+
+```
+2026-09-07T04:14  workflow_dispatch  success  117 秒
+```
+
+**4／4。** 那條路在改動之後仍然是通的 —— 不是因為我推理對了，
+是因為它真的跑過一次。
+
 #### 六道關卡
 
 `npm run verify:all` 全綠、`npm run test:tools` 44 步全通過（沒有改到程式）。
