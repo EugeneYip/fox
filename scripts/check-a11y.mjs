@@ -1048,23 +1048,54 @@ for await (const file of htmlFiles(DIST)) {
    * 沒有放寬成「只要有 #錨點連結就算」：那樣頁尾的「回到頂端」也會過關，
    * 而它救不了每一頁都要穿過導覽列的人。
    */
-  const hasSkipClass = /class="[^"]*skip-link/i.test(html);
-  const skipByShape = (() => {
-    const first = /<a\b[^>]*\shref\s*=\s*"#([^"]+)"[^>]*>/i.exec(html);
-    if (!first) return false;
-    const anchor = first[1];
+  /*
+   * ── 第一判準只看 class，於是錨點掉了也不會有人說話 ──────────
+   *
+   * 第 1 輪（第四十七圈）用「最久沒碰過的東西，前提還在嗎」找到的。
+   * 這一段本來是 `hasSkipClass || skipByShape`：**class 在就直接算過**，
+   * 而錨點存不存在只有 `skipByShape` 那一半在看 —— 也就是說
+   * 這個站（它自己就是用 class 寫的）永遠走第一條，**錨點從來沒有被驗過**。
+   *
+   * 實測：把 `Base.astro` 的 `<main id="main">` 那個 id 拿掉，
+   * 44 頁的跳過連結全部指向不存在的錨點（鍵盤使用者按了什麼都不會發生），
+   * 而這一支**離開碼 0、一個字都沒說**。
+   *
+   * 而規則自己的訊息寫的是「指向後面真的存在的錨點」——
+   * **訊息跟行為講的不是同一件事。** 這不是加一條新檢查，是修一條說了謊的。
+   *
+   * 併成一個判準：先把那個連結找出來（class 認一次，認不到就用頁面最前面
+   * 那個 `#錨點` 連結），再要求它的錨點真的存在、而且在它後面。
+   */
+  const skipLink = (() => {
+    const byClass = /<a\b[^>]*class="[^"]*skip-link[^"]*"[^>]*>/i.exec(html);
+    const first = /<a\b[^>]*\shref\s*=\s*"#[^"]+"[^>]*>/i.exec(html);
+    return byClass ?? first;
+  })();
+  const skipOk = (() => {
+    if (!skipLink) return false;
+    const href = attr(skipLink[0], 'href') ?? '';
+    if (!href.startsWith('#') || href.length < 2) return false;
+    const anchor = href.slice(1);
     /* 錨點要真的存在，而且連結要在它前面（不然那是「回到某處」不是「跳過」） */
     const target = new RegExp(`\\sid\\s*=\\s*"${anchor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`, 'i');
     const at = html.search(target);
-    return at > 0 && at > (first.index ?? 0);
+    return at > 0 && at > (skipLink.index ?? 0);
   })();
 
-  if (!hasSkipClass && !skipByShape) {
+  if (!skipOk) {
+    /*
+     * 兩種壞法要分得開：「根本沒有那個連結」跟「連結在、但它指向的錨點不見了」。
+     * 後者在畫面上一模一樣（連結還是看得到、按了什麼都不會發生），
+     * 而修法完全不同 —— 一個是加連結，一個是把 id 補回去。
+     */
+    const href = skipLink ? attr(skipLink[0], 'href') ?? '' : '';
     add(
       'error',
       rel,
       'skip-link',
-      '沒有跳轉連結 —— 鍵盤使用者每頁都要先穿過導覽列。' +
+      (skipLink && href.startsWith('#')
+        ? `跳轉連結指向 \`${href}\`，而這一頁上沒有那個錨點 —— 按下去什麼都不會發生。`
+        : '沒有跳轉連結 —— 鍵盤使用者每頁都要先穿過導覽列。') +
         '　判準：頁面最前面要有一個 `<a href="#…">` 指向後面真的存在的錨點' +
         '（這個站是 Base.astro 的 `class="skip-link"` 指向 `<main id="main">`）。',
     );

@@ -323,6 +323,21 @@ const CASES = {
       .replace('<main id="main">', '<main>'),
   },
   /*
+   * ── class 在、而錨點不見了 ──
+   *
+   * 上面那一格**同時**拿掉了 class 與 id，所以它走的是「用形狀認」那條路。
+   * 而這個站自己是用 class 寫的 —— 第 1 輪（第四十七圈）量到：
+   * 判準本來是 `hasSkipClass || skipByShape`，class 在就直接算過，
+   * **錨點從來沒有被驗過**。把 `Base.astro` 的 `<main id="main">` 拿掉，
+   * 44 頁的跳過連結全部指向不存在的錨點，而關卡離開碼 0、一個字都沒說。
+   *
+   * 這一格就是那個缺口：class 留著，只把 id 拿掉。
+   */
+  'skip-link（class 在但錨點不見了）': {
+    rule: 'skip-link',
+    html: page().replace('<main id="main">', '<main>'),
+  },
+  /*
    * 這一條的判準是「英文頁的 <main> 跟對應的中文頁**一模一樣**」——
    * 那是明確的「忘了翻」。所以案例必須同時放兩份文件。
    *
