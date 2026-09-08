@@ -14,7 +14,11 @@ lang: zh-TW
 publishedAt: 2026-08-20
 draft: true
 
-platform: threads          # 必須對應 src/config/platforms.data.mjs 裡的 id
+platform: threads          # 要對應 src/config/platforms.data.mjs 裡的 id
+                           # 沒有東西在驗這個。打錯的話不會有人報錯 ——
+                           # 網站會照那串字編一個平臺出來（灰色、名字就是那串字），
+                           # 還會多產生 /elsewhere/<那串字>/ 兩頁，並進 sitemap 與 feed。
+                           # 第 3 輪（第五十二圈）實測過：七道關卡一道都沒說話。
 url: https://www.threads.net/@example/post/EXAMPLE
 
 excerpt: >-

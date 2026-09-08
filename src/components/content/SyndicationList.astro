@@ -66,8 +66,20 @@ const itemLang = (item: (typeof items)[number]) =>
         </span>
       </div>
 
-      {/* why 是站主自己寫的（跟著頁面語言），summary 來自對方平臺（可能是別的語言） */}
-      {item.why && <p class="synd__why">{item.why}</p>}
+      {/*
+        `why` 原本沒有標 lang，理由寫的是「why 是站主自己寫的（跟著頁面語言）」。
+        **那個前提不成立**，而且同一個檔案上面就寫了為什麼：`manualItems()`
+        刻意**不依語言過濾**（「她還在哪裡發表，跟讀者現在用哪種語言看網站無關」）。
+        一筆手動登錄的條目只有一個 `lang`，它的 `why` 會原封不動出現在
+        **兩種語言**的 /elsewhere 上 —— 跟著條目走，不是跟著頁面走。
+
+        第 3 輪（第五十二圈）實測：把範本那一筆改成 `draft: false` 再建置，
+        `check:a11y` 的 `unlabelled-cjk` 當場紅在 `en/elsewhere/index.html`
+        —— 英文頁上一段沒有標語言的中文。
+        這一行從來沒有在站上算繪過（手動登錄目前 0 筆），所以那個前提
+        也從來沒有被檢驗過。判準跟 title／summary 對齊：用 itemLang()。
+      */}
+      {item.why && <p class="synd__why" lang={itemLang(item)}>{item.why}</p>}
       {!item.why && item.summary && (
         <p class="synd__summary muted" lang={itemLang(item)}>{item.summary}</p>
       )}

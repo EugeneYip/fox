@@ -568,6 +568,25 @@ for (const e of entries.filter((x) => !x.draft)) {
      * **沒有走 lib/content.ts 的 getEntries()** —— 同一條規則的第二份實作。
      * 兩份實作遲早會分岔，而分岔的那天沒有東西會說話。
      *
+     * ── 這條的改法本來第一句就指錯方向 ──────────────
+     *
+     * 原本寫的是「先確認 frontmatter 的 platform 是 docs/PLATFORMS.md 裡有的 id」。
+     * 第 3 輪（第五十二圈）實測，那個原因**不可能造成這條規則響**：
+     * `platformOrFallback()` 對不認得的 id 會**當場編一個平臺出來**
+     * （name 就是那串 id、灰色、media: 'article'），所以條目照樣會出現。
+     *
+     * 把範本那一筆改成 `draft: false` ＋ `platform: thrads`（打錯一個字）再建置：
+     *
+     *   build 離開碼 0
+     *   /elsewhere 多一格叫「thrads」的平臺，寫著「共 1 篇」
+     *   多產生兩頁：dist/elsewhere/thrads/ 與 dist/en/elsewhere/thrads/
+     *   sitemap-0.xml、rss-all.xml、search-index.json、首頁、/about 都有它
+     *   **這一條 saw 到 1 個主體，然後是綠的**
+     *
+     * 也就是說：打錯 platform 的後果不是「不見了」，是**多了一個假的平臺**，
+     * 而七道關卡沒有一道說話（`docs/TODO.md` 記了「沒有人在驗 platform id」）。
+     * 改法的第一句因此指向一個永遠不會發生的原因 —— 拿掉了。
+     *
      * 這條只問一件事：非草稿的 external 有沒有出現在 elsewhere/ 底下。
      * 標題短於 4 個字時 needles 會是空的、掃不了 —— 那是這整套字串比對
      * 共同的限制（見上面 draft-unscannable），不在這裡重複處理。
@@ -583,8 +602,8 @@ for (const e of entries.filter((x) => !x.draft)) {
             '不是草稿，但產出的 elsewhere/ 底下找不到它。' +
             (staleDist
               ? '　改法：dist/ 比內容舊，**先跑 npm run build**。'
-              : '　改法：dist/ 是新的。先確認 frontmatter 的 platform 是 docs/PLATFORMS.md 裡有的 id；' +
-                '再不然就是 lib/syndication.ts 的 manualItems() 沒把它收進去。'),
+              : '　改法：dist/ 是新的，所以是 lib/syndication.ts 的 manualItems() 沒把它收進去。' +
+                '　（**不是 platform 打錯** —— 那不會讓它消失，見下面那段註解。）'),
         });
       }
     }

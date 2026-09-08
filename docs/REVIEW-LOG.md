@@ -117,7 +117,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 64,819 行、3.4 MB、412 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 64,931 行、3.4 MB、413 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -64817,3 +64817,115 @@ dist/ 的內嵌 <script> 裡的 fetch／XHR：2 個
 改到 `scripts/`，所以 commit 之後補跑 `ci:sim`。
 
 **下一輪：3 — 內容結構**
+
+### 2026-09-08 — 第 3 輪（第五十二圈）：內容結構
+
+**這一圈問：這個東西的名字，跟它實際做的事一樣嗎？**
+內容這一輪對準**欄位的名字與註解對那個欄位的承諾**。
+
+#### 一、`platform: threads # 必須對應…裡的 id` —— 那個「必須」沒有人在守
+
+同一份 schema 裡兩個「指向別的東西」的欄位，寫法不一樣：
+
+| 欄位 | 型別 | 有沒有人驗 |
+|---|---|---|
+| `poems` 的 `related` | `z.array(reference('poems'))` | **有**（Astro 自己會擋） |
+| `external` 的 `platform` | `z.string()` | 沒有 |
+| `posts` 的 `alsoOn[].platform` | `z.string()` | 沒有 |
+| `sources.mjs` 的 `platform` | —— | **有**（`verify-sources`／`sync-health --strict`，第四十四圈量過） |
+
+也就是說：**同一條「platform id 必須存在」的規則，來源那一半在守，內容那一半沒有。**
+
+把範本那一筆暫時打開（`draft: false`）並把 id 打錯一個字再建置，量到的後果：
+
+```
+build 離開碼 0
+/elsewhere 多一格叫「thrads」的平臺，寫著「共 1 篇」，灰色
+多產生兩頁：dist/elsewhere/thrads/ 與 dist/en/elsewhere/thrads/
+進了 sitemap-0.xml、rss-all.xml、search-index.json、首頁、/about
+```
+
+七道關卡跑一遍：`check:content`／`check:links`／`check:copy`／`audit:privacy`／
+`check:perf`／`check:generated` **全綠**。唯一紅的是 `check:a11y`，
+而它抓到的是**另一件事**（下一節）。
+
+**沒有當場加檢查** —— 「過去十輪沒有真的事故」那一條，站上手動登錄目前 0 筆。
+記進 `docs/TODO.md`，並把範本裡那句「必須」改成說得出後果的版本
+（打錯不會有人報錯，網站會照那串字編一個平臺出來）。
+
+#### 二、`external-missing` 的改法，第一句指向一個不可能發生的原因
+
+那條規則的訊息寫著：
+
+> 　改法：dist/ 是新的。**先確認 frontmatter 的 platform 是 docs/PLATFORMS.md 裡有的 id**；
+> 再不然就是 lib/syndication.ts 的 manualItems() 沒把它收進去。
+
+上面那次實測同時證明了這句話不可能對：`platformOrFallback()` 對不認得的 id
+**當場編一個平臺出來**，所以條目照樣會出現在 `elsewhere/` 底下 ——
+這條規則那一次 `saw` 到 **1 個主體，然後是綠的**。
+
+打錯 platform 的後果不是「不見了」，是**多了一個假的平臺**。
+第一句拿掉，換成量到的事實（註解裡留了完整的複現步驟）。
+
+#### 三、`why` 那一行的註解說它跟著頁面語言 —— 而同一個檔案上面就寫了它不會
+
+`SyndicationList.astro` 有三個會印文字的地方，兩個標了語言、一個沒有：
+
+```astro
+<Heading class="synd__title" lang={itemLang(item)}>{item.title}</Heading>
+{item.why && <p class="synd__why">{item.why}</p>}                        ← 沒有
+<p class="synd__summary muted" lang={itemLang(item)}>{item.summary}</p>
+```
+
+沒標的那一行有註解說明為什麼：「why 是站主自己寫的（**跟著頁面語言**）」。
+**那個前提不成立**，而反證就寫在同一個檔案往上 40 行的 `manualItems()` 裡：
+它**刻意不依語言過濾**（「她還在哪裡發表，跟讀者現在用哪種語言看網站無關」）。
+一筆手動登錄的條目只有一個 `lang`，它的 `why` 會原封不動出現在**兩種語言**的
+`/elsewhere` 上 —— 跟著條目走，不是跟著頁面走。
+
+第一節那次實測當場證實了：`check:a11y` 的 `unlabelled-cjk` 紅在
+`en/elsewhere/index.html` ——「英文頁面上的中文沒有標語言」。
+加上 `lang={itemLang(item)}` 之後，**同一份輸入**再跑一次，綠。
+
+這一行**從來沒有在站上算繪過**（`external` 集合 0 筆），所以那個前提
+也從來沒有被檢驗過。
+
+#### 四、突變
+
+| 突變 | 預期 | 結果 |
+|---|---|---|
+| 把範本改成非草稿（等於把那條路打開），修正前 | `unlabelled-cjk` 紅 | **紅**（exit 1） |
+| 同上，修正後 | 綠 | **綠**（exit 0） |
+| 拿掉旁邊那一行 `summary` 的 `lang=`（那一行站上真的在算繪） | `unlabelled-cjk` 紅 | **紅**（2 筆，影片說明） |
+
+第三發是為了確認**那個守衛今天是活的** —— `why` 那一行一旦有內容，
+同一條規則就會看著它。
+
+#### 五、我自己在這一輪裡讀漏了工具的輸出
+
+第一次做第一節那個實驗時，`--from 'draft: true'` 配到了**兩處**：
+第 8 行的註解（「draft: true 代表這只是範本」）與第 15 行的 frontmatter。
+`mutate.mjs` 改的是第一處，然後**它就印在畫面上**：
+
+```
+已套用到 …（那一段出現 2 次，只改第一次）
+```
+
+而我把它導進檔案、只 `echo $?`，於是沒看到。結果是建置出來什麼都沒變，
+差一點寫成「`external` 的條目即使非草稿也不會算繪」—— 一個完全錯的發現。
+工具沒問題，是我沒讀它說的話。（第三輪、第三次要修正自己的量尺。）
+
+#### 六、沒發現問題的部分
+
+- 33 個 schema 欄位裡 8 個沒有任何內容用過 —— 關卡自己每次都會說，不重複記
+- `featured`、`draft`、`translationKey` 三個「名字承諾了行為」的欄位都查過：
+  前兩個接得好好的，第三個關卡自己會說「3 個 key、0 組配成對」
+- 集合叫 `posts`、網址是 `/writing`、UI 叫「文章」—— 三個名字，
+  但 `new-entry.mjs` 第 50 行把三者對在一起，寫的人不會走錯
+
+#### 六道關卡
+
+`npm run verify:all` 六道全綠、`npm run test:tools` 44 步全部通過。
+改到 `scripts/`，所以 commit 之後補跑 `ci:sim`。
+
+**下一輪：4 — 平臺 feed 實測**

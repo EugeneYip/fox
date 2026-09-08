@@ -75,6 +75,23 @@
   不守「讀起來對不對」。
 - **螢幕閱讀器從來沒有人測過**（`docs/A11Y.md` 自己寫著「現況：沒有人做過」）。
 
+- **內容 frontmatter 的 `platform` 沒有人在驗，而 `sources.mjs` 的有。**
+  `external` 的 `platform` 與 `posts` 的 `alsoOn[].platform` 都是 `z.string()`，
+  而同一份 schema 裡的 `related` 用的是 Astro 的 `reference()` —— 這個 repo
+  知道怎麼宣告真的參照。第 3 輪（第五十二圈）實測打錯一個字的後果：
+  建置離開碼 0、`/elsewhere` 多一格灰色的假平臺、多產生兩頁、進 sitemap／
+  rss-all／search-index／首頁／`/about`，**七道關卡一道都沒說話**
+  （唯一紅的是 `unlabelled-cjk`，而它抓的是另一件事）。
+  `sources.mjs` 那一半由 `verify-sources`／`sync-health --strict` 守著。
+  沒有當場加檢查是因為「過去十輪沒有真的事故」那一條 —— 站上手動登錄目前 0 筆。
+  真的要補的話最省的地方是 schema（`content.config.ts` 可以 import
+  `platforms.data.mjs`，那個拆分本來就是為了讓沒有編譯步驟的東西讀得到）。
+- **手動登錄外站文章那條路整個沒有算繪過。** 站上 `external` 集合 0 筆
+  （唯一那份是 `draft: true` 的範本），所以 `SyndicationList` 的 `why` 那一行、
+  `/elsewhere/<平臺>/` 對應手動平臺的那種頁、以及 `platformOrFallback` 的
+  灰色樣式都從來沒有跟真資料跑過。第 3 輪（第五十二圈）把它暫時打開量了一次，
+  當場抓到 `why` 少標 `lang`（已修）。
+
 ## 工具與檢查
 
 - **站外連結沒有東西在守**（第四十八圈第 4 輪量到）。`check:links` 只看站內
