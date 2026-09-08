@@ -3,7 +3,11 @@
 /**
  * 產生 PNG 圖示與社群分享圖。
  *
- *   node scripts/make-icons.mjs
+ *   npm run icons
+ *
+ * （要 `--experimental-strip-types`，因為分享圖上的字是從 `src/config/site.ts`
+ * 讀出來的 —— 見下面 import 那一行的說明。npm script 就是為了把那個旗標
+ * 收在一個地方。）
  *
  * 用 sharp 把 SVG 轉成 PNG。sharp 本來就是 Astro 的相依套件，不必另外裝。
  * 產出的檔案會被 commit 進 repo —— 它們很少變動，沒必要每次 build 都重跑。
@@ -16,6 +20,23 @@ import { writeFile, mkdir } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
+/*
+ * ── 分享圖上的三行字，本來是手抄的 ──────────────────
+ *
+ * 第 6 輪（第五十三圈）量到：`ogSvg({ title: '狐說八道', tagline: '一隻狐狸，說古人的話',
+ * epigraph: '青青子衿，悠悠我心' })` —— 三個字串在 `src/config/site.ts` 裡都有
+ * （`site.name['zh-TW']`、`site.tagline['zh-TW']`、`site.epigraph.text`），
+ * 而這裡各抄了一份。今天三份都一樣，所以不是 bug，是一個等著發生的分岔。
+ *
+ * 為什麼這一份特別危險：改站名的時候，每一頁、兩份 feed、`site.webmanifest`
+ * 都會跟著動（manifest 那一份還有 `manifest-drift` 在守），
+ * **只有這一張 PNG 不會** —— 而且它是二進位，任何掃字串的檢查都看不進去。
+ * 社群分享出去的那張圖會一直印著舊站名，沒有人會收到通知。
+ *
+ * 改成直接讀 `site.ts`。代價是這支腳本從此要 `--experimental-strip-types`
+ * （`check:copy` 早就是這樣跑的），所以順手補了 `npm run icons`。
+ */
+import { site } from '../src/config/site.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC = resolve(ROOT, 'public');
@@ -129,7 +150,11 @@ await png(iconSvg({ size: 180, padding: 0.1 }), resolve(PUBLIC, 'apple-touch-ico
 await png(iconSvg({ size: 32, padding: 0.06 }), resolve(PUBLIC, 'favicon.ico'), PAPER);
 
 await png(
-  ogSvg({ title: '狐說八道', tagline: '一隻狐狸，說古人的話', epigraph: '青青子衿，悠悠我心' }),
+  ogSvg({
+    title: site.name['zh-TW'],
+    tagline: site.tagline['zh-TW'],
+    epigraph: site.epigraph.text,
+  }),
   resolve(PUBLIC, 'og/default.png'),
   PAPER,
 );

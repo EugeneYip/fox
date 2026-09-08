@@ -117,7 +117,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 65,853 行、3.5 MB、423 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 65,933 行、3.5 MB、424 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -65851,3 +65851,83 @@ dist/en/search/index.html   blank=1  rel=0
 這一輪沒有改到 `scripts/` 或 `.github/`。
 
 **下一輪：6 — 文案與語氣**
+
+### 2026-09-08 — 第 6 輪（第五十三圈）：文案與語氣
+
+**這一圈問：動這一處，會牽動哪些地方？那些牽連，有人寫下來嗎？**
+文案這一輪找的是反過來的那一種：**改了站名，有哪一個地方「不會」跟著動？**
+
+#### 一、答案是那張社群分享圖
+
+`scripts/make-icons.mjs` 第 132 行（改之前）：
+
+```js
+ogSvg({ title: '狐說八道', tagline: '一隻狐狸，說古人的話', epigraph: '青青子衿，悠悠我心' })
+```
+
+三個字串在 `src/config/site.ts` 裡**都有**：
+
+| 圖上的字 | site.ts 裡的來源 | 今天一樣嗎 |
+|---|---|---|
+| `狐說八道` | `site.name['zh-TW']` | ✓ |
+| `一隻狐狸，說古人的話` | `site.tagline['zh-TW']` | ✓ |
+| `青青子衿，悠悠我心` | `site.epigraph.text` | ✓ |
+
+**今天三份都一樣，所以不是 bug** —— 是一個等著發生的分岔。
+而這一份特別危險，理由有三個疊在一起：
+
+1. 改站名的時候，44 頁、兩份 feed、`site.webmanifest` 都會跟著動
+   （manifest 那一份還有 `manifest-drift` 在守），**只有這張 PNG 不會**
+2. 它是**二進位** —— `check:copy`、`check:content`、`audit:privacy`
+   全部是掃文字的，沒有一支看得進去
+3. 它**沒有 npm script**（`node -e` 掃過整份 `package.json`：一個都沒有），
+   所以連「什麼時候該重跑」都沒有記在任何地方
+
+社群分享出去的那張圖會一直印著舊站名，而沒有人會收到通知。
+
+#### 二、改成直接讀 `site.ts`，而且驗過位元組一樣
+
+先跑對照組：照原樣 `node scripts/make-icons.mjs` 跑一次 ——
+`git status public/` **沒有輸出**，五個 PNG 逐位元組跟版控裡的一樣。
+（這支腳本在這台機器上是可重現的，所以下面的比對才有意義。）
+
+改完（三個字串改成 `site.name['zh-TW']`／`site.tagline['zh-TW']`／`site.epigraph.text`）
+再跑：**還是沒有輸出** —— 產出一模一樣。
+
+代價是這支腳本從此需要 `--experimental-strip-types`（`check:copy` 早就是這樣跑的），
+所以順手補了 `npm run icons`，把旗標收在一個地方，
+並把檔頭那行用法從 `node scripts/make-icons.mjs` 改成 `npm run icons`。
+
+#### 三、突變：把站名改掉，圖真的會跟著變
+
+```
+改 site.ts 的 name → npm run icons → git status: M public/og/default.png
+還原 site.ts       → npm run icons → git status: （沒有輸出，回到原本的位元組）
+```
+
+這一格證明的是**連上了**，不是「今天剛好一樣」。
+
+#### 四、量到但沒動的：同一支腳本還手抄了四個顏色
+
+```
+PAPER = #faf6ee  ← tokens.css 的 --c-bg
+FLAME = #d2622a  ← --c-flame
+INK   = #1f1c18  ← --c-ink
+SOFT  = #55504a  ← --c-ink-soft
+```
+
+四個今天也都一樣。沒有一起改：那是視覺那一輪的東西，
+而且要從 CSS 剖析變數（比 import 一個 `.ts` 麻煩），
+不是「只做這一輪的面向」該做的事。記進 `docs/TODO.md`。
+
+#### 五、沒發現問題的部分
+
+- `check:copy` 的 148 組文案、`EN_COVERAGE` 基準線（第 6 輪〔第五十二圈〕剛更新過）都沒動
+- 三個字串在改之前就是一致的，所以這一輪沒有修好任何一個**現存**的錯
+
+#### 六道關卡
+
+`npm run verify:all` 六道全綠、`npm run test:tools` 44 步全部通過。
+改到 `scripts/` 與 `package.json`，所以 commit 之後補跑 `ci:sim`。
+
+**下一輪：7 — 建置與 CI**
