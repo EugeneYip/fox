@@ -79,9 +79,23 @@ const isCurrent = (href: string) => {
      * 而 `color-mix()` 沒有 —— 同一套紀律只用在其中一個上。
      * （`check:contrast` 現在兩個都守。）
      */
+    /*
+     * ── 從半透明毛玻璃改成不透明 ──────────────────
+     *
+     * 本來是 `color-mix(… 88%, transparent)` ＋ `backdrop-filter: blur(10px)`。
+     * 第 8 輪（第五十三圈）在瀏覽器裡捲一次首頁看到的：站名那行大字會從
+     * 頁首底下**糊出來**，在一個以「紙」為材質的站上讀起來像沒對齊，不像效果。
+     *
+     * 而同一件事一直是量得出來的缺口：`check:contrast` 每一次都會警告
+     * 「.site-header 上的 --c-ink-faint 最壞 4.09:1（淺）／4.11:1（深）」——
+     * 低於 AA 的 4.5，而那個「最壞」正是底下捲過 --c-seal／--c-flame 的時候。
+     * `docs/STATE.md` 也把它列在「還沒解決」裡。
+     *
+     * 改成不透明之後：糊掉的字沒有了，而那兩個最壞情況也不存在了
+     * （頁首的字現在永遠是印在 --c-bg 上，4.94:1 與 4.86:1，兩套都過）。
+     * 分隔仍然靠那條 `border-block-end` 的髮絲線 —— 這個站本來就不用陰影堆層次。
+     */
     background: var(--c-bg);
-    background: color-mix(in srgb, var(--c-bg) 88%, transparent);
-    backdrop-filter: blur(10px);
     position: sticky;
     inset-block-start: 0;
     z-index: 20;

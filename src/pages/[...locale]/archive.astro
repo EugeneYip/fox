@@ -103,8 +103,27 @@ const otherTotal =
     grid-template-columns: min(5.5rem, 30%) min(1.6rem, 10%) 1fr;
     gap: var(--s-2);
     align-items: baseline;
-    padding-block: var(--s-2);
-    margin: 0;
+    padding-block: var(--s-3);
+    /*
+     * 往外咬一點，讓 hover 的底色比文字寬一些 —— 底色貼著字會顯得髒。
+     * 用負的 margin 而不是加寬容器：這樣列表本身的對齊線不會動。
+     */
+    padding-inline: var(--s-3);
+    margin-inline: calc(var(--s-3) * -1);
+    border-radius: var(--r-md);
+    transition: background var(--dur-fast) var(--ease);
+  }
+
+  /*
+   * 整列有回應，不只標題換色。
+   *
+   * `:focus-within` 跟 `:hover` 一起寫：鍵盤 Tab 到那一列的連結時，
+   * 看到的回饋要跟滑鼠一樣 —— 不然這個效果等於只給滑鼠使用者。
+   * 動效的時長走 `--dur-fast`，`prefers-reduced-motion` 的全站區塊會關掉它。
+   */
+  .arc__item:hover,
+  .arc__item:focus-within {
+    background: var(--c-bg-sunken);
   }
 
   .arc__date {

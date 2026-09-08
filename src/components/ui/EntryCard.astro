@@ -73,6 +73,17 @@ const subtitle = poem ? `${poem.author}${poem.dynasty ? `・${poem.dynasty}` : '
     gap: var(--s-2);
     padding-block: var(--s-5);
     border-block-end: var(--border-thin);
+    /* 跟 /彙整 的列同一個做法：底色往外咬一點，對齊線不動 */
+    padding-inline: var(--s-3);
+    margin-inline: calc(var(--s-3) * -1);
+    border-radius: var(--r-md);
+    transition: background var(--dur-fast) var(--ease);
+  }
+
+  /* 整篇有回應（`:focus-within` 讓鍵盤也拿得到同一個回饋） */
+  .entry:hover,
+  .entry:focus-within {
+    background: var(--c-bg-sunken);
   }
 
   .entry:last-child { border-block-end: 0; }
