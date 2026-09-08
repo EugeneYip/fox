@@ -193,10 +193,12 @@ git pull --rebase origin main && git push
 git checkout --theirs src/data/syndication.json && git add src/data/syndication.json && git rebase --continue
 ```
 
-推完立刻確認個資檔沒被帶上去：
+推完立刻確認個資檔沒被帶上去（跟上面「推之前的最後確認」同一條，
+**不要**寫成 `git ls-files | grep -c identity.local` —— 那一條永遠是 1，
+`identity.local.example.ts` 是刻意公開的範本，它自己就會配到）：
 
 ```bash
-git ls-files | grep -c identity.local    # 必須是 0
+git ls-files -- src/config/identity.local.ts   # 要沒有輸出
 ```
 
 ---

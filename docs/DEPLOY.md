@@ -49,11 +49,19 @@ git push -u origin main
 推完之後檢查一件事：
 
 ```bash
-git ls-files | grep -c identity.local
+git ls-files -- src/config/identity.local.ts
 ```
 
-**必須輸出 `0`。** 如果不是 0，代表個資檔被推上去了，停下來先處理
+**必須沒有輸出。** 有輸出就代表個資檔被推上去了，停下來先處理
 （`git rm --cached src/config/identity.local.ts`，並且注意歷史紀錄裡也會留存）。
+
+（**不要寫成 `git ls-files | grep -c identity.local`。** 這一份到
+第 1 輪〔第五十二圈〕為止就是那樣寫的，而它**永遠輸出 1** ——
+`identity.local.example.ts` 是刻意公開的範本，檔名自己就會配到。
+也就是說：照這一段做的人每一次都會看到「不是 0」，然後照著上面那句話
+去 `git rm --cached` 一個根本不在版控裡的檔案。
+`docs/STATE.md` 的「推之前的最後確認」一直是對的寫法 ——
+**同一件事兩個地方在寫，而只有一邊是對的。**）
 
 ---
 
