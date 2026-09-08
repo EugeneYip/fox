@@ -74,7 +74,7 @@ import { RULES, documentationDuty } from './lib/copy-rules.mjs';
  * 記一個基準在這裡：掉下來的時候那一段會說「這是回退」並附上上一次的數字。
  * 真的決定要少一句英文的話，把這裡一起改 —— 那一改就是「我知道我在改什麼」。
  */
-const EN_COVERAGE = { date: '2026-09-06', pairs: 147, pct: 100 };
+const EN_COVERAGE = { date: '2026-09-08', pairs: 148, pct: 100 };
 
 const EXTRA_RULE_IDS = [
   'unused-i18n-key',
