@@ -137,16 +137,30 @@ const isCurrent = (href: string) => {
   .site-nav {
     flex: 1;
     min-inline-size: 0;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
   }
 
-  .site-nav::-webkit-scrollbar { display: none; }
-
+  /*
+   * ── 導覽列用換行，不用橫向捲 ──────────────────────
+   *
+   * 本來是 `overflow-x: auto` ＋ `scrollbar-width: none`（捲軸還藏起來）。
+   * 第 1 輪（第五十四圈）問「最壞的輸入下長什麼樣」，在瀏覽器裡量到：
+   *
+   *   視窗 320px、根字級 16px    五項都在（最右邊 247px）—— 那條捲軸從來用不到
+   *   視窗 320px、根字級 32px    只看得到「詩詞 文章 短札」，
+   *                              「各處」在 392px、「關於」在 492px —— **看不到，也沒有任何提示**
+   *
+   * 內容沒有真的消失（那一條可以滑、Tab 也走得進去），所以不算違反 1.4.4；
+   * 但把捲軸藏起來等於**連「還有東西」都不說**。一個把預設字級調大的人
+   * 看到的是一個只有三項的選單。
+   *
+   * 改成換行：預設字級下五項本來就排得下，所以**畫面一點都沒變**；
+   * 字級一大就換到第二行，全部看得到。橫向的 gap 維持 --s-5，
+   * 換行之後的行距用 --s-2（1.5rem 當行距太鬆）。
+   */
   .site-nav ul {
     display: flex;
-    gap: var(--s-5);
+    flex-wrap: wrap;
+    gap: var(--s-2) var(--s-5);
     list-style: none;
     padding: 0;
     margin: 0;
@@ -244,14 +258,17 @@ const isCurrent = (href: string) => {
     }
 
     /*
-     * `inline-size: max-content` 是關鍵：ul 預設會被拉成 nav 的寬度（100%），
-     * 那時項目是**溢出**它的內容盒，尾端的 padding 一樣留不住。
-     * 讓 ul 跟著內容長，那段留白才會變成真的可捲寬度。
-     * `min-inline-size: 100%` 讓內容不夠寬時維持原樣（中文就是這一種）。
+     * 上面那一段（尾端 padding 留不住）**是捲動容器才有的問題**。
+     * 第 1 輪（第五十四圈）把導覽列從橫向捲改成換行之後就不存在了 ——
+     * 沒有捲動，就沒有「捲到底」。
+     *
+     * `inline-size: max-content` 因此也拿掉了：它會讓 ul 跟著內容長到
+     * 532px（根字級 32px 時實測），而現在沒有捲動容器接住它，
+     * **整頁會橫向溢出 212px** —— 比原本更糟。
+     * 留 `min-inline-size: 100%`：那一行本來就只是「內容不夠寬時維持原樣」。
      */
     .site-nav ul {
       padding-inline: var(--gutter);
-      inline-size: max-content;
       min-inline-size: 100%;
     }
     .site-header__tools { margin-inline-start: auto; }
