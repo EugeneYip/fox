@@ -662,8 +662,20 @@ for (const required of DEPLOY_MUST_RUN) {
 
 {
   const pkg = pkgJson;
+  /*
+   * 切 `&&` 不要求兩側有空格。
+   *
+   * 第 7 輪（第五十一圈）量到：同一個字串有兩支在剖析，而它們對「合法但少了
+   * 空格」的寫法不一樣 —— `run-steps.mjs` 的 `expand()` 是 `split('&&')` 再
+   * `trim()`，兩種寫法都展開成 2 步；這裡本來是 `split(' && ')`，
+   * 於是 `npm run a&&npm run b` 會被當成**一個**叫做 `a&&npm run b` 的關卡。
+   *
+   * 實測：把 verify:all 的 `&&` 兩側空格拿掉（npm 照樣跑得動、離開碼 0），
+   * 這一支就報 `X [gate-missing-in-check] 部署路徑上會跑 npm run check&&npm run…`
+   * —— 紅得很大聲，但點名的是一個不存在的關卡，讀的人會往錯的方向找。
+   */
   const gates = String(pkg.scripts?.['verify:all'] ?? '')
-    .split(' && ')
+    .split(/\s*&&\s*/)
     .map((/** @type {string} */ s) => s.replace('npm run ', '').trim())
     .filter(Boolean);
   const checkYml = await readFile(resolve(DIR, 'check.yml'), 'utf8').catch(() => '');

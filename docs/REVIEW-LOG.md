@@ -117,7 +117,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 64,298 行、3.4 MB、408 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 64,377 行、3.4 MB、409 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -64296,3 +64296,82 @@ scripts/lib/copy-rules.mjs    [一-鿿] × 8（五條規則的 bad 與 subject�
 `npm run verify:all` 全綠、`npm run test:tools` 44 步全部通過（沒有改到程式）。
 
 **下一輪：7 — 建置與 CI**
+
+### 2026-09-08 — 第 7 輪（第五十一圈）：建置與 CI
+
+**第五十一圈問：同一件事，現在有幾個地方各做一次？做得一樣嗎？**
+
+CI 這一支最該問的是：**`npm run a && npm run b` 這種字串，有幾支在剖析？**
+
+兩支：
+
+```
+scripts/run-steps.mjs      expand()   split('&&') → trim()      遞迴，展得開就繼續展
+scripts/check-workflows.mjs gates     split(' && ')             一層，而且**要求兩側各一個空格**
+```
+
+（`ci-sim.mjs` 不算 —— 它的步驟是從 `deploy.yml` 推的，不是從 `package.json`。）
+
+#### 餵同一個合法輸入，兩支的答案不一樣
+
+`&&` 兩側不留空格在 npm 裡是合法的。開四個探針 script 試 `run-steps`：
+
+| `probe:spaced`（`a && b`） | **2 步** |
+| `probe:tight`（`a&&b`） | **2 步** |
+
+再把 `verify:all` 的 `&&` 兩側空格拿掉（**npm 照樣跑得動，`verify:all` 離開碼 0**），
+跑 `check:workflows`：
+
+```
+X [gate-missing-in-check] 部署路徑上會跑 npm run check&&npm run check:contrast&&npm run build&&…
+離開碼 1
+```
+
+**它把整條鏈當成一個關卡的名字。** 紅得很大聲 —— 但點名的是一個不存在的關卡，
+讀的人會往「check.yml 少跑了一道」的方向找，而真正的原因是兩個空格。
+
+#### 改成跟另一支一致
+
+`split(' && ')` → `split(/\s*&&\s*/)`。驗了兩個方向：
+
+| | 結果 |
+|---|---|
+| 正常空格（現況） | 輸出跟改之前**一字不差**（`diff` 乾淨） |
+| 少空格 | 離開碼 0、假關卡名消失 —— 跟 `run-steps` 一樣看到六道 |
+
+這不是新規則，是讓兩支剖析同一個字串的程式在**同一個合法輸入**上給同一個答案。
+
+#### 為什麼不是「兩支合成一支」
+
+`run-steps` 要的是「展開成一串可以逐步跑的名字」（遞迴、會展 `test:tools`），
+`check-workflows` 要的是「`verify:all` 這一層有哪幾道關卡」（**刻意只展一層** ——
+`docs/TODO.md` 上那條「`membersOf` 只展開一層」記的就是這件事，
+而第 7 輪〔第四十六圈〕量過那個決定的後果：正因為展不開複合 script，
+`check.yml` 才必須逐一列出八道關卡）。
+**兩支要的答案不同，所以是兩支；差別只在容忍度，而那一格今天對齊了。**
+
+#### 而寫這一筆的時候，被自己的關卡抓了一次
+
+`test:tools` 第一次跑**停在第 39 步**：
+
+```
+X [doc-command-missing] docs/STATE.md:210　npm run a
+   package.json 裡沒有 "a" 這個 script —— 照著文件打的人會拿到 Missing script。
+```
+
+我在 `docs/STATE.md` 裡拿 `npm run a && npm run b` 當例子講這一輪在剖析什麼，
+而 `check:doc-links` 掃文件裡每一個 `npm run X`、確認 `X` 真的存在。
+**那條規則守的正是第五十圈那個問題**（照著文件做，做得完嗎）——
+而它在我描述一個剖析器的時候，抓到我寫了一個打不動的指令。
+
+（`docs/REVIEW-LOG.md` 在那支的 `SKIP` 名單裡，所以上面那段程式碼框沒有被算進去。）
+改成不寫死假的 script 名字之後就綠了。
+
+#### 六道關卡
+
+`npm run verify:all` 全綠、`npm run test:tools` 44 步全部通過（第一次紅在上面那一格）。
+四個探針 script 與 `verify:all` 的空格都用 `git checkout -- package.json` 還原，
+`git status --porcelain` 只剩該改的那幾個檔案。
+改到了 `check-workflows.mjs`，所以 commit 之後補跑了一次 `ci:sim`。
+
+**下一輪：8 — 視覺與版面**
