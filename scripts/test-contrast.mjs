@@ -292,7 +292,18 @@ await check('原本的顏色全部合格', {}, { exit: 0, checked: 44 });
         .map((v) => v / 255)
         .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
         .reduce((acc, v, i) => acc + [0.2126, 0.7152, 0.0722][i] * v, 0);
-    const ratio = (lum('#faf6ee') + 0.05) / (lum(hex) + 0.05);
+    /*
+     * 亮的當分子 —— 跟 check-contrast.mjs 的 `contrast()` 一樣先排序。
+     *
+     * 第 8 輪（第五十一圈）量到：這一行本來寫死「`#faf6ee` 比較亮」，
+     * 而那今天成立**只因為底色是寫死的** —— 建議的顏色一定比它暗。
+     * 兩種算法在 `#1f1c18`（15.74）與 `#55504a`（7.40）上一模一樣，
+     * 一換成比底色亮的（`#ffffff`）就分岔：關卡算 1.08、這裡算 0.93。
+     * `docs/TODO.md` 上那條「把 `#faf6ee` 寫死在 fixture 裡」哪天真的拿掉，
+     * 這一行就會變成一個 bug。先對齊，不要等到那時候。
+     */
+    const [hi, lo] = [lum('#faf6ee'), lum(hex)].sort((x, y) => y - x);
+    const ratio = (hi + 0.05) / (lo + 0.05);
     if (ratio < 4.5) problems.push(`建議的 ${hex} 只有 ${ratio.toFixed(2)}:1，還是不夠`);
   }
   const ok = problems.length === 0;
