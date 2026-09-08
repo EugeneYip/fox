@@ -1302,6 +1302,89 @@ console.log('─'.repeat(64));
   await rm(withShapes, { recursive: true, force: true });
 }
 
+/*
+ * ── JS 自己發的請求 ────────────────────────────────
+ *
+ * 第 2 輪（第五十二圈）加的。上面那八種全是**標記**寫的請求，
+ * 而 `requestParts()` 開頭那句寫的是「這一頁真正會發出的請求數」。
+ * 站上有一個不是標記寫的：`/search` 的內嵌腳本 `fetch('/search-index.json')`。
+ * 實測（本機 preview）：`/search` 不抓、`/search?q=月` 一進站就抓。
+ *
+ * 兩格：script 裡有 fetch 要數得到；**正文裡寫到 `fetch(` 不算**
+ * （那是在講它，不是在做它 —— 這個 repo 踩過八次的同一個形狀）。
+ */
+{
+  const withFetch = await mkdtemp(join(tmpdir(), 'perf-fetch-'));
+  await writeFile(
+    join(withFetch, 'index.html'),
+    page({ body: '<p>小</p><script>fetch("/x.json")</script>' }),
+    'utf8',
+  );
+  const outFetch = await check(withFetch);
+  const okFetch = /JS 自己發的/.test(outFetch) && /1 個 fetch／XHR/.test(outFetch);
+  if (!okFetch) failed++;
+  console.log(`  ${okFetch ? '✓' : 'X'} script 裡有 fetch 時說得出來`);
+  if (!okFetch) console.log('        ' + outFetch.split('\n').filter((l) => /JS 自己發的/.test(l)).join(' ｜ '));
+  await rm(withFetch, { recursive: true, force: true });
+
+  const proseOnly = await mkdtemp(join(tmpdir(), 'perf-fetch-prose-'));
+  await writeFile(
+    join(proseOnly, 'index.html'),
+    page({ body: '<p>這一段在講 fetch( 這個寫法，並沒有真的呼叫它。</p>' }),
+    'utf8',
+  );
+  const outProse = await check(proseOnly);
+  const okProse = !/JS 自己發的/.test(outProse);
+  if (!okProse) failed++;
+  console.log(`  ${okProse ? '✓' : 'X'} 正文裡寫到 fetch( 不算（反向案例）`);
+  if (!okProse) console.log('        ' + outProse.split('\n').filter((l) => /JS 自己發的/.test(l)).join(' ｜ '));
+  await rm(proseOnly, { recursive: true, force: true });
+}
+
+/*
+ * ── 「讀者第一次到訪最多下載 N」那句話的「最多」 ──────────────
+ *
+ * 第 2 輪（第五十二圈）：那個 N 比的是**阻塞渲染**的位元組，定義是對的，
+ * 但那句話對讀者說的是「最多下載」—— 而帶著 `?q=` 進 /search 的人
+ * 還會多抓一份搜尋索引。站上實測 16.4 KB > 首頁的 14.1 KB。
+ *
+ * 兩格：加起來比較多的時候要說出來；比較少的時候不要多嘴（反向案例）。
+ */
+{
+  const bigIdx = await mkdtemp(join(tmpdir(), 'perf-qparam-'));
+  await mkdir(join(bigIdx, 'search'), { recursive: true });
+  await writeFile(join(bigIdx, 'index.html'), page({ body: '<p>小</p>' }), 'utf8');
+  await writeFile(
+    join(bigIdx, 'search', 'index.html'),
+    page({ body: '<p>小</p><script>fetch("/search-index.json")</script>' }),
+    'utf8',
+  );
+  // 壓得動的內容，但夠大：確定超過首頁的關鍵路徑
+  await writeFile(join(bigIdx, 'search-index.json'), JSON.stringify({ items: Array.from({ length: 400 }, (_, i) => ({ t: `題目 ${i}`, u: `/p/${i}` })) }), 'utf8');
+  const outBig = await check(bigIdx);
+  const okBig = /帶著 `\?q=` 進 \/search 的人會再多抓一份搜尋索引/.test(outBig);
+  if (!okBig) failed++;
+  console.log(`  ${okBig ? '✓' : 'X'} 索引讓總下載超過首頁時，那句「最多」會補一行`);
+  if (!okBig) console.log('        ' + outBig.split('\n').filter((l) => /最多下載|\?q=/.test(l)).join(' ｜ '));
+  await rm(bigIdx, { recursive: true, force: true });
+
+  const smallIdx = await mkdtemp(join(tmpdir(), 'perf-qparam-small-'));
+  await mkdir(join(smallIdx, 'search'), { recursive: true });
+  await writeFile(join(smallIdx, 'index.html'), page({ body: '<p>' + 'ㄅ'.repeat(20000) + '</p>' }), 'utf8');
+  await writeFile(
+    join(smallIdx, 'search', 'index.html'),
+    page({ body: '<p>小</p><script>fetch("/search-index.json")</script>' }),
+    'utf8',
+  );
+  await writeFile(join(smallIdx, 'search-index.json'), '{"items":[]}', 'utf8');
+  const outSmall = await check(smallIdx);
+  const okSmall = !/再多抓一份搜尋索引/.test(outSmall);
+  if (!okSmall) failed++;
+  console.log(`  ${okSmall ? '✓' : 'X'} 沒超過的時候不多嘴（反向案例）`);
+  if (!okSmall) console.log('        ' + outSmall.split('\n').filter((l) => /\?q=/.test(l)).join(' ｜ '));
+  await rm(smallIdx, { recursive: true, force: true });
+}
+
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
 process.exit(failed > 0 ? 1 : 0);
 

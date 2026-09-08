@@ -195,6 +195,31 @@ function requestParts(text) {
    * 站上哪天放一支影片（`<video>`）、一張內容圖、或一個內嵌 iframe，
    * 這條預算就會安靜地少算 —— 而註解還會繼續說「一個都沒有」。
    */
+  /*
+   * ── 上面那八種全是**標記**寫的請求。JS 自己發的不在裡面 ──────────
+   *
+   * 第 2 輪（第五十二圈）問「名字跟它做的事一樣嗎」時量到的。
+   * `requestParts()` 開頭那句寫的是「這一頁**真正會發出的請求數**」，
+   * 而它數的是 stylesheet／script src／img src —— 三種都是標記宣告的。
+   *
+   * 站上有一個不是：`/search` 與 `/en/search` 的內嵌腳本會
+   * `fetch('/search-index.json')`（gzip 5.8 KB）。**它不是每次載入都發** ——
+   * 使用者打字、送出、或是**帶著 `?q=` 進站**才會。
+   * 實測（本機 preview，瀏覽器的網路紀錄）：
+   *
+   *     /search          文件 ＋ 1 個 CSS          （沒有 JSON）
+   *     /search?q=月     文件 ＋ 1 個 CSS ＋ search-index.json
+   *
+   * 所以它**不該**併進 `otherShapes` —— 那個清單一旦不是 0 就會印
+   * 「這條預算漏數了」，而條件式的請求不是漏數，是另一種東西。
+   * 它自己一行，數字每次重算（跟 `uncountedLinks` 同一個做法）。
+   *
+   * 只掃 `<script>` 裡面：文章正文寫到 `fetch(` 的話不算，那是在講它。
+   */
+  const runtimeFetch = [...text.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].reduce(
+    (n, m) => n + (m[1].match(/\bfetch\s*\(|XMLHttpRequest|sendBeacon|\bimport\s*\(/g) ?? []).length,
+    0,
+  );
   const otherShapes = {
     preload: (text.match(/<link\b[^>]*rel=["']?(?:module)?preload/gi) ?? []).length,
     preconnect: (text.match(/<link\b[^>]*rel=["']?(?:preconnect|dns-prefetch)/gi) ?? []).length,
@@ -205,7 +230,7 @@ function requestParts(text) {
     cssUrl: (text.match(/url\(\s*["']?(?!data:|#)/gi) ?? []).length,
     fontFace: (text.match(/@font-face/gi) ?? []).length,
   };
-  return { links, scripts, imgs, uncountedLinks, otherShapes, total: links + scripts + imgs };
+  return { links, scripts, imgs, uncountedLinks, runtimeFetch, otherShapes, total: links + scripts + imgs };
 }
 
 /*
@@ -1193,6 +1218,35 @@ console.log(
     `${kb(worstCritical.gzip)} ＋ 阻塞渲染的樣式表 ${kb(worstCritical.critical - worstCritical.gzip)}`,
 );
 /*
+ * ── 上面那句的「最多」，有一個網址比它多 ────────────────
+ *
+ * 第 2 輪（第五十二圈）量到的。`worstCritical` 比的是**阻塞渲染**的位元組，
+ * 那個定義是對的；但那句話對讀者說的是「最多**下載**」，而搜尋頁帶著 `?q=`
+ * 進站時還會多抓一份搜尋索引（`search.astro` 自己的註解寫著
+ * 「網址帶 ?q= 時直接搜（方便從別的地方連過來）」）。
+ *
+ * 實測：`/search` 的 HTML ＋ 阻塞的 CSS 是 10.6 KB，加上索引 5.8 KB ＝ **16.4 KB**，
+ * 比首頁的 14.1 KB 多 16%（數字每次重算，這裡記的是 2026-09-08 的值）。
+ * 索引不阻塞算繪（畫面先出來、結果後到），所以預算不動 ——
+ * 動的是這句話：把那個網址也說出來，數字現算。
+ */
+{
+  /* 取**最重**的那一頁，不是第一個 —— `find` 會拿到 en/search（比較小）。 */
+  const searchPage = pageStats
+    .filter((p) => p.requests.runtimeFetch > 0)
+    .reduce((a, b) => (a === null || b.critical > a.critical ? b : a), /** @type {typeof pageStats[0] | null} */ (null));
+  const indexFile = files.find((f) => f.path === 'search-index.json');
+  if (searchPage && indexFile && searchPage.critical + indexFile.gzip > worstCritical.critical) {
+    console.log(
+      `  　　　　　但帶著 \`?q=\` 進 /search 的人會再多抓一份搜尋索引：` +
+        `${kb(searchPage.critical)} ＋ ${kb(indexFile.gzip)} ＝ ` +
+        `**${kb(searchPage.critical + indexFile.gzip)}**，比上面那個數字多 ` +
+        `${Math.round(((searchPage.critical + indexFile.gzip) / worstCritical.critical - 1) * 100)}%。`,
+    );
+    console.log('  　　　　　（索引不阻塞算繪，所以不進「首次造訪關鍵路徑」那條預算。）');
+  }
+}
+/*
  * ── 「在快取裡」有個 10 分鐘的期限 ──────────────────
  *
  * 原本這一行寫「第二頁起樣式表在快取裡，就只剩 HTML」。
@@ -1227,14 +1281,15 @@ const reqTotals = pageStats.reduce(
   (a, p) => ({
     links: a.links + p.requests.links,
     uncountedLinks: a.uncountedLinks + p.requests.uncountedLinks,
+    runtimeFetch: a.runtimeFetch + p.requests.runtimeFetch,
     scripts: a.scripts + p.requests.scripts,
     imgs: a.imgs + p.requests.imgs,
     otherShapes: Object.fromEntries(
       Object.entries(p.requests.otherShapes).map(([k, v]) => [k, (a.otherShapes[k] ?? 0) + v]),
     ),
   }),
-  /** @type {{ links: number, scripts: number, imgs: number, uncountedLinks: number, otherShapes: Record<string, number> }} */
-  ({ links: 0, scripts: 0, imgs: 0, uncountedLinks: 0, otherShapes: {} }),
+  /** @type {{ links: number, scripts: number, imgs: number, uncountedLinks: number, runtimeFetch: number, otherShapes: Record<string, number> }} */
+  ({ links: 0, scripts: 0, imgs: 0, uncountedLinks: 0, runtimeFetch: 0, otherShapes: {} }),
 );
 /** @type {string[]} */
 const empty = [];
@@ -1327,6 +1382,21 @@ if (images.length > 0 && rendered.length === 0) {
         `${(reqTotals.uncountedLinks / html.length).toFixed(1)} 個）。\n` +
         '      抓不抓由瀏覽器決定 —— 第 2 輪（第四十八圈）在 bellafoxy.com 上量兩頁，\n' +
         '      宣告的 4 個一個都沒被抓（一般載入時不會，manifest 要到安裝才會）。',
+    );
+  }
+
+  /*
+   * JS 自己發的請求：條件式的，不是漏數，所以自己一行。
+   * 數字每次重算 —— 哪天有人在別的頁面加一個 fetch，這一行會自己變。
+   */
+  if (reqTotals.runtimeFetch > 0) {
+    const pagesWith = pageStats.filter((p) => p.requests.runtimeFetch > 0);
+    empty.push(
+      `單頁請求數之外還有 JS 自己發的：${pagesWith.length} 頁的內嵌腳本裡有 ` +
+        `${reqTotals.runtimeFetch} 個 fetch／XHR（${pagesWith.map((p) => p.path).join('、')}）。\n` +
+        '      那是**條件式**的 —— 搜尋索引要等使用者打字、送出、或帶著 `?q=` 進站才抓，\n' +
+        '      所以它不在「單頁請求數」裡，也不算這條預算漏數。\n' +
+        '      搜尋索引本身有自己的預算（上面那條）。',
     );
   }
 
