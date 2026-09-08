@@ -117,7 +117,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 64,166 行、3.4 MB、406 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 64,233 行、3.4 MB、407 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -64164,3 +64164,70 @@ $ curl https://bellafoxy.com/colophon/
 `sync:dry` 不寫檔，`git status --porcelain` 是空的。
 
 **下一輪：5 — 隱私與安全**
+
+### 2026-09-08 — 第 5 輪（第五十一圈）：隱私與安全
+
+**第五十一圈問：同一件事，現在有幾個地方各做一次？做得一樣嗎？**
+
+#### 先查有沒有人查過 —— 有，而且註解就是為了擋我這種人寫的
+
+第一個候選是「外部連結要有 `rel`」：`check-a11y` 有 `blank-rel`（error），
+`audit-privacy` 有 `target-blank-no-rel`（warn），兩條守同一件事而嚴重度不同。
+
+去看程式，`check-a11y` 那一段的註解已經寫著：
+
+> `audit:privacy` 的 `target-blank-no-rel` 守同一件事，但**留在 warn** ——
+> 那一支掃的是**原始碼**，而原始碼裡 `<SomeWrapper target="_blank">`
+> 由包裝元件補 rel 是有可能的正當寫法。兩支的嚴重度不同不是漏改，
+> 是掃的東西不同（**這一行寫下來，免得下一個人「順手對齊」**）。
+
+第 5 輪（第十四圈）就查過了，結論還成立。**這一輪這一格的成果是沒有動它。**
+
+#### 真正值得量的：「什麼算第三方請求」有三層
+
+| 層 | 判準 | 語料 | 嚴重度 |
+|---|---|---|---|
+| `google-fonts`／`third-party-cdn`／`raw-youtube-embed` | **名單** —— 5 個主機（`fonts.googleapis.com`、`fonts.gstatic.com`、`cdn.jsdelivr.net`、`unpkg.com`、`cdnjs.cloudflare.com`）＋ iframe 樣式 | 原始碼，**但跳過散文 `.md`** | warn |
+| `built-third-party-request` | **反過來** —— `host.endsWith('bellafoxy.com')` 以外的全部 | `dist/` 裡真的資源引用 | **error** |
+| CSP | 瀏覽器執行時 | 讀者的瀏覽器 | 擋在送出請求之前 |
+
+拿同一個主機（`cdn.jsdelivr.net`）在三種位置各放一次：
+
+| 放在哪 | 結果 |
+|---|---|
+| `docs/PROBE.md`（散文） | **一聲都沒有** |
+| `src/lib/probe.ts`（原始碼） | `! src/lib/probe-c51r5.ts:1 [third-party-cdn]`，exit 0（warn） |
+| 建置產物裡（第 5 輪〔第四十九圈〕量過，用的是**名單外**的 `cdn.example.com`） | `[built-third-party-request]`，**exit 1** |
+
+第一格一開始看起來像漏報，去追才知道是**刻意**的 —— `audit-privacy.mjs:1805`：
+
+```js
+if (rule.aboutLoading && /\.mdx?$/.test(rel) && !rel.startsWith('public/')) continue;
+```
+
+「這一條守的是站上會不會去載入它」的規則，在散文 `.md` 裡一律跳過
+（`public/` 底下的 `.md` 不算散文，那是會出貨的）。
+第 5 輪（第十六圈）的誤報探針就是為了這件事做的。
+
+#### 三份，而且每一份都寫著自己為什麼不是另外兩份
+
+`third-party-cdn` 的 `whyWarn` 直接點名另外兩層：
+
+> 會不會真的發請求，由 `built-third-party-request`（error）掃 `dist/` 判定，
+> CSP 再擋一次。這一條是原始碼側的早期提醒。
+
+也就是說這三份**不是同一件事做三次**，是**同一件事在三個時間點各攔一次**：
+寫的時候（原始碼）、出貨的時候（`dist/`）、讀者打開的時候（CSP）。
+名單那 5 個主機是「早期提醒」不是保證 —— 而那句話寫在規則自己的 `whyWarn` 裡，
+所以「把主機加進名單就安全了」這個誤會有東西擋著。
+
+#### 沒發現問題
+
+兩個候選，一個十七輪前就查過並寫下結論，一個是刻意的三層分工。
+**這一輪沒有改任何東西。** 兩個探針檔都刪掉了，`git status --porcelain` 是空的。
+
+#### 六道關卡
+
+`npm run verify:all` 全綠、`npm run test:tools` 44 步全部通過。
+
+**下一輪：6 — 文案與語氣**
