@@ -478,6 +478,30 @@ const CASES = {
     'scripts/test-nobody-runs-me.mjs': '// 沒有任何 npm script 指到這個檔案\n',
   },
 
+  /*
+   * ── 有 script，但 CI 走不到 ──
+   *
+   * 這條規則的改法本來就寫著「加一個 script，**並串進 test:units**」，
+   * 而第二半句到第 7 輪（第五十三圈）之前沒有人在守。
+   * 實測（在真的 repo 上）：把 `test:mutate` 從 `test:units` 的串裡拿掉、
+   * script 定義留著 —— `check:workflows` 離開碼 0，輸出裡連這條規則的
+   * id 都沒出現。這一格就是那個情形：script 在，但沒有人串它。
+   */
+  'test-file-not-run（有 script，但沒串進任何鏈）': {
+    expect: 'test-file-not-run',
+    'package.json': JSON.stringify({
+      scripts: {
+        'verify:all': 'npm run build && npm run check:a11y',
+        'test:units': 'x', 'test:built': 'x', build: 'x', 'check:a11y': 'x',
+        'test:tools': 'npm run test:units && npm run test:built',
+        /* 有 script，但 test:units／test:built 都沒有串它 */
+        'test:lonely': 'node scripts/test-lonely.mjs',
+      },
+      engines: { node: '>=22.19.0' },
+    }),
+    'scripts/test-lonely.mjs': '// 有 npm script，但沒有任何 workflow 走得到\n',
+  },
+
   /* 反過來：npm script 指到一個不存在的測試檔 */
   'test-file-not-run（指到不存在的檔案）': {
     expect: 'test-file-not-run',

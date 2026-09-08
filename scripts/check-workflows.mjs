@@ -647,6 +647,56 @@ for (const required of DEPLOY_MUST_RUN) {
         '      改法：在 package.json 加一個 script，並串進 test:units。',
     );
   }
+  /*
+   * ── 「有 script」跟「CI 真的跑得到」是兩件事 ──────────────
+   *
+   * 上面那一半只問「有沒有任何一個 npm script 提到這個檔案」。
+   * 而這條規則自己的改法寫的是「加一個 script，**並串進 test:units**」——
+   * **後面那半句沒有人在守。**
+   *
+   * 第 7 輪（第四十九圈）就記過一次（`docs/TODO.md`，標著「→ 7 建置與 CI」）：
+   * 把 `test:a11y-rules` 從 `test:units` 的串裡拿掉，`test:tools` 印
+   * 「43 步全部通過」並 exit 0。第 7 輪（第五十三圈）換一支再量一次：
+   * 拿掉 `test:mutate`（script 定義留著）——
+   *
+   *   走得到的測試檔      38 → 37
+   *   check:workflows     離開碼 **0**，輸出裡連 `test-file-not-run` 都沒出現
+   *   check:doc-links     離開碼 0
+   *
+   * 所以補的是同一條規則的另一半，不是新規則：**從 workflow 真的會跑的
+   * npm script 出發**（不是寫死 `test:units`，那份清單這支腳本本來就從
+   * workflow 推），展開 package.json 的呼叫鏈，看每支測試檔在不在裡面。
+   * 今天 38／38 全部走得到，零誤報。
+   */
+  /** workflow 裡真的會跑的 npm script，當成展開的起點 */
+  const ciRoots = new Set(
+    [...bareTexts.values()].flatMap((t) => [...t.matchAll(/npm run ([a-z][\w:-]*)/g)].map((m) => m[1])),
+  );
+  /** @param {string} name @param {Set<string>} seen */
+  const expandScript = (name, seen) => {
+    if (seen.has(name)) return;
+    seen.add(name);
+    for (const m of String(pkg.scripts?.[name] ?? '').matchAll(/npm run ([a-z][\w:-]*)/g)) {
+      expandScript(m[1], seen);
+    }
+  };
+  /** @type {Set<string>} */
+  const ciReachable = new Set();
+  for (const r of ciRoots) expandScript(r, ciReachable);
+  const ciText = [...ciReachable].map((n) => String(pkg.scripts?.[n] ?? '')).join(' && ');
+  for (const f of testFiles) {
+    if (!allScripts.includes('scripts/' + f)) continue; // 上面那一半已經報過
+    if (ciText.includes('scripts/' + f)) continue;
+    add(
+      'scripts/' + f,
+      0,
+      'test-file-not-run',
+      '這個測試檔**有** npm script，但那個 script 不在任何一條 workflow 走得到的鏈上 ——\n' +
+        '      也就是說它在本機叫得動，而 CI 上永遠不會跑到。\n' +
+        '      改法：把那個 script 串進 `test:units`（或 `test:built`）。',
+    );
+  }
+
   const referenced = [...new Set([...allScripts.matchAll(/scripts\/(test-[\w-]+\.mjs)/g)].map((m) => m[1]))];
   for (const r of referenced) {
     if (testFiles.includes(r)) continue;
