@@ -156,7 +156,29 @@ export function estimateReadingTime(entry: AnyEntry, body: string | undefined): 
   return readingMinutes(`${body ?? ''} ${extra}`);
 }
 
-/** 上一篇／下一篇 */
+/**
+ * 上一篇／下一篇。
+ *
+ * ── 這一個函式讓每一篇的頁面**依賴它的鄰居** ──────────────
+ *
+ * 順序是拿整個集合依日期排出來的，所以**改一篇的 `publishedAt`，
+ * 會改到另外兩篇的頁面**（它們的「較新／較舊」指向別人了）。
+ *
+ * 第 3 輪（第五十三圈）量過一次，改 `wu-yi-xiang.md` 的日期一個欄位：
+ * 61 個產出檔裡 **13 個**跟著變 ——
+ *
+ *   它自己             poems/wu-yi-xiang/
+ *   **另外兩首詩**      poems/jing-ye-si/、poems/pi-pa-xing-excerpt/　← 就是這個函式
+ *   它的四個標籤頁      tags/唐詩、劉禹錫、七言絕句、懷古
+ *   列表與彙整          index.html、archive/、poems/
+ *   兩份 feed ＋ 搜尋索引
+ *
+ * 對照組（什麼都不改、重建一次）是 **0 個**，所以那 13 個都是那一個欄位造成的。
+ * 而 `sitemap-0.xml` **沒有變** —— 它沒有 `lastmod`（見 `docs/TODO.md`）。
+ *
+ * 寫下來的理由：「我只改了一篇，為什麼那一篇的下一篇也變了」
+ * 是一個會讓人以為建置壞掉的問題。
+ */
 export async function getNeighbors<C extends WritingCollection>(
   collection: C,
   entry: CollectionEntry<C>,
