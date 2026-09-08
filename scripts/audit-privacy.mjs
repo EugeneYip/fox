@@ -956,8 +956,47 @@ if (existsSync(resolve(ROOT, 'dist'))) {
 
     withCsp++;
     const policy = meta[3];
-    const scriptSrc = policy.split(';').find((d) => d.trim().startsWith('script-src')) ?? '';
-    if (/'unsafe-inline'|'unsafe-eval'/.test(scriptSrc)) {
+    /*
+     * ── 這一條的 id 說「CSP 裡有 unsafe-inline」，而它只看 script-src ──────
+     *
+     * 第 5 輪（第五十二圈）量到的。原本這一行是
+     * `policy.split(';').find(d => d.trim().startsWith('script-src'))` ——
+     * **整份政策只看一條指令**，而這個站的 CSP 有 11 條。
+     *
+     * 實測把 `astro.config.mjs` 的 `styleDirective` 從 `kind: 'attribute'`
+     * 改成 `kind: 'element'` 再建置：
+     *
+     *   style-src 'self'                 ← 雜湊全部不見了（原本 23 個）
+     *   style-src-elem 'unsafe-inline'   ← 每一段內嵌 <style> 從此不受限
+     *
+     *   audit:privacy   離開碼 0，一個字都沒說
+     *   check:a11y      離開碼 0
+     *   check:content   離開碼 0
+     *   check:perf      離開碼 0，而且「CSP 雜湊數」從 88% 掉到 **29%** ——
+     *                   那條預算只擋成長，所以這個退步在它眼裡是進步
+     *
+     * 也就是說：這個 repo 有一句量出來的結論（「注入被 CSP 擋掉了 ——
+     * style-src 是用雜湊鎖住的」），而讓它成立的那個機制**可以被安靜地拿掉**。
+     *
+     * 改成掃**每一條**指令。唯一的例外是 `style-src-attr 'unsafe-inline'`，
+     * 那是刻意的、理由寫在 `astro.config.mjs` 的 `styleDirective` 上面
+     * （雜湊對 style **屬性**無效，而設計系統靠 `style="--brand:…"` 傳值；
+     * 真正重要的那道防線是 script-src，它仍然只認雜湊）。
+     * 例外只給 `style-src-attr` 的 `'unsafe-inline'` —— `'unsafe-eval'`
+     * 與任何別的指令（含 `script-src-attr`，那是 onclick= 那種）都要擋。
+     */
+    const ALLOWED_UNSAFE = 'style-src-attr';
+    const unsafeDirective =
+      policy
+        .split(';')
+        .map((d) => d.trim())
+        .find((d) => {
+          if (!/'unsafe-inline'|'unsafe-eval'/.test(d)) return false;
+          const name = d.split(/\s+/)[0];
+          return !(name === ALLOWED_UNSAFE && !/'unsafe-eval'/.test(d));
+        }) ?? '';
+    if (unsafeDirective) {
+      const scriptSrc = unsafeDirective;
       findings.push({
         rel,
         lineNo: 0,
@@ -981,8 +1020,11 @@ if (existsSync(resolve(ROOT, 'dist'))) {
            */
           level: 'error',
           why:
-            "script-src 出現 'unsafe-inline' 或 'unsafe-eval'，那等於把 CSP 對 XSS 的防護關掉。" +
-            '　改法：拿掉那兩個關鍵字 —— Astro 會自動算 inline script 的雜湊，本來就不需要它們。',
+            `CSP 的 \`${unsafeDirective.split(/\s+/)[0]}\` 出現 'unsafe-inline' 或 'unsafe-eval'，` +
+            '那等於把這一類資源的雜湊鎖拿掉。' +
+            '　改法：拿掉那兩個關鍵字 —— Astro 會自動算 inline script／style 的雜湊，本來就不需要它們。' +
+            "　（唯一的例外是 `style-src-attr 'unsafe-inline'`：雜湊對 style **屬性**無效，" +
+            '理由寫在 astro.config.mjs 的 styleDirective 上面。）',
         },
       });
     }

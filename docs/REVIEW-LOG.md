@@ -117,7 +117,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 65,063 行、3.4 MB、414 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 65,174 行、3.4 MB、415 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -65061,3 +65061,114 @@ TS 的 evolving-`any[]` 推導撐不過去，`const failedIds = []` 當場變 `a
 改到 `scripts/`，所以 commit 之後補跑 `ci:sim`。
 
 **下一輪：5 — 隱私與安全**
+
+### 2026-09-08 — 第 5 輪（第五十二圈）：隱私與安全
+
+**這一圈問：這個東西的名字，跟它實際做的事一樣嗎？**
+這一輪的答案在一條規則的 id 上：它叫 `csp-unsafe-inline`，而它只看**一條指令**。
+
+#### 一、先查有沒有人查過（省掉一整輪）
+
+第一個念頭是 `privacy.ts` 的 13 個開關 —— 名字承諾了一個隱私控制，
+真的接上去了嗎？粗掃出四個「沒有人讀它」的：`showBirthday`、
+`showRelationship`、`allowRemoteFonts`、`stripImageExif`。
+
+**四個全部已經查過而且處理掉了**：`privacy.ts` 有一份 `UNWIRED` 名單、
+`audit:privacy` 有三條規則在守它（`privacy-switch-unused`、
+`privacy-switch-stale-note`、`privacy-doc-unwired`，各 14 個主體）、
+`docs/PRIVACY.md` 那幾列標著「⚠ 這個開關沒有接上」。
+（另外三個「0 個讀它」是我的 grep 不準：`showEducation`、`showLocation`
+走的是 `reveal()`，而我把 `privacy.ts` 自己排除掉了。）
+
+#### 二、`csp-unsafe-inline` 掃的是整份政策裡的一條
+
+這個站的 CSP 有 **11 條指令**：
+
+```
+default-src 'none'                 img-src 'self' data:
+font-src 'self'                    connect-src 'self'
+frame-src https://www.youtube-nocookie.com
+manifest-src 'self'                base-uri 'none'
+form-action 'self'                 object-src 'none'
+script-src 'self' + 12 個 sha256
+style-src  'self' + 23 個 sha256
+style-src-attr 'unsafe-inline'
+```
+
+而規則是這樣寫的：
+
+```js
+const scriptSrc = policy.split(';').find((d) => d.trim().startsWith('script-src')) ?? '';
+if (/'unsafe-inline'|'unsafe-eval'/.test(scriptSrc)) { … }
+```
+
+**11 條裡只看 1 條。** 它的 `why` 訊息倒是誠實（第一個字就是「script-src」）——
+不誠實的是 id，以及它在 `/privacy` 承諾對照表上被登記成
+「宣告 CSP 只載自己的網域 ✓」的那一格。
+
+#### 三、把 style 的雜湊鎖拿掉，四道關卡全都變**更綠**
+
+不是推論，是實測。`astro.config.mjs` 的 `styleDirective` 從
+`kind: 'attribute'` 改成 `kind: 'element'`，重新建置：
+
+```
+style-src 'self'                 ← 23 個雜湊全部不見了
+style-src-elem 'unsafe-inline'   ← 每一段內嵌 <style> 從此不受限
+```
+
+| 關卡 | 結果 |
+|---|---|
+| `audit:privacy` | 離開碼 **0**，一個字都沒說 |
+| `check:a11y` | 離開碼 0 |
+| `check:content` | 離開碼 0 |
+| `check:perf` | 離開碼 0，而且「CSP 雜湊數」從 **88% 掉到 29%** |
+
+最後那一格值得停一下：那條預算只擋**成長**，所以一個安全性的退步
+在它眼裡是進步 —— 螢幕上是一條變短的綠色長條。
+
+而這個 repo 有一句量出來的結論靠著那個雜湊鎖：
+第 8 輪（第三圈）在紀錄裡寫著「注入被 CSP 擋掉了 —— `style-src` 是用雜湊鎖住的」。
+**讓那句話成立的機制可以被安靜地拿掉。**
+
+#### 四、改成掃每一條，例外只留一個而且說得出理由
+
+判準改成「任何一條指令出現 `'unsafe-inline'`／`'unsafe-eval'` 就報」，
+唯一的例外是 **`style-src-attr` 的 `'unsafe-inline'`** ——
+那是刻意的，理由早就寫在 `astro.config.mjs` 的 `styleDirective` 上面：
+
+> CSP 的雜湊機制**對 style 屬性無效**（只對 `<style>` 元素有效），
+> 所以設計系統裡那些「把動態值傳給 CSS 變數」的寫法會全部被擋⋯⋯
+> 真正重要的那道防線是 script-src。
+
+例外**只給 `'unsafe-inline'`**：同一條指令要是出現 `'unsafe-eval'`，照樣擋。
+`script-src-attr`（那是 `onclick=` 那一種）也不在例外裡。
+
+改完之後：現在的站綠、上面那個 `kind: 'element'` 的實驗**離開碼 1**，
+44 頁全部點名 `style-src-elem 'unsafe-inline'`。
+
+#### 五、突變三發
+
+| 突變 | 預期 | 結果 |
+|---|---|---|
+| 把指令名固定成 `'script-src'`（等於例外永遠不成立） | 反向案例紅 | **紅**（exit 1） |
+| 例外不再排除 `'unsafe-eval'` | 「unsafe-eval 照樣擋」那一格紅 | **紅** |
+| 例外從 `style-src-attr` 放寬成 `style-src` | 正向案例紅 | **紅** |
+
+三個新案例（一正兩反）在 `test:privacy-structural`。
+不過**最有力的證據不是突變**，是第三節那個實驗本身：
+同一份設定，改之前四道全綠、改之後 exit 1。
+
+#### 六、量到但沒動的
+
+- **「CSP 雜湊數」那條預算只有上限。** 雜湊數**掉**下來通常表示有東西不再被鎖住，
+  而現在那是綠得更漂亮。要不要給它一個下限是另一件事（記進 `docs/TODO.md`）。
+- `frame-src` 指向 `youtube-nocookie.com` —— 那是第三方網域，但
+  `csp-frame-host-unpromised`（44 個主體）拿它跟 `/privacy` 的承諾對過，
+  而 `VideoFacade` 是按了才載入。查過，沒問題。
+
+#### 六道關卡
+
+`npm run verify:all` 六道全綠、`npm run test:tools` 44 步全部通過。
+改到 `scripts/`，所以 commit 之後補跑 `ci:sim`。
+
+**下一輪：6 — 文案與語氣**

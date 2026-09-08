@@ -114,6 +114,23 @@ const CASES = {
         "content=\"default-src 'none'; script-src 'self' 'unsafe-inline'\"><title>x</title></head><body>x</body></html>",
     },
   },
+  /*
+   * ── 這一條的 id 說「CSP 裡有 unsafe-inline」，而它本來只看 script-src ──
+   *
+   * 第 5 輪（第五十二圈）實測：把 astro.config.mjs 的 styleDirective 從
+   * `kind: 'attribute'` 改成 `kind: 'element'`，產出的 CSP 變成
+   * `style-src 'self'`（雜湊全部不見）＋ `style-src-elem 'unsafe-inline'`，
+   * 而 audit:privacy、check:a11y、check:content、check:perf **四道全綠**
+   * （check:perf 的「CSP 雜湊數」還從 88% 掉到 29% —— 那條預算只擋成長）。
+   */
+  'csp-unsafe-inline（style-src 也算）': {
+    check: 'csp-unsafe-inline',
+    files: {
+      'dist/index.html':
+        '<!DOCTYPE html><html lang="zh"><head><meta http-equiv="content-security-policy" ' +
+        "content=\"default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'\"><title>x</title></head><body>x</body></html>",
+    },
+  },
   'deploy-without-gates': {
     files: { '.github/workflows/deploy.yml': 'name: 部署\njobs:\n  b:\n    steps:\n      - run: npm run build\n      - run: test -f dist/CNAME\n' },
   },
@@ -513,6 +530,44 @@ for (const [label, { files, git, check, coFires }] of Object.entries(CASES)) {
   const quiet = !out.includes('[csp-frame-src-mismatch]');
   if (!quiet) failed++;
   console.log(`  ${quiet ? '✓' : 'X'} iframe 主機跟 frame-src 對得上時不出聲（反向案例）`);
+  await rm(dir, { recursive: true, force: true });
+}
+
+/*
+ * 反向案例：`style-src-attr 'unsafe-inline'` 是**刻意的**，不該響。
+ *
+ * 理由寫在 `astro.config.mjs` 的 `styleDirective` 上面：雜湊對 style
+ * **屬性**無效，而設計系統靠 `style="--brand:…"` 把動態值傳給 CSS 變數。
+ * 少了這一格，「把規則放寬回只看 script-src」也會通過。
+ */
+{
+  const dir = await build({
+    'dist/index.html':
+      '<!DOCTYPE html><html lang="zh"><head><meta http-equiv="content-security-policy" ' +
+      "content=\"default-src 'none'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'\">" +
+      '<title>x</title></head><body>x</body></html>',
+  });
+  const { out } = await audit(dir);
+  const quiet = !out.includes('[csp-unsafe-inline]');
+  if (!quiet) failed++;
+  console.log(`  ${quiet ? '✓' : 'X'} style-src-attr 的 unsafe-inline 是刻意的，不出聲（反向案例）`);
+  await rm(dir, { recursive: true, force: true });
+}
+
+/*
+ * 反向案例：`style-src-attr` 出現 `'unsafe-eval'` 就不是那個例外了，要擋。
+ */
+{
+  const dir = await build({
+    'dist/index.html':
+      '<!DOCTYPE html><html lang="zh"><head><meta http-equiv="content-security-policy" ' +
+      "content=\"default-src 'none'; script-src 'self'; style-src-attr 'unsafe-inline' 'unsafe-eval'\">" +
+      '<title>x</title></head><body>x</body></html>',
+  });
+  const { out } = await audit(dir);
+  const caught = out.includes('[csp-unsafe-inline]');
+  if (!caught) failed++;
+  console.log(`  ${caught ? '✓' : 'X'} 例外只給 unsafe-inline —— style-src-attr 的 unsafe-eval 照樣擋`);
   await rm(dir, { recursive: true, force: true });
 }
 
