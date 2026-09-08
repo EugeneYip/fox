@@ -25,6 +25,22 @@ export const GET: APIRoute = async (context) => {
     };
   });
 
+  /*
+   * `.filter` 那一行是**底下那個排序的前提**，不是內容上的取捨。
+   *
+   * 第 3 輪（第五十一圈）實測：把一筆的 `publishedAt` 設成 null、再把這一行拿掉，
+   * 建置當場死在 `TypeError: Cannot read properties of null (reading 'getTime')`
+   * —— 噴在底下 `b.pubDate.getTime()` 那裡，不是在 rss 套件裡。
+   *
+   * 同一件事（「由新到舊」）這個 repo 有三份寫法，而它們對「沒有日期」的立場不同：
+   *   lib/content.ts   `byNewest`                      schema 保證有日期，不用防
+   *   lib/syndication.ts `?? 0`                        容忍，沒日期的排最後
+   *   這裡            `b.pubDate.getTime()`            **不容忍** —— 所以要先濾
+   *
+   * 也就是說：沒有日期的同步項目在 /elsewhere 上看得到（排最後），
+   * 在這份 feed 裡看不到。那是這一行決定的。
+   * （今天 9 筆都有日期，所以這個差別還沒有真的發生過。）
+   */
   const elsewhere = (await getSyndication())
     .filter((item) => item.publishedAt)
     .map((item) => ({

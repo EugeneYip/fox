@@ -117,7 +117,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 64,000 行、3.4 MB、404 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 64,064 行、3.4 MB、405 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -63998,3 +63998,67 @@ check-a11y   45 頁      check-perf   45 頁      check-links  45 頁
 `npm run verify:all` 全綠、`npm run test:tools` 44 步全部通過。
 
 **下一輪：3 — 內容結構**
+
+### 2026-09-07 — 第 3 輪（第五十一圈）：內容結構
+
+**第五十一圈問：同一件事，現在有幾個地方各做一次？做得一樣嗎？**
+
+內容這一支先問最該問的那個：**「哪些內容算數」有幾個地方在判？**
+
+#### 一、草稿過濾：兩份，而那件事十七圈前就查過了
+
+`getCollection` 全站只有兩個呼叫點（`lib/content.ts` 與 `lib/syndication.ts`），
+兩邊的草稿判準逐字相同。**而 `syndication.ts` 的註解已經記著這件事** ——
+第 3 輪（第十四圈）比對過，結論是「草稿那一半逐字相同、語言那一半是刻意不同的」。
+
+所以這一格不是新發現。**查了、已經有人查過了、結論還成立** —— 記下來就好。
+
+#### 二、排序：三份，而它們對「沒有日期」的立場不一樣
+
+```
+lib/content.ts      byNewest                        b.data.publishedAt.getTime() - a…
+lib/syndication.ts  (b.publishedAt?.getTime() ?? 0) - (a…)
+rss-all.xml.ts      (a, b) => b.pubDate.getTime() - a.pubDate.getTime()
+```
+
+先確認「站上的列表」跟「feed」會不會因此排出不同順序 —— **不會**，
+因為 `rss.xml.ts` 走的是同一個 `getAllWriting()`，只有一份排序。
+還特地把兩篇的日期改成同一天再建置一次驗過：兩邊的順序**完全一樣**。
+
+真正的分岔在第三份。
+
+#### 三、`rss-all.xml` 那一行 `.filter` 是排序的前提，不是內容上的取捨
+
+那一行長得像一個編輯決定（「沒有日期的就不放進 feed」），旁邊**一句說明都沒有**。
+實測：把一筆同步資料的 `publishedAt` 設成 `null`、再把那一行拿掉、建置 ——
+
+```
+[ERROR] TypeError: Cannot read properties of null (reading 'getTime')
+[build] Caught error rendering /rss-all.xml
+離開碼 1
+```
+
+**死在底下 `b.pubDate.getTime()` 那裡**，不是在 rss 套件裡。
+也就是說那一行在擋的是**自己那個排序**。
+
+後果：沒有日期的同步項目在 `/elsewhere` 上**看得到**（`?? 0`，排最後），
+在 `rss-all.xml` 裡**看不到**。今天 9 筆都有日期，所以還沒真的發生過。
+
+補了一段註解在那一行上面（是註解不是檢查，規則 10 不適用），
+把三份寫法的立場並排寫出來 —— 下一個看到那一行的人不會以為它可以刪。
+
+#### 我又踩了一次 `grep -c`
+
+還原之後想確認 `rss-all.xml` 回到 14 筆，`grep -c "<pubDate>"` 回 **1** ——
+因為那個 XML 是**一行**。`grep -c` 數的是行，不是出現次數。
+換成 `grep -o … | wc -l` 才是 14。
+**第四十七圈第 1 輪就是同一個坑**（那次是 sitemap 的 `<loc>`），
+而這次只隔了四圈又踩一次。
+
+#### 六道關卡
+
+`npm run verify:all` 全綠、`npm run test:tools` 44 步全部通過。
+兩處突變（內容檔的日期、`rss-all.xml.ts` 的 filter）都還原了，
+`syndication.json` 用 `git checkout --` 還原，重新建置後 feed 回到 14 筆。
+
+**下一輪：4 — 平臺 feed 實測**
