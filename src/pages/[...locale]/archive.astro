@@ -140,7 +140,24 @@ const otherTotal =
     border-radius: var(--r-sm);
     background: var(--c-bg-sunken);
     color: var(--c-ink-faint);
-    align-self: center;
+    /*
+     * ── 對齊第一行，不是對齊整列 ──────────────────────
+     *
+     * 本來是 `align-self: center`。標題只有一行時看不出差別，
+     * 但第 3 輪（第五十四圈）拿一個 33 字的標題去量（站上最長的標題是 15 字，
+     * 所以這種情況從來沒有出現過）：
+     *
+     *   1 行的標題   date 459　mark 458　title 457   ← 齊
+     *   4 行的標題   date 334　**mark 368**　title 332   ← 標記掉了 34px
+     *
+     * 那一格是「這是哪一種內容」的標記，它屬於**日期那一行**；
+     * 掉到整列的垂直中央就跟日期斷開了，讀起來像浮在標題中間。
+     *
+     * 用 `baseline`：這一列本來就是 `align-items: baseline`，
+     * 而這個標記是 `inline-grid` ＋ `place-items: center`，
+     * 它的基線就是裡面那個字的基線 —— 字級一變也會自己跟上。
+     */
+    align-self: baseline;
   }
 
   .arc__mark[data-type="poems"] {
