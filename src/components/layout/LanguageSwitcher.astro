@@ -121,7 +121,28 @@ const localeHome = (l: Locale) => localizePath('/', l);
 
   .lang__menu a:hover { background: var(--c-bg-sunken); }
 
-  .lang__menu a[aria-current="true"] {
+  /*
+   * ── 這一條的選擇器不寫死那個值 ──────────────────
+   *
+   * `aria-current` 在這個站身兼兩職：**無障礙的狀態**，以及**樣式的鉤子**
+   * （Header、Footer、Pagination 也都是這樣，各自寫著 `[aria-current="page"]`）。
+   * 沒有一處註解講過這件事。
+   *
+   * 而這一個特別容易被「順手改對」：這裡的值是 `true` 不是 `page`，
+   * 看起來像漏改 —— 其實是刻意的。它標的是**目前的語言**，不是目前的頁。
+   * 404 頁就是證據：那一頁的「繁體中文」指向 `/`，**根本不是當前頁**，
+   * 寫 `page` 會是假話。
+   *
+   * 第 1 輪（第五十三圈）實測把它改成 `'page'`：建置過、產出裡
+   * `aria-current="true"` 從 44 個變成 **0 個**、這一條規則一個元素都配不到
+   * （目前語言的橘色與粗體整站消失），而 `check:a11y`／`check:contrast`／
+   * `check:content`／`check:copy`／`audit:privacy`／`check:perf`／`check:links`
+   * **七道全部離開碼 0**。
+   *
+   * 改成只看屬性在不在：這個元件只有「目前語言」那一個會帶 `aria-current`
+   * （其餘是 `undefined`），所以今天的畫面一模一樣，而值換了樣式不會掉。
+   */
+  .lang__menu a[aria-current] {
     color: var(--c-flame-ink);
     font-weight: 600;
   }
