@@ -23,9 +23,11 @@ interface Props {
   locale: Locale;
   /** 本地封面圖路徑，例如 /thumbs/abc.jpg */
   poster?: string;
+  /** 直版影片（9:16）。她的頻道現在整批都是，所以預設就是直版 */
+  portrait?: boolean;
 }
 
-const { videoId, title, locale, poster } = Astro.props;
+const { videoId, title, locale, poster, portrait = true } = Astro.props;
 const t = useTranslations(locale);
 const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
@@ -54,7 +56,7 @@ const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
 const ids = { play: `facade-${videoId}-play`, listen: `facade-${videoId}-listen`, title: `facade-${videoId}-title` };
 ---
 
-<figure class="facade" data-video-id={videoId} data-title={title}>
+<figure class:list={['facade', portrait && 'facade--portrait']} data-video-id={videoId} data-title={title}>
   <div class="facade__frame">
     {poster ? (
       <img class="facade__poster" src={poster} alt="" loading="lazy" decoding="async" width="1280" height="720" />
@@ -112,6 +114,52 @@ const ids = { play: `facade-${videoId}-play`, listen: `facade-${videoId}-listen`
     overflow: hidden;
     background: var(--c-bg-sunken);
     border: 1px solid var(--c-rule);
+  }
+
+  /*
+   * ── 直版（Shorts，9:16）──────────────────────────────
+   *
+   * 她的頻道現在整批都是直版：實測 og:video 是 405×720，播放器列出來的
+   * 解析度是 1080×1920 / 720×1280 / 480×854。用上面那個 16:9 的框放，
+   * 播出來左右兩側是大黑邊，而框本身反而是頁面上最寬的一塊。
+   *
+   * 寬度一定要自己夾住 —— 9:16 在詩頁 736px 寬的欄位裡會長到 1,308px 高，
+   * 一整頁就只剩那支影片。夾在 17.5rem（280px）是 498px 高，
+   * 差不多是一支手機立在紙上的大小。
+   */
+  .facade--portrait {
+    --facade-w: 17.5rem;
+  }
+
+  .facade--portrait .facade__frame {
+    aspect-ratio: 9 / 16;
+    /* 用 inline-size 不用 max-inline-size：column flex 的 stretch 遇到
+       auto 邊距會失效，寬度就變成沒有定值的循環參照 */
+    inline-size: min(var(--facade-w), 100%);
+    margin-inline: auto;
+  }
+
+  /*
+   * 夠寬的時候把說明挪到影片旁邊。
+   * 直版影片旁邊那半欄本來就是空的，而說明壓在一個 498px 高的框底下，
+   * 離「聽朗讀」那個標題已經隔了一整個螢幕高。
+   */
+  @media (min-width: 44rem) {
+    .facade--portrait {
+      flex-direction: row;
+      align-items: center;
+      gap: var(--s-5);
+    }
+
+    .facade--portrait .facade__frame {
+      flex: none;
+      margin-inline: 0;
+    }
+
+    .facade--portrait .facade__caption {
+      min-inline-size: 0;
+      gap: var(--s-2);
+    }
   }
 
   .facade__poster {

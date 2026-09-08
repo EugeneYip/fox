@@ -103,6 +103,7 @@ annotations:                       # 逐詞注解（選填，可以寫很多條�
     gloss: 「好像是」。不是真的認錯，是恍惚。
 
 videoUrl: https://www.youtube.com/watch?v=xxxxx   # 朗讀影片（選填）
+videoPortrait: true                # 直版影片（9:16）。橫版的寫 false
 vertical: true                     # 直排。想橫排就寫 false
 ---
 

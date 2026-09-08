@@ -172,6 +172,13 @@ const poems = defineCollection({
         .default([]),
       /** 朗讀影片（YouTube 網址）。不會直接嵌入，會用點擊才載入的預覽卡 */
       videoUrl: z.url({ error: 'videoUrl 要是完整網址，像 https://www.youtube.com/watch?v=…' }).optional(),
+      /*
+       * 影片是直版（9:16）還是橫版（16:9）。預設直版 —— 她的頻道
+       * 現在整批都是 Shorts，實測 og:video 是 405×720、播放器列的是
+       * 1080×1920。用 16:9 的框放直版，播出來兩側是大黑邊。
+       * 哪天真的有一支橫版的，那一篇寫 `videoPortrait: false`。
+       */
+      videoPortrait: z.boolean().default(true),
       /** 預設直排 —— 詩詞直排比較好看，也比較接近原本的閱讀方式 */
       vertical: z.boolean().default(true),
       cover: image().optional(),

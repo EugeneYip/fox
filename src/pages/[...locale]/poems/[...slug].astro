@@ -96,7 +96,7 @@ const description =
         但留著兩種寫法更糟。
       */}
       {privacy.allowThirdPartyEmbeds ? (
-        <div class="poem-page__embed">
+        <div class:list={['poem-page__embed', entry.data.videoPortrait && 'poem-page__embed--portrait']}>
           <iframe
             src={`https://www.youtube-nocookie.com/embed/${videoId}?rel=0`}
             title={`〈${entry.data.poem.title}〉${entry.data.poem.author}`}
@@ -106,7 +106,12 @@ const description =
           />
         </div>
       ) : (
-        <VideoFacade videoId={videoId} title={`〈${entry.data.poem.title}〉${entry.data.poem.author}`} locale={locale} />
+        <VideoFacade
+          videoId={videoId}
+          title={`〈${entry.data.poem.title}〉${entry.data.poem.author}`}
+          locale={locale}
+          portrait={entry.data.videoPortrait}
+        />
       )}
     </section>
   )}
@@ -173,6 +178,14 @@ const description =
     aspect-ratio: 16 / 9;
     border-radius: var(--r-md);
     overflow: hidden;
+  }
+
+  /* 直版影片。數字跟 VideoFacade 的 .facade--portrait 是同一組
+     這條路現在走不到（見上面那段註解），但兩邊長得不一樣更糟 */
+  .poem-page__embed--portrait {
+    aspect-ratio: 9 / 16;
+    inline-size: min(17.5rem, 100%);
+    margin-inline: auto;
   }
 
   .poem-page__embed iframe {

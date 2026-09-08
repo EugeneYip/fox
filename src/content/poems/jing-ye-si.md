@@ -7,6 +7,7 @@ featured: true
 tags: [唐詩, 李白, 五言絕句, 思鄉]
 translationKey: jing-ye-si
 vertical: true
+videoUrl: https://www.youtube.com/watch?v=aIAsc5PZsa8
 poem:
   title: 靜夜思
   author: 李白
