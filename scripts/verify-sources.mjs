@@ -222,11 +222,17 @@ if (PATTERNS) {
   console.log('符號：✓ 讀到東西　· 端點活著、但讀到 0 筆　✗ 打不通　– 沒有樣板\n');
 
   let realFailures = 0;
-  /** 哪幾個失敗了 —— 底下要判斷是不是「那個會一陣一陣回 404 的」 */
+  /**
+   * 哪幾個失敗了 —— 底下要判斷是不是「那個會一陣一陣回 404 的」。
+   * 型別要寫出來：只 push 字串的話 TS 會自己推導成 `string[]`，但那個推導
+   * 撐不過「在後面第二個地方也讀它」—— 第 4 輪（第五十二圈）多加一處
+   * `.includes()` 就變成 `any[]`，`astro check` 當場四個 error。
+   * @type {string[]}
+   */
   const failedIds = [];
-  /** 回了合法的 feed，但裡面一筆都沒有 —— 綠燈，卻什麼都沒證明 */
+  /** 回了合法的 feed，但裡面一筆都沒有 —— 綠燈，卻什麼都沒證明 @type {string[]} */
   const emptyIds = [];
-  /** 這一輪真的打過的（拿真實帳號那種）—— 底下要跟 confidence 對照 */
+  /** 這一輪真的打過的（拿真實帳號那種）—— 底下要跟 confidence 對照 @type {string[]} */
   const probedIds = [];
 
   for (const p of PLATFORMS) {
@@ -374,6 +380,64 @@ if (PATTERNS) {
     console.log('  改法：確認那個平臺的樣板還在不在；真的失效了就把 confidence 改掉。');
   }
   console.log('');
+
+  /*
+   * ── 這張表綠了，跟「她的來源好不好」是兩件事 ──────────────
+   *
+   * `CLAUDE.md` 的「已知的坑」寫著：`--patterns` 打的是**公開頻道**，
+   * 那一格綠燈**證明不了她的頻道沒事**（第 4 輪〔第四十圈〕實測到
+   * 「它可能只壞一個頻道」—— 同一時間 Google 自家回 200、她的回 404）。
+   *
+   * 那句話只寫在 CLAUDE.md 裡。**這一支自己不說** —— 而它正是印出那一格
+   * 綠燈的地方。第 4 輪（第五十二圈）跑的時候就是活的例子：
+   * 這裡 `✓ youtube`，而 `src/data/syndication.json` 裡
+   * `youtube-foxpoetry` 的 `status` 是 `error`。兩邊都對，說的是不同的事。
+   *
+   * 判準不寫死平臺名：拿 `sources.mjs` 啟用中的來源，比對它自己的識別字串
+   * 與 `probeHandle`。不一樣就說出來 —— 哪天她加了第二個來源也一樣適用。
+   */
+  const short = (/** @type {string} */ v) => (v.length > 26 ? v.slice(0, 10) + '…' + v.slice(-6) : v);
+  const enabledSources = sources.filter((s) => s.enabled);
+  const crossed = enabledSources
+    .map((s) => {
+      const plat = PLATFORMS.find((/** @type {{ id: string }} */ x) => x.id === s.platform);
+      return {
+        id: s.id,
+        platform: s.platform,
+        mine: s.channelId ?? s.handle ?? s.feedUrl ?? '',
+        probe: plat?.probeHandle ?? '',
+        green: probedIds.includes(s.platform) && !failedIds.includes(s.platform),
+      };
+    })
+    .filter((r) => r.green && r.probe && r.mine && r.probe !== r.mine);
+  if (crossed.length > 0) {
+    console.log('這張表跟這個站的關係');
+    for (const r of crossed) {
+      console.log(
+        `  ${r.platform} 那一格打的是 probeHandle「${short(r.probe)}」，` +
+          `**不是這個站的來源**（${r.id}：「${short(r.mine)}」）。`,
+      );
+    }
+    console.log('  綠燈證明的是樣板與端點還能用，證明不了這個站的來源抓不抓得到。');
+    console.log('  要看那個：npm run sync:dry（不寫檔）或 npm run sync:health。');
+    /* 手上剛好有那份資料的話就把它說完 —— 沒有也不要壞掉（CI 上不一定有） */
+    try {
+      const syn = JSON.parse(
+        await readFile(new URL('../src/data/syndication.json', import.meta.url), 'utf8'),
+      );
+      const broken = crossed.filter((r) => syn.sources?.[r.id]?.status === 'error');
+      for (const r of broken) {
+        console.log(
+          `  而現在 src/data/syndication.json 裡 ${r.id} 的 status 是 **error**` +
+            `（最後成功 ${syn.sources[r.id].lastSuccessAt ?? '沒有紀錄'}）——` +
+            ' 同一個平臺，一綠一紅，兩邊都對。',
+        );
+      }
+    } catch {
+      /* 沒有那份檔案就算了，這一段只是補充 */
+    }
+    console.log('');
+  }
 
   process.exit(realFailures > 0 ? 1 : 0);
 }

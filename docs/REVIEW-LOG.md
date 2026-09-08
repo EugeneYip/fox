@@ -117,7 +117,7 @@
 
 ## 這份檔案有多大，怎麼讀
 
-**約 64,931 行、3.4 MB、413 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
+**約 65,063 行、3.4 MB、414 筆逐輪紀錄**（數法：`grep -c '^### 20..-' docs/REVIEW-LOG.md`）。
 沒有人應該從頭讀它。
 
 三種讀法：
@@ -64929,3 +64929,135 @@ build 離開碼 0
 改到 `scripts/`，所以 commit 之後補跑 `ci:sim`。
 
 **下一輪：4 — 平臺 feed 實測**
+
+### 2026-09-08 — 第 4 輪（第五十二圈）：平臺 feed 實測
+
+**這一圈問：這個東西的名字，跟它實際做的事一樣嗎？**
+這一輪的答案在一個剛好同時發生的巧合裡：**同一個平臺，一格綠、一格紅，兩邊都對。**
+
+#### 一、先把 feed 打一次（上一圈那次故障的下半場）
+
+第 4 輪（第五十一圈）量到的是**故障**那一半：feed 回 404／500、重試 7 次、
+`status` 翻 `error`、`/colophon` 自己亮燈。這一輪接到的是**復原**那一半。
+
+進來時的狀態（排程 2026-09-08T04:15:50Z 那一跑留下的）：
+
+```
+status: error   itemCount: 9   lastSuccessAt: 2026-09-07T17:40:23Z
+```
+
+實測（12:34 UTC，連打三次）：
+
+```
+12:34:35  200  16197 bytes
+12:34:37  200  16197 bytes
+12:34:39  200  16197 bytes
+```
+
+以及 `CLAUDE.md` 說的那個真正的判準 —— **她的頻道頁還在不在**：
+
+```
+https://www.youtube.com/@FoxPoetry   200
+canonical → https://www.youtube.com/channel/UCiCJBnqbS3ECSPEM7vSmrPw   ← 跟 sources.mjs 一致
+```
+
+`npm run sync:dry`：抓到 9 筆、來源失敗 0。跑真的 `npm run sync`：
+
+```
+總計 9 筆（新增 0、更新 0、來源失敗 0）
+已寫入 src/data/syndication.json
+status: ok   lastSuccessAt: 2026-09-08T12:38:03Z
+```
+
+**「新增 0、更新 0」卻寫了檔**，那是對的：`sameAndAlreadyToday()` 只把
+`generatedAt` 與各來源的 `lastSuccessAt` 拿掉再比，`status` 從 `error` 變 `ok`
+本來就是內容變了。重建之後 `/colophon` 從「0 個正常，1 個異常」變回
+**「1 個正常」**。整條鏈的兩半現在都在真的故障上量過了。
+
+停多久：從 04:15Z 那一跑失敗，到 12:34Z 三次都通 —— **至少八小時**，
+比 2026-09-02 那次（上午壞、中午好）長得多。這件事本來就沒有固定的時長。
+
+#### 二、`npm run verify -- --patterns`：24 列全部打過
+
+```
+verified         11 個　這一輪真的打過 11 個，全部通過（最舊的宣稱 2026-09-06，2 天前）
+lookup-required   9 個　一個都沒打（8 個沒有樣板、pixnet 有樣板但沒有 probeHandle）
+documented        4 個　一個都沒打（4 個都沒有樣板）
+note                    200、合法的 RSS 2.0、**0 筆** —— 腳本自己會說這種綠燈只證明「端點還在」
+```
+
+沒有平臺改版或下架的跡象，`confidence` 一個都不用動。
+
+#### 三、而這張表跟「她的來源好不好」是兩件事 —— 今天剛好同時看得到
+
+跑 `--patterns` 的那一刻，兩個輸出同時成立：
+
+| 哪裡 | 說什麼 |
+|---|---|
+| `verify --patterns` | `✓ youtube  200 Atom 15 筆` |
+| `src/data/syndication.json` | `youtube-foxpoetry: status **error**` |
+
+**兩邊都對。** 那一格打的是 `probeHandle`（`UC_x5XG1OV2P6uZZ5FSM9Ttw`，
+Google 自家的頻道），不是 `sources.mjs` 裡的 `UCiCJBnqbS3ECSPEM7vSmrPw`。
+第 4 輪（第四十圈）就實測過「它可能只壞一個頻道」——
+同一時間 Google 自家回 200、她的回 404，所以**「別的頻道通不通」不是判準**。
+
+那句話寫在 `CLAUDE.md` 的「已知的坑」裡。**印出那一格綠燈的腳本自己不說。**
+一個因為 feed 好像壞了而跑 `--patterns` 的人，看到的是一排綠。
+
+補上，判準是算出來的、不寫死平臺名：拿 `sources.mjs` **啟用中**的來源，
+比對它自己的識別字串與該平臺的 `probeHandle`，不一樣就說出來；
+手上剛好讀得到 `syndication.json` 的話，再把那個來源現在的 `status` 說完。
+
+```
+這張表跟這個站的關係
+  youtube 那一格打的是 probeHandle「UC_x5XG1OV2P6uZZ5FSM9Ttw」，**不是這個站的來源**（youtube-foxpoetry：「UCiCJBnqbS3ECSPEM7vSmrPw」）。
+  綠燈證明的是樣板與端點還能用，證明不了這個站的來源抓不抓得到。
+  要看那個：npm run sync:dry（不寫檔）或 npm run sync:health。
+  而現在 src/data/syndication.json 裡 youtube-foxpoetry 的 status 是 **error**（最後成功 2026-09-07T17:40:23.620Z）—— 同一個平臺，一綠一紅，兩邊都對。
+```
+
+（上面那段是**修好之前**跑出來的實際輸出。同步跑完之後最後一行就不會出現了 ——
+那一行只在真的有來源掛著的時候才印。）
+
+#### 四、突變三發
+
+| 突變 | 預期 | 結果 |
+|---|---|---|
+| 把整段關掉 | 正向案例紅 | **紅**（exit 1） |
+| 把「不一樣才說」改成「一律說」 | 反向案例紅 | **紅** |
+| 把 `filter(s => s.enabled)` 拿掉 | 「沒啟用的來源不算」紅 | **紅** |
+
+三個新案例（一正兩反）在 `test:verify-sources`。順帶替那支測試的
+`patterns()` 開了 `--sources=`（本來只吃 `--platforms=`）。
+
+#### 五、量到但沒動的：`confidence` 這個欄位名，裝的是兩種不同的東西
+
+型別上的說明寫著「**這個 pattern 我實際打過嗎？**」，三個值是：
+
+| 值 | 說明 | 是什麼 |
+|---|---|---|
+| `verified` | 本專案建置時實際 curl 過 | 可信度 |
+| `documented` | 平臺文件或長期慣例，但本次未實測 | 可信度 |
+| `lookup-required` | 需要到該平臺頁面上找 RSS 圖示 | **是方法，不是可信度** |
+
+而「這個 pattern」對 **24 個裡的 12 個**根本不存在（`--patterns` 印「無樣板」）。
+`docs/PLATFORMS.md` 上顯示給人看的中文標籤（已實測／依文件／**需自行查**）
+反而是誠實的 —— 不誠實的是欄位名與那句型別說明。
+沒有改：這個名字散在資料檔、型別、產生的文件與 UI 上，動它不是一輪的事，
+而且今天沒有任何東西因此判斷錯。記進 `docs/TODO.md`。
+
+#### 六、我自己：漏了型別註記，`astro check` 四個 error
+
+新加的 `.includes()` 是 `probedIds`／`failedIds` 的**第二個讀取點**，
+TS 的 evolving-`any[]` 推導撐不過去，`const failedIds = []` 當場變 `any[]`。
+`npm run verify:all` 第一道就紅（4 errors）—— 補上 `@type {string[]}` 就好，
+並把理由寫在那三行的註解裡，免得下一個人再拿掉。
+**這一格是關卡替我抓的**，不是我自己發現的。
+
+#### 六道關卡
+
+`npm run verify:all` 六道全綠、`npm run test:tools` 44 步全部通過。
+改到 `scripts/`，所以 commit 之後補跑 `ci:sim`。
+
+**下一輪：5 — 隱私與安全**

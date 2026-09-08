@@ -232,15 +232,28 @@ console.log('\nnpm run verify 的判斷\n' + '─'.repeat(56));
  */
 console.log('\nnpm run verify -- --patterns 的判斷\n' + '─'.repeat(56));
 
-/** @param {unknown[]} platforms */
-async function patterns(platforms) {
+/**
+ * `sources` 也給得進來：`--patterns` 那條路現在會拿啟用中的來源跟 probeHandle
+ * 對一次（第 4 輪〔第五十二圈〕加的），不給的話用的是真的 sources.mjs。
+ * @param {unknown[]} platforms
+ * @param {unknown[]} [srcs]
+ */
+async function patterns(platforms, srcs) {
   const file = join(tmp, `p-${Math.random().toString(36).slice(2)}.json`);
   await writeFile(file, JSON.stringify(platforms), 'utf8');
+  /** @type {string[]} */
+  const extra = [];
+  if (srcs) {
+    const sf = join(tmp, `s-${Math.random().toString(36).slice(2)}.json`);
+    await writeFile(sf, JSON.stringify(srcs), 'utf8');
+    extra.push(`--sources=${sf}`);
+  }
   try {
     const { stdout } = await run('node', [
       resolve(ROOT, 'scripts/verify-sources.mjs'),
       '--patterns',
       `--platforms=${file}`,
+      ...extra,
     ]);
     return { out: stdout, code: 0 };
   } catch (err) {
@@ -346,6 +359,45 @@ console.log('\nFLAKY_ENDPOINT 的 id\n' + '─'.repeat(56));
     /* 跑完之後版控裡那一份必須一個字都沒變 —— 這才是「改副本」的真正保證 */
     check('跑完之後 scripts/verify-sources.mjs 沒有被動過', (await readFile(realPath, 'utf8')) === original, '被動過了');
   }
+}
+
+/*
+ * ── 綠燈是誰的綠燈 ────────────────────────────────
+ *
+ * 第 4 輪（第五十二圈）：`CLAUDE.md` 寫著「`--patterns` 打的是公開頻道，
+ * 那一格綠燈證明不了她的頻道沒事」，而**這支腳本自己不說**。
+ * 那一輪跑的時候就是活的例子：這裡 `✓ youtube`，
+ * 而 syndication.json 裡 `youtube-foxpoetry` 是 `error`。
+ *
+ * 判準不寫死平臺名，所以測試也用假的：來源的識別字串跟 probeHandle 不一樣
+ * 就說出來，一樣就閉嘴。
+ */
+{
+  const { out } = await patterns(
+    [plat({ feedTemplate: `${base}/ok`, probeHandle: 'someone-else' })],
+    [{ id: 's1', platform: 'p1', enabled: true, handle: 'her-own-handle' }],
+  );
+  check(
+    'probeHandle 不是這個站的來源時說得出來',
+    /這張表跟這個站的關係/.test(out) && /someone-else/.test(out) && /her-own-handle/.test(out),
+    out,
+  );
+}
+
+{
+  const { out } = await patterns(
+    [plat({ feedTemplate: `${base}/ok`, probeHandle: 'same-handle' })],
+    [{ id: 's1', platform: 'p1', enabled: true, handle: 'same-handle' }],
+  );
+  check('打的就是這個站自己的帳號時不多嘴（反向案例）', !/這張表跟這個站的關係/.test(out), out);
+}
+
+{
+  const { out } = await patterns(
+    [plat({ feedTemplate: `${base}/ok`, probeHandle: 'someone-else' })],
+    [{ id: 's1', platform: 'p1', enabled: false, handle: 'her-own-handle' }],
+  );
+  check('沒啟用的來源不算（反向案例）', !/這張表跟這個站的關係/.test(out), out);
 }
 
 /* 收尾搬到這裡 —— `--patterns` 那幾格用的是同一個假伺服器與同一個暫存目錄 */
