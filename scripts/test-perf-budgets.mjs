@@ -1385,6 +1385,43 @@ console.log('─'.repeat(64));
   await rm(smallIdx, { recursive: true, force: true });
 }
 
+/*
+ * ── 「還剩幾個」要是算出來的 ────────────────────────
+ *
+ * 第 2 輪（第五十三圈）加的。那一輪問「動這一處會牽動哪些地方」，
+ * 實測在一個只產生 2 頁的路由上加一個 `<style>`：**44 頁每一頁**的
+ * CSP 雜湊數都 +1、全站 HTML gzip +1,813 B、這條預算 88% → 90%。
+ * 加元件的人看不到那筆帳，所以 `why` 裡把剩餘額度說出來。
+ *
+ * 兩格：數字要跟著語料動（不是寫死的），而且要用同一個上限算。
+ */
+{
+  const mk = async (/** @type {number} */ n) => {
+    const dir = await mkdtemp(join(tmpdir(), `perf-csp-${n}-`));
+    await writeFile(
+      join(dir, 'index.html'),
+      page({
+        head:
+          '<meta http-equiv="content-security-policy" content="script-src ' +
+          Array.from({ length: n }, (_, i) => `'sha256-${'a'.repeat(42)}${i}='`).join(' ') +
+          '">',
+      }),
+      'utf8',
+    );
+    const out = await check(dir, ['--verbose']);
+    await rm(dir, { recursive: true, force: true });
+    return out;
+  };
+  const a = await mk(30);
+  const b = await mk(36);
+  const okA = /還剩 \*\*11 個\*\*/.test(a);
+  const okB = /還剩 \*\*5 個\*\*/.test(b);
+  if (!okA || !okB) failed++;
+  console.log(`  ${okA && okB ? '✓' : 'X'} 「還剩幾個」是算出來的（30 個 → 剩 11、36 個 → 剩 5）`);
+  if (!okA) console.log('        30：' + (a.split('\n').find((l) => /還剩/.test(l)) ?? '（沒印）'));
+  if (!okB) console.log('        36：' + (b.split('\n').find((l) => /還剩/.test(l)) ?? '（沒印）'));
+}
+
 console.log(failed === 0 ? '全部通過。\n' : `${failed} 項失敗。\n`);
 process.exit(failed > 0 ? 1 : 0);
 

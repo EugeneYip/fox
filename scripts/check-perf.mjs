@@ -302,6 +302,12 @@ const pageStats = html.map((f) => {
 
 const worstHashes = pageStats.reduce((a, b) => (b.cspHashes > a.cspHashes ? b : a));
 
+/**
+ * 這條預算的上限。提成常數是因為 `limit` 與 `why` 裡的「還剩幾個」
+ * 都要用它 —— 寫兩次遲早會分岔（這個 repo 記過很多次的同一件事）。
+ */
+const CSP_HASH_LIMIT = 41;
+
 const worstCritical = pageStats.reduce((a, b) => (b.critical > a.critical ? b : a));
 
 const worstPage = pageStats.reduce((a, b) => (b.gzip > a.gzip ? b : a));
@@ -578,6 +584,23 @@ const budgets = [
      * 第 2 輪（第三圈）算出首頁 `auto` 比 `never` 領先 294 B，
      * 也就是**再多 7 個雜湊（35 → 42）就該把 inlineStylesheets 換成 `never`**。
      * 上限設 41，就是讓這件事在該做的時候自己紅燈，而不是靠人記得去數。
+     *
+     * ── 這條預算是**全站共用**的，而花掉它的決定是**局部**的 ──────────
+     *
+     * 第 2 輪（第五十三圈）問「動這一處會牽動哪些地方」，實測了一次：
+     * 在 `src/pages/[...locale]/privacy.astro`（只產生 2 頁、原本沒有
+     * `<style>`）加**一個** `<style>` 區塊，重新建置 ——
+     *
+     *   每頁雜湊數   34/35/36 → **35/36/37**（44 頁**每一頁**都 +1）
+     *   單頁最大     36 → 37，這條預算 88% → **90%**
+     *   全站 HTML    gzip 合計 295,532 → 297,345 B（**+1,813 B**）
+     *
+     * 1,813 ÷ 44 ≈ 41 B／頁，跟第 2 輪（第五十圈）量到的「一個雜湊 41 B」對得上。
+     *
+     * 也就是說：**一個只用在兩頁的樣式，帳是 44 頁一起付的**，
+     * 而付帳的那條預算是全站最接近上限的一條。
+     * 加元件的人看不到這件事 —— 所以 `why` 裡把「還剩幾個」算出來說。
+     * （量的是 `<style>`；內嵌 `<script>` 同一個機制，這一輪沒有另外量。）
      */
     label: 'CSP 雜湊數（單頁最多）',
     basis:
@@ -585,14 +608,17 @@ const budgets = [
     subjects: pageStats.length,
     fix: '把 astro.config 的 inlineStylesheets 改成 never —— 這條紅燈就是那個時候到了。',
     value: worstHashes.cspHashes,
-    limit: 41,
+    limit: CSP_HASH_LIMIT,
     detail: worstHashes.path,
     unit: 'count',
     why:
       '一個雜湊約 43 B（gzip 幾乎壓不動），而首頁 auto 比 never 只領先 294 B。' +
       '到 42 個就該把 astro.config 的 inlineStylesheets 改成 never —— ' +
       '這條紅燈就是那個時候到了。第 2 輪（第六圈）實測：' +
-      '每頁 34–36 個、全站聯集 44 個，**不是每頁都一樣**，所以取單頁最大值。',
+      '每頁 34–36 個、全站聯集 44 個，**不是每頁都一樣**，所以取單頁最大值。' +
+      `　**這條預算是全站共用的**：在任何一個元件或頁面加一個內嵌 <style>，` +
+      `${pageStats.length} 頁**每一頁**的雜湊數都會 +1（第 2 輪〔第五十三圈〕實測，見原始碼註解）。` +
+      `照現在的值算，還剩 **${CSP_HASH_LIMIT - worstHashes.cspHashes} 個**。`,
   },
   {
     label: '最大單一檔案',
