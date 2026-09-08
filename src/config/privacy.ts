@@ -75,7 +75,28 @@ export interface PrivacyConfig {
   indexing: 'allow' | 'noindex';
   /** 是否讓 AI 訓練爬蟲抓取（寫進 robots.txt） */
   allowAiCrawlers: boolean;
-  /** 對外連結是否加上 rel="noreferrer" */
+  /**
+   * 對外連結是否加上 rel="noreferrer"。
+   *
+   * 這個布林值一動，牽動的比名字看起來多 —— 第 5 輪（第五十三圈）實測
+   * （對照組：什麼都不改重建一次 0 個檔案不同；量完還原，也是 0 個）：
+   *
+   *   61 個產出檔裡 **14 個**跟著變
+   *   58 個外連的 rel 從 `noopener noreferrer` 變成 `noopener`
+   *   另外 2 個是搜尋頁執行時才組出來的（兩種語言各一），
+   *     它們用同一個 `externalLinkRel`，所以也跟著變 —— 只是靜態掃不到
+   *     （`check:a11y` 自己會說 `blank-rel` 有 2 個主體掃不到）
+   *   **`/privacy` 那一頁的句子也跟著改**：從「一律加上 rel="noreferrer"」
+   *     變成「加上 rel="noopener"，沒有 noreferrer」
+   *
+   * 最後那一項是刻意的（那一頁永遠說實話），但它有一個後果值得寫下來：
+   * `audit:privacy` 的 `external-link-rel-broken-promise` 比的是
+   * **承諾對事實**，而兩邊都從這個開關長出來 —— 所以**關掉它，五道檢查全綠**
+   * （實測 `audit:privacy`／`check:a11y`／`check:content`／`check:copy`／`check:links`）。
+   * 那條規則沒有失效，它守的是「有人手寫了一個 rel」那種情形；
+   * 它守不到的是「有人把這個開關關掉」。那是站主的決定，不是 bug ——
+   * 但決定的人看不到那 60 個連結，所以數字寫在這裡。
+   */
   strictReferrerPolicy: boolean;
   /**
    * 建置時是否清掉圖片 EXIF（GPS、機型、拍攝時間）。
