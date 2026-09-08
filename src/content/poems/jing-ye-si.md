@@ -28,6 +28,9 @@ annotations:
     gloss: 「好像是」。不是真的認錯，是半睡半醒之間的恍惚。
   - term: 舉頭 / 低頭
     gloss: 兩個動作之間什麼都沒說，但整首詩的重量都在那裡。
+related:
+  - jiu-yue-jiu-ri-yi-shan-dong-xiong-di
+  - yue-ye-yi-she-di
 ---
 
 二十個字，沒有一個難字，小學生都背得出來。可是要說它到底好在哪裡，反而不容易。

@@ -742,11 +742,11 @@ if (textFiles.length > 0) {
     why:
       'feed、sitemap、CSS、robots.txt⋯⋯凡是純文字的都算在這裡 —— 它們壓縮率 3–13:1，' +
       '用「最大單一檔案」那把量圖片的 raw 尺去量會得到沒有意義的結論。' +
-      'rss-all.xml 目前 14 筆、gzip 3.8 KB。feed 的筆數**有上限**（rss-all.xml.ts 的 ' +
+      'rss-all.xml 目前 22 筆、gzip 4.4 KB。feed 的筆數**有上限**（rss-all.xml.ts 的 ' +
       'slice(0, 100)、rss.xml 的 limit: 60），所以檔案不會無限長大 —— ' +
       '滿載時推估 gzip 約 27 KB。' +
       '這條線設在 40 KB，抓的是兩種情況：有人把上限拿掉了，' +
-      '或者單筆變得很肥（現在單筆 678 bytes，其中描述佔 45%、標題佔 28%）。' +
+      '或者單筆變得很肥（現在單筆 603 bytes）。' +
       '碰到時先看是哪一種，不要直接調高門檻。',
   });
 } else {
@@ -757,15 +757,15 @@ if (searchIndex) {
   budgets.push({
     label: '搜尋索引（gzip）',
     basis:
-      '推導：平均每筆 426 B（gzip），60 KB 約 144 筆。',
+      '推導：平均每筆約 442 B（gzip），60 KB 約 139 筆。',
     subjects: 1,
     fix: '不要只是調高門檻，選一個：(a) 索引分片載入、(b) 縮短 search-index.json.ts 的 600 字摘要、(c) 影片只收標題不收描述。',
     value: searchIndex.gzip,
     limit: 60 * 1024,
     detail: `${searchIndex.path}，未壓縮 ${kb(searchIndex.raw)}`,
     why:
-      '目前 14 筆約 5.8 KB，平均每筆 426 bytes（gzip），所以 60 KB 大約是 **144 筆**。' +
-      '重點是這個索引**不需要任何人寫東西就會自己長**：14 筆裡有 9 筆是 ' +
+      '目前 22 筆約 9.5 KB，平均每筆約 442 bytes（gzip），所以 60 KB 大約是 **139 筆**。' +
+      '重點是這個索引**不需要任何人寫東西就會自己長**：22 筆裡有 9 筆是 ' +
       'sync-feeds 抓進來的 YouTube 影片。頻道目前是停更的（最後一支 2024-10-26），' +
       '所以短期內不會動；但一旦重新開始發，這條線會自己往上走，' +
       '而不是因為站主寫多了。碰到時不要只是調高門檻，選一個：' +
