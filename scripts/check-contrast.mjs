@@ -264,14 +264,41 @@ function parseTokens(rawCss, selector, from = 0) {
  *   ui          3:1    邊界、圖示、焦點框
  *   decorative  無要求，只報數字
  */
+/*
+ * ── 「卡片上的⋯」那六列，說的不是卡片 ────────────────
+ *
+ * 第 8 輪（第五十二圈）量到的。這一圈問「名字跟它做的事一樣嗎」，
+ * 而這六列的 `where` 都寫著「卡片上的⋯」。
+ *
+ * 這個站真正叫「卡片」的東西是 `EntryCard.astro` 畫的 `.entry` ——
+ * 而 **`.entry` 沒有背景**（只有一條 `border-block-end` 分隔），
+ * 它坐在 `--c-bg` 上，不是 `--c-bg-raised`。
+ *
+ * 版控裡用 `--c-bg-raised` 當背景的**只有五處**，
+ * 上面那六列講的就是它們（`where` 保持短，細節寫在這裡）：
+ *
+ *   `.skip-link`（global.css）　正文、邊界、焦點框
+ *   `.lang__menu`　　　　　　　 正文（項目）、連結（目前語言）、焦點框
+ *   `.pgrid__cell`　　　　　　　正文（平臺名）、次要文字（「看全部」「前往」）、
+ *   　　　　　　　　　　　　　　.faint（「共 N 篇」）、連結（hover）
+ *   `.search__input`　　　　　　邊界、焦點框
+ *   `VideoFacade`　　　　　　　 站上還沒有影片，沒算繪過
+ *
+ * 也就是說：一個照著 `where` 去找的人，會去看 `.entry`，
+ * 而那六個比值講的是另外四個東西。
+ * 第 8 輪（第三十六圈）用瀏覽器對過**組合**有沒有漏（漏一組，補上了），
+ * 但沒有對過**名字指得對不對**。
+ *
+ * 只改 `where` 這個字串 —— 比值一個都沒有動（改前改後的數字逐一比過）。
+ */
 const PAIRS = [
   { fg: '--c-ink', bg: '--c-bg', kind: 'text', where: '正文' },
-  { fg: '--c-ink', bg: '--c-bg-raised', kind: 'text', where: '卡片上的正文' },
+  { fg: '--c-ink', bg: '--c-bg-raised', kind: 'text', where: '浮起表面上的正文' },
   { fg: '--c-ink', bg: '--c-bg-sunken', kind: 'text', where: '程式碼區塊' },
   { fg: '--c-ink-soft', bg: '--c-bg', kind: 'text', where: '次要文字（.muted、摘要）' },
-  { fg: '--c-ink-soft', bg: '--c-bg-raised', kind: 'text', where: '卡片上的次要文字' },
+  { fg: '--c-ink-soft', bg: '--c-bg-raised', kind: 'text', where: '浮起表面上的次要文字' },
   { fg: '--c-ink-faint', bg: '--c-bg', kind: 'text', where: '.faint（日期、註記）' },
-  { fg: '--c-ink-faint', bg: '--c-bg-raised', kind: 'text', where: '卡片上的 .faint' },
+  { fg: '--c-ink-faint', bg: '--c-bg-raised', kind: 'text', where: '浮起表面上的 .faint' },
   /*
    * ── 這一組是量出來的，不是設計時想到的 ──────────
    *
@@ -287,7 +314,7 @@ const PAIRS = [
    */
   { fg: '--c-ink-faint', bg: '--c-bg-sunken', kind: 'text', where: '程式碼區塊／定義清單上的 .faint' },
   { fg: '--c-flame-ink', bg: '--c-bg', kind: 'text', where: '連結、強調' },
-  { fg: '--c-flame-ink', bg: '--c-bg-raised', kind: 'text', where: '卡片上的連結' },
+  { fg: '--c-flame-ink', bg: '--c-bg-raised', kind: 'text', where: '浮起表面上的連結' },
   { fg: '--c-flame-ink', bg: '--c-flame-wash', kind: 'text', where: '彙整頁的詩詞標記' },
   { fg: '--c-moss', bg: '--c-bg', kind: 'text', where: '「手動挑選」標記' },
   { fg: '--c-seal', bg: '--c-bg', kind: 'text', where: '同步異常訊息' },
@@ -295,9 +322,9 @@ const PAIRS = [
   { fg: '--c-ink', bg: '--c-selection', kind: 'text', where: '選取範圍' },
   { fg: '--c-flame', bg: '--c-bg', kind: 'ui', where: '狐狸標記、目前頁面的底線' },
   { fg: '--c-focus', bg: '--c-bg', kind: 'ui', where: '鍵盤焦點框' },
-  { fg: '--c-focus', bg: '--c-bg-raised', kind: 'ui', where: '卡片上的焦點框' },
+  { fg: '--c-focus', bg: '--c-bg-raised', kind: 'ui', where: '浮起表面上的焦點框' },
   { fg: '--c-edge', bg: '--c-bg', kind: 'ui', where: '輸入框、按鈕的邊界' },
-  { fg: '--c-edge', bg: '--c-bg-raised', kind: 'ui', where: '卡片上的輸入框邊界' },
+  { fg: '--c-edge', bg: '--c-bg-raised', kind: 'ui', where: '浮起表面上的邊界' },
   { fg: '--c-rule-strong', bg: '--c-bg', kind: 'decorative', where: '浮起表面外框（有陰影撐著）' },
   { fg: '--c-rule', bg: '--c-bg', kind: 'decorative', where: '分隔線（純裝飾）' },
 ];
