@@ -6,6 +6,33 @@
  *   2. content collection "external" —— 手動寫的（Instagram、微信公眾號、Behance）
  *
  * 這裡把兩者正規化成同一個 SyndicatedItem，頁面只要處理一種形狀。
+ *
+ * ── 她在 YouTube 發一支影片，站上會動到哪裡 ──────────────
+ *
+ * 第 4 輪（第五十三圈）實測（先跑對照組：什麼都不改重建一次，0 個檔案不同）。
+ * 在 `syndication.json` 加**一筆**，重新建置 —— **61 個產出檔裡 10 個**跟著變：
+ *
+ *   /elsewhere、/elsewhere/youtube          兩種語言共 4 個
+ *   首頁                                    兩種語言共 2 個
+ *   `/about`（← 這個容易漏掉）              兩種語言共 2 個
+ *   rss-all.xml、search-index.json          2 個
+ *
+ * `/about` 那兩個容易漏掉：它**不畫項目清單**，它用 `getActivePlatforms()`
+ * 拿每個平臺的「共 N 篇」，所以筆數一變它就變。
+ * 沒有變的：`rss.xml`（那是站內內容的 feed，刻意不含外站）、
+ * `sitemap-0.xml`（沒有 `lastmod`，見 `docs/TODO.md`）、`/colophon`。
+ *
+ * ── 而搜尋索引裡，站外的比站內的多一倍 ──────────────
+ *
+ * 同一次量到的：`dist/search-index.json` 共 15 筆 ——
+ * **站內 5 筆（poems 3、notes 1、posts 1）、YouTube 10 筆**。
+ * 也就是說搜尋框回的東西**三分之二會把人帶離這個站**，
+ * 而那些字是她在 YouTube 上打的，中間沒有經過任何一次站上的編輯。
+ *
+ * 那條路本身是有人想過的：外站結果帶 `target="_blank"` ＋ `externalLinkRel`、
+ * 標題後面有 `↗`、`.res__meta` 印平臺名、排序上站內比站外多 0.5 分。
+ * 而 `check:copy` 會掃到那些標題（第 3 輪〔第三十六圈〕記過：
+ * 在 YouTube 標題裡打一個「台」，這個 repo 的關卡會紅，而那行字在這裡改不掉）。
  */
 import { getCollection } from 'astro:content';
 import { platformOrFallback, type MediaKind, type Platform } from '@config/platforms';
