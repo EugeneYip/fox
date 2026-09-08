@@ -362,6 +362,20 @@ const CASES = {
   },
   'unlabelled-cjk': { file: 'en/x.html', html: enPage({ body: '<p>English text.</p><p>沒有標語言的中文</p>' }) },
   /*
+   * 緊接在前一段文字後面的元素。第 1 輪（第五十二圈）量到上面那個案例
+   * **剛好走的是能過的那條路** —— 它的中文住在 `</p><p>` 之後，
+   * 而規則原本的樣式會把下一個元素的 `<` 一起吃進 match 裡，
+   * `matchAll` 從它後面繼續，於是「前面剛好有文字」的元素永遠掃不到。
+   * 三個形狀實測：`<p>Hello<span>中文</span>` 漏、`</p><span>中文</span>` 抓到、
+   * 單獨一個 `<span>中文</span>` 抓到 —— 只有第一種是漏的，而這一格補的就是它。
+   * 真實觸發：語言鈕的 `English<span class="sr-only" lang="zh-TW">…`。
+   */
+  'unlabelled-cjk（緊接在文字後面）': {
+    rule: 'unlabelled-cjk',
+    file: 'en/x3.html',
+    html: enPage({ body: '<p>English text<span>沒有標語言的中文</span></p>' }),
+  },
+  /*
    * 標了，但標錯。第 1 輪（第八圈）之前 `lang="en"` 會讓這條規則放行 ——
    * 而那正是最該抓的情況：螢幕閱讀器會照著那個假的宣告用英文語音唸中文。
    */

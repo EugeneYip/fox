@@ -17,6 +17,15 @@ export const ui = {
   'nav.language': { 'zh-TW': '語言', en: 'Language' },
   'nav.theme': { 'zh-TW': '切換深淺色', en: 'Toggle theme' },
   /*
+   * 語言鈕在「這一頁沒有那個語言的版本」時去的是該語言的**首頁**。
+   * 那件事 <head> 的 hreflang 已經說了（它只宣告真的存在的語言），
+   * 但連結自己的名字沒有 —— 第 1 輪（第五十二圈）量到 19 個中文頁是這樣。
+   */
+  'nav.languageNoPage': {
+    'zh-TW': '（這一頁沒有這個語言的版本，會到首頁）',
+    en: '(no version of this page; goes to the home page)',
+  },
+  /*
    * 上下篇導覽的名稱。
    * 原本跟主選單共用 'nav.menu'，結果同一頁出現兩個都叫「選單」的
    * navigation 地標 —— 螢幕閱讀器的地標清單裡分不出哪個是哪個。

@@ -475,7 +475,26 @@ for await (const file of htmlFiles(DIST)) {
       .replace(/<script[\s\S]*?<\/script>/gi, ' ')
       .replace(/<style[\s\S]*?<\/style>/gi, ' ');
     const seen = new Set();
-    for (const m of body.matchAll(/<([a-z][a-z0-9]*)\b([^>]*)>([^<]{2,})</gi)) {
+    /*
+     * 結尾是 `(?=<)` 不是 `<` —— 那個前瞻是這一條的正確性，不是寫法偏好。
+     *
+     * 第 1 輪（第五十二圈）拿三個形狀餵進來量到的：
+     *
+     *   <p>Hello<span>靜夜思李白</span></p>   **漏掉**
+     *   <p>Hello</p><span>靜夜思李白</span>   抓到
+     *   <span>靜夜思李白</span>               抓到
+     *
+     * 差別在第一個 span 的 `<` 已經被前一筆比對**吃掉了**（原本的樣式
+     * 把那個 `<` 算進 match 裡），`matchAll` 從它後面繼續，
+     * 於是那個元素永遠不會被看到。也就是說：**任何緊接在前一段文字後面的
+     * 元素都掃不到** —— 而規則的訊息說的是「英文頁面上的中文沒有標語言」，
+     * 沒有「除非它前面剛好有文字」。
+     *
+     * 這一輪自己就踩到了：語言鈕新加的 `English<span class="sr-only" lang="zh-TW">…`
+     * 正好是第一個形狀，`lang` 忘了標的話這一條一個字都不會說。
+     * 改成前瞻之後三個形狀都抓得到，而在真的 12 個英文頁上 0 個新發現。
+     */
+    for (const m of body.matchAll(/<([a-z][a-z0-9]*)\b([^>]*)>([^<]{2,})(?=<)/gi)) {
       const [, tag, attrs, text] = m;
       if (!/[\u4e00-\u9fff]{2,}/.test(text)) continue;
       /*

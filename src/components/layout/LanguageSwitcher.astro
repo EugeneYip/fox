@@ -43,6 +43,26 @@ const localeHome = (l: Locale) => localizePath('/', l);
           aria-current={l === locale ? 'true' : undefined}
         >
           {LOCALE_LABEL[l]}
+          {/*
+            沒有對應頁面時這個連結去的是該語言的**首頁**，而它的名字仍然只有
+            「English」—— 名字說的是「換語言」，做的是「換語言，並且離開這一頁」。
+            第 1 輪（第五十二圈）量到：32 個中文頁裡 19 頁是這種情況，
+            而同一頁 `<head>` 的 hreflang **沒有**宣告英文版 ——
+            給機器看的那一份說了實話，給人看的那一份沒有。
+            補的方式是 `ExternalLink.astro` 那個形狀：sr-only 進可及名稱，畫面上的字不動。
+            （那個元件本身**沒有任何人 import**，是第三十圈量出來的 —— 見 `docs/TODO.md`。
+            所以這裡不是「照著現成的做法」，是那個形狀第一次真的出現在產出裡：
+            實測 `dist/` 裡 `<a>` 內含 sr-only 的連結，在這一行之前是 0 個。）
+            文字前面那個空格寫在字串裡不是靠排版：可及名稱是把子節點接起來算的，
+            接的時候不會自己補空白，於是會變成「English(no version…」。
+            span 自己標 `lang={locale}`：這句話是用**這一頁的語言**寫的，
+            而它住在一個 `lang={l}` 的連結裡，不標的話英文頁上會用英文語音唸中文。
+            只補「別的語言」那一個 —— 目前語言的那一個帶著 aria-current，
+            說「這一頁沒有中文版」在中文頁上是錯的。
+          */}
+          {l !== locale && !available.includes(l) && (
+            <span class="sr-only" lang={locale}>{' ' + t('nav.languageNoPage')}</span>
+          )}
         </a>
       </li>
     ))}
