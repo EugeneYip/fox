@@ -216,6 +216,13 @@
 - `CNAME` 的 content-type 是 `octet-stream`
 - `--w-prose`／`--w-content` 那兩份手抄值
 - `test-contrast` 把 `#faf6ee` 寫死在 fixture 裡
+- **「這是不是文字檔」有兩個判準，而看名單那一個的缺口是別人幫它補的。**
+  第五十一圈第 2 輪量到：`check-perf` 的 `isTextLike` 看內容、`audit-privacy` 的
+  `SCAN_EXT` 看副檔名（17 項）；餵同一棵 dist 只差 4 個刻意排除的 `.xml`，
+  但常見的純文字副檔名裡**有 15 種不在名單上**（`.webmanifest` 第十圈已經咬過一次）。
+  拿假的針實測：漏掉的型別**只要進了版控就會被 `unscanned-tracked-file` 點名**——
+  所以今天是安全的，代價是那條規則哪天鬆掉、這個缺口就跟著開，而它們是兩個地方
+  （→ 2 效能）
 - `images` 還是副檔名認的
 - CSS 那三條沒有被 `sawTags` 涵蓋
 - 這份檔案自己的頁首也是個沒人守的數字
