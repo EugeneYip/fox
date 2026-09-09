@@ -313,6 +313,29 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
     writing-mode: horizontal-tb;
     text-orientation: mixed;
     max-inline-size: 100%;
+    /*
+     * 一句不能被折斷 —— 跟直排那條下限是同一件事，只是軸換了。
+     *
+     * 直排那邊寫的是 `max-inline-size` 的下限（`calc(N * 1.14em + 0.5em)`），
+     * 用 em 寫，所以字級一放大它自己跟著長。橫排這一支原本只有
+     * `max-inline-size: 100%` —— 那是**容器的百分比**，不跟著字級走。
+     *
+     * 2026-09-09 實測（放大瀏覽器的預設字級，WCAG 1.4.4 要求撐到 200%）：
+     *
+     *   視窗 320px　字級 150%　→ 不折
+     *   視窗 320px　字級 175%　→ 四句七言**每一句都折成兩截**
+     *   視窗 360px　字級 200%　→ 折（360 是最常見的 Android 寬度）
+     *   視窗 375px　字級 200%　→ 不折（一句七言要 287px，這裡剛好夠）
+     *   直排任何寬度　字級 200%　→ 不折（它的下限是 em 寫的）
+     *
+     * 折出來的樣子是「秦時明月漢／時關」—— 那不是排版難看，是**讀錯**。
+     *
+     * 所以這裡下的是 `min-inline-size`：整塊至少要有一句那麼長。
+     * 真的不夠寬時它會超出容器，而 `.poem__scroll` 是 `overflow-x: auto`，
+     * 於是變成橫向捲一小段，不是把句子切開。
+     * （縮字級也能解，但那是在跟使用者「我要大字」的設定作對。）
+     */
+    min-inline-size: calc(var(--poem-longest-line, 7) * 1.14em + 0.5em);
     text-align: center;
     line-height: 2.2;
     letter-spacing: 0.1em;
@@ -331,6 +354,8 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
       writing-mode: horizontal-tb !important;
       text-orientation: mixed;
       max-inline-size: 100%;
+      /* 同上面那段註解 —— 窄螢幕一律橫排，所以這條才是手機上真正生效的那一份 */
+      min-inline-size: calc(var(--poem-longest-line, 7) * 1.14em + 0.5em);
       text-align: center;
       font-size: var(--t-md);
     }
@@ -356,6 +381,19 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
       writing-mode: horizontal-tb !important;
       max-inline-size: 100% !important;
       text-align: center;
+    }
+
+    /*
+     * 紙上把上面那個下限關掉。
+     *
+     * 螢幕上放不下就橫向捲，紙上沒有捲軸 —— 留著下限的話，超出頁面的那半句
+     * 會**無聲地印不出來**（跟 PRINT_VERTICAL_MAX_LINES 擋的是同一種事故）。
+     * 折行至少讀得到全部的字。兩個媒介只能挑一個壞法，紙上挑折行。
+     */
+    .poem__original,
+    .poem[data-orientation="horizontal"] .poem__original,
+    .poem[data-print-overflows] .poem__original {
+      min-inline-size: 0 !important;
     }
 
     .poem__scroll { overflow: visible; }

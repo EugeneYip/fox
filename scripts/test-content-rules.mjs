@@ -580,11 +580,44 @@ const CASES = {
     },
     args: (/** @type {string} */ dir) => [`--guide=${join(dir, 'guide.md')}`],
   },
+  /*
+   * ── 橫排少了「一句不能折」的下限 ──────────────────
+   *
+   * 2026-09-09 加的。站主要求嚴格確認斷句，實測到橫排那一支只有
+   * `max-inline-size: 100%`（容器的百分比，不跟著字級走）——
+   * 320px 視窗 ＋ 175% 字級，四句七言每一句都折成兩截。
+   *
+   * 這一格的 CSS 有直排那一段（所以 vertical-lost 不會跟著響），
+   * 橫排那一段刻意少了下限。
+   */
+  'linebreak-lost': {
+    content: { 'poems/wu-yi-xiang.md': poem() },
+    dist: {
+      'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
+      '_astro/x.css':
+        '.poem__original{writing-mode:vertical-rl;max-inline-size:min(21rem,max(52vh,calc(var(--poem-longest-line,7)*1.14em + 0.5em)))}' +
+        '@media (max-width:48rem){.poem__original{writing-mode:horizontal-tb!important}}\n',
+    },
+  },
+  /* 反向：下限還在就不該報。少了這一格，把規則改成「一律報」也會全綠 */
+  'linebreak-lost（下限還在就不報）': {
+    expect: 'no-title',
+    content: {
+      'poems/wu-yi-xiang.md': poem(),
+      'poems/broken.md': '---\nlang: zh-TW\n---\n沒有 title。\n',
+    },
+    dist: {
+      'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
+      '_astro/x.css':
+        '.poem__original{writing-mode:vertical-rl;max-inline-size:min(21rem,max(52vh,calc(var(--poem-longest-line,7)*1.14em + 0.5em)))}' +
+        '@media (max-width:48rem){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}\n',
+    },
+  },
   'vertical-lost': {
     content: { 'poems/wu-yi-xiang.md': poem() },
     dist: {
       'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
-      '_astro/x.css': '.poem__original{writing-mode:horizontal-tb}\n',
+      '_astro/x.css': '.poem__original{writing-mode:horizontal-tb;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}\n',
     },
   },
   /* 反向：CSS 裡還有那條宣告就不該報 */
@@ -616,7 +649,7 @@ const CASES = {
       'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
       '_astro/x.css':
         '.poem__original{writing-mode:vertical-rl}' +
-        '@media (width>=0){.poem__original{writing-mode:horizontal-tb!important}}\n',
+        '@media (width>=0){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}\n',
     },
   },
 
@@ -635,7 +668,7 @@ const CASES = {
       'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
       '_astro/x.css':
         '.poem__original{writing-mode:vertical-rl}' +
-        '@media (width<=48rem){.poem__original{writing-mode:horizontal-tb!important}}\n',
+        '@media (width<=48rem){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}\n',
     },
   },
 
@@ -670,7 +703,7 @@ const CASES = {
     },
     dist: {
       'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
-      '_astro/x.css': '.poem__original{writing-mode:horizontal-tb}\n',
+      '_astro/x.css': '.poem__original{writing-mode:horizontal-tb;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}\n',
     },
   },
 
@@ -925,6 +958,15 @@ const CLEAN = {
      * 「這次沒有東西可看的規則」；有了它，「不該響的不響」才有人守。
      */
     'rss.xml': feed(),
+    /*
+     * 一份「兩條都對」的 CSS：直排那一段在（vertical-lost 的反向），
+     * 橫排那一段帶著下限（linebreak-lost 的反向）。
+     * 在這之前 CLEAN 根本沒有 CSS，那兩條只會印一句「沒有檢查」的註記 ——
+     * 綠燈證明不了任何事。
+     */
+    '_astro/x.css':
+      '.poem__original{writing-mode:vertical-rl;max-inline-size:min(21rem,max(52vh,calc(var(--poem-longest-line,7)*1.14em + 0.5em)))}' +
+      '@media (max-width:48rem){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}\n',
     /*
      * 反向的兩半，都放在 CLEAN 裡：
      *

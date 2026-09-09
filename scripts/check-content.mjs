@@ -1205,6 +1205,7 @@ const RULES = [
   'template-text-left',
   'field-undocumented',
   'vertical-lost',
+  'linebreak-lost',
   'listing-order',
   'locale-list-drift',
   'domain-drift',
@@ -1312,6 +1313,40 @@ const RULES = [
  * 抽出來是因為底下有兩處要用（直排那條規則、斷點那份清單）——
  * 各讀一次的話，兩邊會慢慢分岔。
  */
+/**
+ * 這個位置外面包著哪幾層 @media（由內往外）。
+ *
+ * 本來寫在 `vertical-lost` 的 else 分支裡。2026-09-09 加 `linebreak-lost`
+ * 時搬出來 —— 兩條規則問的是同一種問題（一條 CSS 宣告在不在、有沒有被
+ * 條件蓋掉），各留一份會慢慢分岔。
+ * @param {string} text
+ * @param {number} at
+ */
+const enclosingMedia = (text, at) => {
+  /** @type {string[]} */
+  const out = [];
+  let depth = 0;
+  for (let i = at; i >= 0; i--) {
+    const c = text[i];
+    if (c === '}') depth++;
+    else if (c === '{') {
+      if (depth === 0) {
+        const head = text.slice(Math.max(0, i - 300), i);
+        const m = /@media([^{}]*)$/.exec(head);
+        if (m) out.push(m[1].trim());
+      } else depth--;
+    }
+  }
+  return out;
+};
+
+/** 這條宣告所在區塊的選擇器 */
+const selectorAt = (/** @type {string} */ text, /** @type {number} */ at) => {
+  const blockStart = text.lastIndexOf('{', at);
+  const selStart = Math.max(text.lastIndexOf('}', blockStart), text.lastIndexOf('{', blockStart - 1));
+  return text.slice(selStart + 1, blockStart);
+};
+
 let servedCss = '';
 for (const f of await readdir(resolve(DIST, '_astro')).catch(() => [])) {
   if (f.endsWith('.css')) servedCss += await readFile(resolve(DIST, '_astro', f), 'utf8');
@@ -1360,24 +1395,6 @@ servedCss += dedupedInlineStyles(built.filter((b) => b.path.endsWith('.html')).m
        * `min-width: 0`（壓縮成 `(width>=0)`）。**一個永遠成立的條件不是條件。**
        * 判準跟它要抓的東西犯了同一個錯，這件事本身值得留在這裡。
        */
-      /** 這個位置外面包著哪幾層 @media（由內往外） */
-      const enclosingMedia = (/** @type {string} */ text, /** @type {number} */ at) => {
-        const out = [];
-        let depth = 0;
-        for (let i = at; i >= 0; i--) {
-          const c = text[i];
-          if (c === '}') depth++;
-          else if (c === '{') {
-            if (depth === 0) {
-              const head = text.slice(Math.max(0, i - 300), i);
-              const m = /@media([^{}]*)$/.exec(head);
-              if (m) out.push(m[1].trim());
-            } else depth--;
-          }
-        }
-        return out;
-      };
-
       for (const m of css.matchAll(/writing-mode\s*:\s*horizontal-tb\s*!important/g)) {
         const at = m.index ?? 0;
         const blockStart = css.lastIndexOf('{', at);
@@ -1625,6 +1642,94 @@ servedCss += dedupedInlineStyles(built.filter((b) => b.path.endsWith('.html')).m
     }
   }
   saw('listing-order', listings);
+}
+
+/*
+ * ── 一句詩不能被折成兩截 ─────────────────────────
+ *
+ * 直排那一支早就有保護：`max-inline-size` 的下限寫成
+ * `calc(var(--poem-longest-line) * 1.14em + 0.5em)` —— 用 em，
+ * 所以讀者把字級調大時它自己跟著長。
+ *
+ * 橫排那一支到 2026-09-09 為止只有 `max-inline-size: 100%`，
+ * 那是**容器的百分比**，不跟著字級走。站主要求「嚴格確認斷句」那天實測：
+ *
+ *   視窗 320px　字級 175%　→ 四句七言每一句都折成兩截
+ *   視窗 360px　字級 200%　→ 折（360 是最常見的 Android 寬度）
+ *   視窗 375px　字級 200%　→ 不折（一句七言要 287px）
+ *
+ * 折出來是「秦時明月漢／時關」——**那不是排版難看，是讀錯**。
+ * 而且窄螢幕一律橫排，所以受影響的是所有手機，不是少數。
+ *
+ * 這條守的是修法還在：`.poem__original` 上要有一個非 0 的
+ * `min-inline-size`（列印那一份是 0，紙上沒有捲軸，那是刻意的例外）。
+ *
+ * **它守不到「折了沒有」本身** —— 那要有排版引擎，而這個專案刻意沒有
+ * 無頭瀏覽器（見 docs/ARCHITECTURE.md）。量法寫在 docs/A11Y.md。
+ */
+{
+  const poems = entries.filter((e) => e.collection === 'poems').length;
+  if (poems > 0) {
+    saw('linebreak-lost', poems);
+    if (servedCss === '') {
+      notes.push('詩句會不會被折斷沒有檢查：產出裡找不到任何 CSS。');
+    } else {
+      /*
+       * 判準是「**每一個**把詩設成橫排的區塊，自己都要帶那個下限」，
+       * 不是「全站找得到一個就算數」。
+       *
+       * 第一版寫的是後者，當場被自己的突變掃描打臉：橫排有兩段
+       *（寬螢幕手動切的那一段、窄螢幕一律橫排的那一段），
+       * 只拿掉窄螢幕那一份 —— 也就是**所有手機**——，規則照樣綠。
+       */
+      /** 這條宣告所在區塊的內容（`{` 到配對的 `}`） */
+      const blockAt = (/** @type {number} */ at) => {
+        const start = servedCss.lastIndexOf('{', at);
+        let depth = 0;
+        for (let i = start; i < servedCss.length; i++) {
+          if (servedCss[i] === '{') depth++;
+          else if (servedCss[i] === '}' && --depth === 0) return servedCss.slice(start, i);
+        }
+        return servedCss.slice(start);
+      };
+      const hasGuard = (/** @type {string} */ block) => {
+        const m = /min-inline-size\s*:\s*([^;}]+)/.exec(block);
+        if (!m) return false;
+        return !/^0(\D|$)/.test(m[1].trim());
+      };
+
+      /** @type {string[]} */
+      const unguarded = [];
+      let horizontalBlocks = 0;
+      for (const m of servedCss.matchAll(/writing-mode\s*:\s*horizontal-tb/g)) {
+        const at = m.index ?? 0;
+        const sel = selectorAt(servedCss, at);
+        if (!/poem__original/.test(sel)) continue;
+        /* 紙上沒有捲軸，那一份刻意不設下限 */
+        if (enclosingMedia(servedCss, at).some((q) => /print/.test(q))) continue;
+        horizontalBlocks += 1;
+        if (!hasGuard(blockAt(at))) unguarded.push(sel.trim().slice(0, 80));
+      }
+      const guarded = horizontalBlocks > 0 && unguarded.length === 0;
+      if (horizontalBlocks === 0) {
+        notes.push('詩句會不會被折斷沒有檢查：CSS 裡找不到打在 .poem__original 上的橫排規則。');
+      } else       if (!guarded) {
+        problems.push({
+          file: 'dist/（全站 CSS）',
+          id: 'linebreak-lost',
+          msg:
+            `站上有 ${poems} 首詩，而 ${unguarded.length}／${horizontalBlocks} 個把詩設成橫排的 ` +
+            'CSS 區塊沒有非 0 的 `min-inline-size`：\n' +
+            unguarded.map((sel) => `        ${sel}`).join('\n') + '\n' +
+            '      沒有它，橫排時一句詩會在容器不夠寬時被折成兩截 ——\n' +
+            '      實測 320px 視窗 ＋ 175% 字級，四句七言每一句都折。\n' +
+            '      折出來是「秦時明月漢／時關」，那是讀錯不是難看。\n' +
+            '      改法：看 src/components/content/PoemBlock.astro 橫排那兩段 ——\n' +
+            '      `min-inline-size: calc(var(--poem-longest-line) * 1.14em + 0.5em)` 是不是被拿掉了。',
+        });
+      }
+    }
+  }
 }
 
 /*
@@ -2637,6 +2742,7 @@ const NOT_A_WRITER_RULE = new Map([
   ['feed-unreadable', '報的是產出的 feed，壞的是產生 feed 的程式'],
   ['locale-dead-end', '報的是產出的空狀態頁，改法在版面不在內容'],
   ['search-crosslang-mute', '報的是產出的搜尋頁，改法在那一頁的程式'],
+  ['linebreak-lost', '報的是全站 CSS 的一條宣告，改法在 PoemBlock.astro 不在內容'],
   ['vertical-lost', '報的是全站 CSS'],
   ['listing-order', '報的是列表頁的排序，那是 lib/content.ts 的事不是內容的事'],
   ['domain-drift', '報的是三份設定檔（site.ts／astro.config／CNAME）'],
