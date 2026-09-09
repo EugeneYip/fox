@@ -20,6 +20,15 @@ poem:
     遍插茱萸少一人
 plain: >-
   一個人在外地做客，每到節日就格外想念親人。遠遠地知道兄弟們今天登高，茱萸插了滿頭，只少一個人。
+readings:
+  - char: 茱
+    zhuyin: ㄓㄨ
+    pinyin: zhū
+    homophone: 朱
+  - char: 萸
+    zhuyin: ㄩˊ
+    pinyin: yú
+    homophone: 魚
 annotations:
   - term: 山東
     gloss: 指華山以東。王維家在蒲州（今山西永濟），不是今天的山東省。

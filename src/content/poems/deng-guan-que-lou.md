@@ -20,6 +20,11 @@ poem:
     更上一層樓
 plain: >-
   太陽貼著山落下去，黃河朝著海流過去。想把千里都看到盡頭，就再上一層樓。
+readings:
+  - char: 鸛
+    zhuyin: ㄍㄨㄢˋ
+    pinyin: guàn
+    homophone: 灌
 annotations:
   - term: 白日
     gloss: 白晃晃的太陽，不是「白天」。

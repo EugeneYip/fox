@@ -20,6 +20,19 @@ poem:
     不教胡馬度陰山
 plain: >-
   還是秦朝的那輪明月，還是漢朝的那座關。出征萬里的人沒有回來。只要龍城的飛將軍還在，就不會讓胡人的馬越過陰山。
+readings:
+  - char: 教
+    zhuyin: ㄐㄧㄠ
+    pinyin: jiāo
+    homophone: 交
+  - char: 將
+    zhuyin: ㄐㄧㄤˋ
+    pinyin: jiàng
+    homophone: 醬
+  - char: 還
+    zhuyin: ㄏㄨㄢˊ
+    pinyin: huán
+    homophone: 環
 annotations:
   - term: 秦時明月漢時關
     gloss: 月是秦朝的月，關是漢朝的關 —— 這種交錯著寫的手法叫互文，意思是月與關自秦漢以來都在那裡。七個字跨過七百年。

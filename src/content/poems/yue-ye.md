@@ -24,6 +24,19 @@ poem:
     雙照淚痕乾
 plain: >-
   今夜鄜州的月亮，她一個人在房裡看。可憐那幾個小兒女，還不懂得想念長安。夜霧沾濕了她的髮，月光照得她的手臂發涼。什麼時候才能一起靠在薄帳邊，讓月光照著兩個人，把淚痕曬乾。
+readings:
+  - char: 鄜
+    zhuyin: ㄈㄨ
+    pinyin: fū
+    homophone: 夫
+  - char: 鬟
+    zhuyin: ㄏㄨㄢˊ
+    pinyin: huán
+    homophone: 環
+  - char: 幌
+    zhuyin: ㄏㄨㄤˇ
+    pinyin: huǎng
+    homophone: 恍
 annotations:
   - term: 鄜州
     gloss: 今陝西富縣。安史之亂中杜甫把家安置在那裡，自己被困在長安。

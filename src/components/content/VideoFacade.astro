@@ -13,7 +13,6 @@
  * 刻意不去 hotlink Google 的縮圖網址，那等於又把訪客送過去了。
  */
 import { useTranslations } from '@i18n/utils';
-import { externalLinkRel } from '@config/privacy';
 import type { Locale } from '@config/site';
 
 interface Props {
@@ -29,22 +28,13 @@ interface Props {
 
 const { videoId, title, locale, poster, portrait = true } = Astro.props;
 const t = useTranslations(locale);
-const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
 /*
- * ── 兩個控制項要說出「哪一首」──────────────────────
+ * ── 播放鍵要說出「播的是哪一首」──────────────────────
  *
  * 第 1 輪（第二十圈）第一次讓這個元件真的算繪出來（站上沒有一首詩填
- * `videoUrl`，所以它從來沒有出現在產出裡）。把整頁的按鈕與連結列出來看：
- *
- *   目前是直排，按一下改為橫排
- *   載入並播放          ← 播什麼？
- *   聽朗讀              ← 聽誰的？而且它會離開這個站
- *   標記為「唐詩」
- *   較舊 〈烏衣巷〉
- *
- * 這一頁上其他每一個控制項都說出了目標（標籤是第 1 輪〔第十八圈〕補的），
- * 只有影片這兩個沒有。
+ * `videoUrl`，所以它從來沒有出現在產出裡）。把整頁的按鈕與連結列出來看，
+ * 只有影片這邊沒有說出目標 —— 其他每一個控制項都說了。
  *
  * ## 為什麼用 aria-labelledby 而不是 aria-label
  *
@@ -52,11 +42,24 @@ const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
  * 字串** —— 塞進去就把下面那個 `lang="zh-Hant"` 的修法抵銷掉了，
  * 英文頁上會用英文語音唸〈靜夜思〉。
  * `aria-labelledby` 串接的是**元素**，每一段各自保留自己的語言。
+ *
+ * （2026-09-09 之前這裡還有第二個控制項：一個連去 YouTube 的「聽朗讀 ↗」，
+ * 加上一句解釋「按了才會載入」的說明。站主看過實際頁面之後說那是多餘的 ——
+ * 影片就嵌在這一頁上，說明等於在解釋一個讀者沒有問的問題，
+ * 而那個外連跟整個站「不要跳出去」的方向相反。）
  */
-const ids = { play: `facade-${videoId}-play`, listen: `facade-${videoId}-listen`, title: `facade-${videoId}-title` };
+const ids = { play: `facade-${videoId}-play`, title: `facade-${videoId}-title` };
 ---
 
 <figure class:list={['facade', portrait && 'facade--portrait']} data-video-id={videoId} data-title={title}>
+  {/*
+    圖說放在框**上面**（`<figcaption>` 當 `<figure>` 的第一個子元素是合法的）。
+    站主 2026-09-09 要的：那一行字置中壓在影片上方，像一張照片的標題。
+  */}
+  <figcaption class="facade__caption">
+    <span class="facade__title" id={ids.title} lang="zh-Hant">{title}</span>
+  </figcaption>
+
   <div class="facade__frame">
     {poster ? (
       <img class="facade__poster" src={poster} alt="" loading="lazy" decoding="async" width="1280" height="720" />
@@ -78,25 +81,6 @@ const ids = { play: `facade-${videoId}-play`, listen: `facade-${videoId}-listen`
       <span id={ids.play}>{t('external.loadEmbed')}</span>
     </button>
   </div>
-
-  <figcaption class="facade__caption">
-    {/*
-      標題永遠是「〈詩名〉作者」—— 不管頁面是哪個語言，那串字都是中文。
-      英文頁上不標語言的話，螢幕閱讀器會用英文語音唸〈靜夜思〉李白。
-      跟 PoemBlock 的 .poem__original 用同一個標籤（古典漢文）。
-    */}
-    <span class="facade__title" id={ids.title} lang="zh-Hant">{title}</span>
-    <span class="facade__notice faint">{t('external.embedBlocked')}</span>
-    <a
-      class="facade__fallback ui"
-      href={watchUrl}
-      target="_blank"
-      rel={externalLinkRel}
-      aria-labelledby={`${ids.listen} ${ids.title}`}
-    >
-      <span id={ids.listen}>{t('poem.listen')}</span> <span aria-hidden="true">↗</span>
-    </a>
-  </figcaption>
 </figure>
 
 <style>
@@ -137,29 +121,6 @@ const ids = { play: `facade-${videoId}-play`, listen: `facade-${videoId}-listen`
        auto 邊距會失效，寬度就變成沒有定值的循環參照 */
     inline-size: min(var(--facade-w), 100%);
     margin-inline: auto;
-  }
-
-  /*
-   * 夠寬的時候把說明挪到影片旁邊。
-   * 直版影片旁邊那半欄本來就是空的，而說明壓在一個 498px 高的框底下，
-   * 離「聽朗讀」那個標題已經隔了一整個螢幕高。
-   */
-  @media (min-width: 44rem) {
-    .facade--portrait {
-      flex-direction: row;
-      align-items: center;
-      gap: var(--s-5);
-    }
-
-    .facade--portrait .facade__frame {
-      flex: none;
-      margin-inline: 0;
-    }
-
-    .facade--portrait .facade__caption {
-      min-inline-size: 0;
-      gap: var(--s-2);
-    }
   }
 
   .facade__poster {
@@ -211,27 +172,11 @@ const ids = { play: `facade-${videoId}-play`, listen: `facade-${videoId}-listen`
   }
 
   .facade__caption {
-    display: flex;
-    flex-direction: column;
-    gap: var(--s-1);
     font-size: var(--t-sm);
+    text-align: center;
   }
 
   .facade__title { font-weight: 600; }
-
-  .facade__notice {
-    line-height: var(--lh-snug);
-    max-inline-size: 52ch;
-  }
-
-  .facade__fallback {
-    font-size: var(--t-xs);
-    color: var(--c-ink-soft);
-    text-decoration: none;
-    align-self: flex-start;
-  }
-
-  .facade__fallback:hover { color: var(--c-flame-ink); }
 
   .facade__frame:has(iframe) .facade__play,
   .facade__frame:has(iframe) .facade__poster { display: none; }

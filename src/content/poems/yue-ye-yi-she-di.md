@@ -24,6 +24,15 @@ poem:
     況乃未休兵
 plain: >-
   戍樓的鼓一響，路上就沒有人了。邊地的秋天，一隻雁叫著過去。從今夜起是白露，月亮還是故鄉的亮。弟弟們都散了，連家都沒有，向誰問生死。寄出去的信總是到不了，何況仗還沒有打完。
+readings:
+  - char: 戍
+    zhuyin: ㄕㄨˋ
+    pinyin: shù
+    homophone: 樹
+  - char: 舍
+    zhuyin: ㄕㄜˋ
+    pinyin: shè
+    homophone: 射
 annotations:
   - term: 戍鼓
     gloss: 戍樓的更鼓。鼓一響就宵禁，所以「斷人行」。

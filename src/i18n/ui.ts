@@ -91,6 +91,7 @@ export const ui = {
   'poem.vertical': { 'zh-TW': '直排', en: 'Vertical' },
   'poem.horizontal': { 'zh-TW': '橫排', en: 'Horizontal' },
   'poem.listen': { 'zh-TW': '聽朗讀', en: 'Listen' },
+  'poem.readings': { 'zh-TW': '讀音', en: 'How to read it' },
   /*
    * 相關的詩（frontmatter 的 related，例如同一組唱和）。
    *
@@ -285,10 +286,6 @@ export const ui = {
 
   // ── 外連提示 ───────────────────────────────────────
   'external.opensNewTab': { 'zh-TW': '（在新分頁開啟）', en: '(opens in a new tab)' },
-  'external.embedBlocked': {
-    'zh-TW': '為了不讓第三方在你不知情時記錄你，這段影片要按了才會載入。',
-    en: 'To avoid third parties tracking you silently, this video loads only when you ask.',
-  },
   'external.loadEmbed': { 'zh-TW': '載入並播放', en: 'Load and play' },
 } as const satisfies Record<string, Record<'zh-TW', string> & Partial<Record<Locale, string>>>;
 

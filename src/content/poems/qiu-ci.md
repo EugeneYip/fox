@@ -20,6 +20,15 @@ poem:
     便引詩情到碧霄
 plain: >-
   自古以來，一到秋天就寫悲涼寂寞。我說秋天勝過春天。晴空裡一隻鶴推開雲往上飛，就把詩興一路帶到藍天最高的地方。
+readings:
+  - char: 寥
+    zhuyin: ㄌㄧㄠˊ
+    pinyin: liáo
+    homophone: 聊
+  - char: 霄
+    zhuyin: ㄒㄧㄠ
+    pinyin: xiāo
+    homophone: 消
 annotations:
   - term: 悲寂寥
     gloss: 悲秋是中文詩最老的傳統之一，從宋玉「悲哉秋之為氣也」開始。

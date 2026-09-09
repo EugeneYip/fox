@@ -77,42 +77,84 @@ const description =
     locale={locale}
   />
 
-  {entry.body?.trim() && (
-    <section class="poem-page__section" aria-label={t('poem.thoughts')}>
-      <h2 class="poem-page__section-title ui">{t('poem.thoughts')}</h2>
-      <div class="prose"><Content /></div>
-    </section>
+  {/*
+    「聽朗讀」與「狐狸說」並排 —— 站主 2026-09-09 要的版面。
+
+    寬螢幕：影片在左、她的話在右，兩塊都接在白話底下。
+    窄螢幕：疊起來，順序是白話 → 聽朗讀 → 狐狸說。
+
+    DOM 順序就是窄螢幕的順序（影片在前），寬螢幕只是把它擺到第一欄 ——
+    這樣鍵盤與螢幕閱讀器走到的順序，跟兩種寬度下看到的順序都一致，
+    不必用 `order` 去搬（那會讓兩者對不上）。
+
+    左欄夾在 19rem：站主要求影片那一欄不能超過一半，否則右邊那一欄
+    會窄到跟手機一樣。斷點 48rem 上內容欄約 691px，19rem 是 44%。
+  */}
+  {(videoId || entry.body?.trim()) && (
+    <div class="poem-page__pair">
+      {videoId && (
+        <section class="poem-page__section poem-page__listen" aria-label={t('poem.listen')}>
+          <h2 class="poem-page__section-title ui">{t('poem.listen')}</h2>
+          {/*
+            iframe 的 title 跟底下 VideoFacade 的對齊 ——〈詩名〉作者。
+            第 3 輪（第十四圈）比對時發現同一件事的兩條路寫法不同：
+            這一條沒有補書名號，另一條有。**這條路現在走不到**
+            （`allowThirdPartyEmbeds` 翻成 true 會被 audit:privacy 當場擋下，
+            第 5 輪〔第十一圈〕實測過），所以這個改動沒辦法在產出上驗證 ——
+            但留著兩種寫法更糟。
+          */}
+          {privacy.allowThirdPartyEmbeds ? (
+            <div class:list={['poem-page__embed', entry.data.videoPortrait && 'poem-page__embed--portrait']}>
+              <iframe
+                src={`https://www.youtube-nocookie.com/embed/${videoId}?rel=0`}
+                title={`〈${entry.data.poem.title}〉${entry.data.poem.author}`}
+                loading="lazy"
+                allow="accelerometer; encrypted-media; picture-in-picture; fullscreen"
+                referrerpolicy="strict-origin-when-cross-origin"
+              />
+            </div>
+          ) : (
+            <VideoFacade
+              videoId={videoId}
+              title={`〈${entry.data.poem.title}〉${entry.data.poem.author}`}
+              locale={locale}
+              portrait={entry.data.videoPortrait}
+            />
+          )}
+        </section>
+      )}
+
+      {entry.body?.trim() && (
+        <section class="poem-page__section poem-page__thoughts" aria-label={t('poem.thoughts')}>
+          <h2 class="poem-page__section-title ui">{t('poem.thoughts')}</h2>
+          <div class="prose"><Content /></div>
+        </section>
+      )}
+    </div>
   )}
 
-  {videoId && (
-    <section class="poem-page__section" aria-label={t('poem.listen')}>
-      <h2 class="poem-page__section-title ui">{t('poem.listen')}</h2>
-      {/*
-        iframe 的 title 跟底下 VideoFacade 的對齊 ——〈詩名〉作者。
-        第 3 輪（第十四圈）比對時發現同一件事的兩條路寫法不同：
-        這一條沒有補書名號，另一條有。**這條路現在走不到**
-        （`allowThirdPartyEmbeds` 翻成 true 會被 audit:privacy 當場擋下，
-        第 5 輪〔第十一圈〕實測過），所以這個改動沒辦法在產出上驗證 ——
-        但留著兩種寫法更糟。
-      */}
-      {privacy.allowThirdPartyEmbeds ? (
-        <div class:list={['poem-page__embed', entry.data.videoPortrait && 'poem-page__embed--portrait']}>
-          <iframe
-            src={`https://www.youtube-nocookie.com/embed/${videoId}?rel=0`}
-            title={`〈${entry.data.poem.title}〉${entry.data.poem.author}`}
-            loading="lazy"
-            allow="accelerometer; encrypted-media; picture-in-picture; fullscreen"
-            referrerpolicy="strict-origin-when-cross-origin"
-          />
-        </div>
-      ) : (
-        <VideoFacade
-          videoId={videoId}
-          title={`〈${entry.data.poem.title}〉${entry.data.poem.author}`}
-          locale={locale}
-          portrait={entry.data.videoPortrait}
-        />
-      )}
+  {/*
+    讀音放在最底部 —— 站主 2026-09-09 要的位置。
+    需要的人會找下來，不需要的人不會被它擋在詩跟她的話中間。
+
+    樣式寫在這一頁的 <style> 裡而不是另開一個元件：新開元件會多一個
+    內嵌 <style>，而 CSP 雜湊是 63 頁**共用**的預算（現在 36／41）。
+    這一區只有詩頁用得到，不值得花掉那一格。
+  */}
+  {entry.data.readings.length > 0 && (
+    <section class="poem-page__section" aria-label={t('poem.readings')}>
+      <h2 class="poem-page__section-title ui">{t('poem.readings')}</h2>
+      <ul class="poem-page__readings" lang="zh-Hant">
+        {entry.data.readings.map((r) => (
+          <li>
+            <span class="poem-page__reading-char">{r.char}</span>
+            <span class="poem-page__reading-zhuyin">{r.zhuyin}</span>
+            {/* 拼音是拉丁字母拼的官話，標成 zh-Latn-pinyin 螢幕閱讀器才不會用中文語音唸它 */}
+            <span class="poem-page__reading-pinyin" lang="zh-Latn-pinyin">{r.pinyin}</span>
+            {r.homophone && <span class="poem-page__reading-same faint">同「{r.homophone}」</span>}
+          </li>
+        ))}
+      </ul>
     </section>
   )}
 
@@ -158,6 +200,32 @@ const description =
 </Base>
 
 <style>
+  /*
+   * 兩塊並排。只有一塊的時候（沒影片、或沒寫狐狸說）那一塊佔滿整列 ——
+   * 不然它會被關在 19rem 的左欄裡，變成一條又窄又長的字。
+   */
+  .poem-page__pair {
+    display: grid;
+    gap: var(--s-6);
+    margin-block-start: var(--s-8);
+  }
+
+  .poem-page__pair > .poem-page__section {
+    margin-block-start: 0;
+  }
+
+  @media (min-width: 48rem) {
+    .poem-page__pair {
+      grid-template-columns: minmax(0, 19rem) minmax(0, 1fr);
+      gap: var(--s-7);
+      align-items: start;
+    }
+
+    .poem-page__pair > .poem-page__section:only-child {
+      grid-column: 1 / -1;
+    }
+  }
+
   .poem-page__section {
     margin-block-start: var(--s-8);
     padding-block-start: var(--s-5);
@@ -195,6 +263,52 @@ const description =
     block-size: 100%;
     border: 0;
   }
+
+  .poem-page__readings {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: var(--s-3);
+  }
+
+  .poem-page__readings li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--s-1) var(--s-4);
+    margin: 0;
+  }
+
+  .poem-page__reading-char {
+    flex: none;
+    inline-size: 1.8em;
+    font-family: var(--f-serif);
+    font-size: var(--t-lg);
+    line-height: 1;
+  }
+
+  /*
+   * 注音與拼音各給一個最小寬度，兩欄才對得齊。
+   * 不用 grid 是為了窄螢幕 —— grid 要對齊得讓 <li> 變成 display: contents，
+   * 而那會把清單項目從無障礙樹上拿掉；用 flex ＋ min-inline-size
+   * 對齊效果一樣，放不下時還會自己換行。
+   */
+  .poem-page__reading-zhuyin {
+    flex: none;
+    min-inline-size: 4.5em;
+    font-size: var(--t-sm);
+    letter-spacing: 0.08em;
+  }
+
+  .poem-page__reading-pinyin {
+    flex: none;
+    min-inline-size: 4em;
+    font-size: var(--t-sm);
+    color: var(--c-ink-soft);
+  }
+
+  .poem-page__reading-same { font-size: var(--t-xs); }
 
   .poem-page__foot {
     display: flex;

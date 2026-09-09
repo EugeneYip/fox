@@ -166,6 +166,31 @@ const poems = defineCollection({
       }),
       /** 白話翻譯 */
       plain: z.string().optional(),
+      /*
+       * 難字的讀音。站主 2026-09-09 要的：這個站的讀者不限於中文系，
+       * 生僻字與**破音字**要說得出怎麼唸。
+       *
+       * 破音字才是這一欄真正的價值 —— 教育部辭典裡「咽」有ㄧㄢ／ㄧㄢˋ／ㄧㄝˋ
+       * 三讀、「教」有ㄐㄧㄠˋ／ㄐㄧㄠ、「舍」有ㄕㄜˋ／ㄕㄜˇ。
+       * 這裡放的是**這一首裡讀哪一個**，不是把所有讀音抄一遍。
+       *
+       * 只收真的會卡住的字。字面上看得懂的（壺、橋、月）不要放進來 ——
+       * 放太多的話讀者會學會跳過整個區塊。
+       */
+      readings: z
+        .array(
+          z.object({
+            /** 那個字本身 */
+            char: z.string().min(1),
+            /** 臺灣注音，像 ㄈㄨ */
+            zhuyin: z.string().min(1),
+            /** 漢語拼音，像 fū */
+            pinyin: z.string().min(1),
+            /** 同音字，沒有現成的就整個欄位不要寫 */
+            homophone: z.string().optional(),
+          }),
+        )
+        .default([]),
       /** 逐詞注解 */
       annotations: z
         .array(z.object({ term: z.string(), gloss: z.string() }))

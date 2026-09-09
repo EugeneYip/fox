@@ -30,6 +30,19 @@ plain: >-
   一會兒像黃鶯在花底下婉轉地叫，一會兒像泉水在冰層底下艱難地流。
   泉水結了冰，弦聲也跟著凝住、斷了，斷在那裡，暫時什麼都聽不見。
   可是那個沒有聲音的片刻裡，反而有一種說不出的愁——比任何聲音都更響。
+readings:
+  - char: 嘈
+    zhuyin: ㄘㄠˊ
+    pinyin: cáo
+    homophone: 曹
+  - char: 咽
+    zhuyin: ㄧㄝˋ
+    pinyin: yè
+    homophone: 葉
+  - char: 澀
+    zhuyin: ㄙㄜˋ
+    pinyin: sè
+    homophone: 色
 annotations:
   - term: 嘈嘈 / 切切
     gloss: 兩個疊字，一重一輕。白居易用聲音的質地寫聲音，不用比喻也已經聽見了。
