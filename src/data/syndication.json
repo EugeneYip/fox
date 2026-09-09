@@ -1,14 +1,14 @@
 {
   "$schema": "./syndication.schema.json",
-  "generatedAt": "2026-09-09T04:22:14.105Z",
+  "generatedAt": "2026-09-09T16:26:08.660Z",
   "itemCount": 9,
   "sources": {
     "youtube-foxpoetry": {
-      "status": "error",
+      "status": "ok",
       "platform": "youtube",
       "itemCount": 9,
-      "lastSuccessAt": "2026-09-08T16:29:32.687Z",
-      "message": "RSS 失敗（HTTP 404（試了 7 次）），而且沒有 YOUTUBE_API_KEY 可以退回。　改法：**先不要當成帳號沒了** —— 這個端點會一陣一陣地壞掉，而且**不只 404**，500、502、503 都算（2026-09-06 一分鐘內連打三次：404、500、404）。它還可能**只壞這一個頻道**（同一時間 Google 自家頻道回 200），所以「別的頻道通不通」不是判準。　要確認頻道還在：開 `https://www.youtube.com/@FoxPoetry`，回 200 而且 canonical 指到 sources.mjs 裡那個 channelId，就是 feed 那一端的問題。　過幾分鐘再跑一次；真的持續不通再考慮設 YOUTUBE_API_KEY。"
+      "lastSuccessAt": "2026-09-09T16:26:08.660Z",
+      "message": null
     }
   },
   "items": [
