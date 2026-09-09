@@ -169,6 +169,18 @@
 
 ## 工具與檢查
 
+- **「script 造出來的元素配不到 scoped CSS」沒有東西在守。**（2026-09-09 的事故）
+  `VideoFacade` 的 `.facade iframe` 被編譯成 `iframe[data-astro-cid-…]`，
+  而那個 iframe 是按下播放時 `createElement` 出來的，身上沒有那個屬性 ——
+  **整組樣式一條都沒套上**，iframe 用 HTML 預設值算繪成 304×154
+  （300×150 加預設 2px 邊框），直版影片變成框裡一小條橫的。
+  站主是自己按了播放才發現的；六道關卡與 `test:tools` 全綠。
+  這個規矩站上本來就在用（`search.astro` 有 6 條 `:global()`），
+  漏的是唯一一個從來沒被算繪過的元件。
+  做得起來的話很窄：掃 `.astro` 的 `<script>` 裡 `createElement('x')`
+  與 `innerHTML` 用到的 class，跟同一個檔案 `<style>` 裡沒有包 `:global()`
+  的選擇器對一次。**先確認它跟現有的哪一支關卡放在一起才合理**
+
 - **「一般頁面內嵌 JS」剩 0.1 KB 額度**（2026-09-08 量）。接上影片之後
   `poems/jing-ye-si` 是這條預算的最大值：2.9 KB／上限 3.0 KB（96%）。
   VideoFacade 那段是 561 B，**每頁一份、不會累加** —— 所以再多幾首詩接影片

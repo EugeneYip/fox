@@ -236,7 +236,21 @@ const ids = { play: `facade-${videoId}-play`, listen: `facade-${videoId}-listen`
   .facade__frame:has(iframe) .facade__play,
   .facade__frame:has(iframe) .facade__poster { display: none; }
 
-  .facade iframe {
+  /*
+   * `:global()` 不是隨手加的。
+   *
+   * 這個 iframe 是底下那段 script 在按下播放時 `createElement` 出來的，
+   * 身上沒有 Astro 的 `data-astro-cid-*`；而 scoped 規則會被編譯成
+   * `.facade[data-astro-cid-…] iframe[data-astro-cid-…]` —— 永遠配不到它。
+   *
+   * 2026-09-09 量到的後果：iframe 整組樣式一條都沒套上，用 HTML 預設值
+   * 算繪成 **304×154**（300×150 加上預設的 2px 邊框），
+   * 於是直版的框裡放著一小條橫的播放器。連 `border: 0` 都沒生效。
+   *
+   * 這條路從第一圈就是壞的，但站上一直沒有詩填 `videoUrl`，
+   * 所以沒有人看過它播放的樣子。
+   */
+  .facade :global(iframe) {
     position: absolute;
     inset: 0;
     inline-size: 100%;
