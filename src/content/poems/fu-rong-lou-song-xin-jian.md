@@ -2,7 +2,7 @@
 title: 芙蓉樓送辛漸
 description: 送別詩寫到最後一句不寫離愁，寫的是一句託人帶回去的話。
 lang: zh-TW
-publishedAt: 2026-09-08
+publishedAt: 2024-10-19T11:07:58.000Z
 tags: [唐詩, 王昌齡, 七言絕句, 送別]
 translationKey: fu-rong-lou-song-xin-jian
 vertical: true

@@ -2,7 +2,7 @@
 title: 出塞
 description: 秦時的月照著漢時的關。王昌齡把七百年放進第一句的七個字裡。
 lang: zh-TW
-publishedAt: 2026-09-08
+publishedAt: 2024-10-26T06:23:28.000Z
 tags: [唐詩, 王昌齡, 七言絕句, 邊塞]
 translationKey: chu-sai
 vertical: true

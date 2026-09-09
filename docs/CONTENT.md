@@ -77,7 +77,7 @@ tags: [唐詩, 李白]
 title: 靜夜思                      # 詩詞的話，這個讀者看不到（見下面）
 description: 二十個字，一個人，一地月光。   # 列表上顯示的一句話（選填）
 lang: zh-TW
-publishedAt: 2026-09-01           # 發表日期
+publishedAt: 2026-09-01           # 發表日期（接了影片的話見下面）
 featured: true                    # 想置頂就寫 true，不想就整行刪掉
 tags: [唐詩, 李白, 五言絕句, 思鄉]
 
@@ -113,6 +113,22 @@ vertical: true                     # 直排。想橫排就寫 false
 
 > 引用別人的話。
 ```
+
+### 接了外站作品的話，日期要跟外站一樣
+
+一篇如果連著你在別的平臺發過的作品（現在是 `videoUrl` 接 YouTube，
+以後串別的平臺也一樣），`publishedAt` 要寫**那個平臺的發佈時刻**，
+不是你把這一頁寫出來的那一天。
+
+理由很簡單：那是同一件作品。同一支影片如果在「各處」那一頁寫著
+10月22日、在詩頁上寫著 9月8日，讀者會以為那是兩件事。
+
+照抄 `src/data/syndication.json` 裡那一筆的 `publishedAt` 就對了，
+連時刻一起抄（像 `2024-10-21T16:51:45.000Z`）。網站顯示的時候會換算成
+臺北時間，所以那一串在畫面上是「2024年10月22日」。
+
+寫錯的話 `npm run check:content` 的 `external-date-drift` 會擋下來，
+而且會把該填的那一串直接印給你。
 
 **詩詞的 `title` 讀者看不到。** 網站上每一個會顯示詩名的地方 ——
 首頁與列表的卡片、`/archive`、兩份 RSS、搜尋、詩頁的大標與瀏覽器分頁 ——
@@ -387,6 +403,7 @@ npm run dev
 | `draft-unscannable` | 草稿的標題與原文都短於四個字 | 給它一個四個字以上的 `title` —— 太短的話「草稿有沒有外洩」查不完整 |
 | `external-missing` | 收錄的外站文章在產出裡找不到 | 先確認 `platform` 是 [PLATFORMS.md](PLATFORMS.md) 裡有的 id |
 | `collection-unregistered` | 這篇所在的資料夾不在 `src/content/` 的四個分類裡 | 搬進 `posts`／`poems`／`notes`／`external` 其中一個 |
+| `external-date-drift` | 填了 `videoUrl`，但 `publishedAt` 跟那支影片在 YouTube 上的日子不一樣 | 把 `publishedAt` 換成影片的發佈時刻（訊息裡會直接把該填的那一串印出來） |
 
 #### 不是你寫錯了
 

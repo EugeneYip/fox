@@ -70,6 +70,52 @@ ${draft ? 'draft: true\n' : ''}poem:
 測試用。
 `;
 
+/*
+ * 一份**通得過真 schema** 的假 syndication，帶一支可以對日期的影片。
+ *
+ * `external-date-drift` 與 `syndication-schema` 這兩條都吃這份檔案，
+ * 所以它不能只放前者要的那兩個欄位 —— 少了 `$schema` 或欄位不齊，
+ * `syndication-schema` 的主體會掉成 0，CLEAN 那一格的「沒東西可看」
+ * 名單就會多一條，而那一格的意思正好是「這份名單該是空的」。
+ *
+ * @param {string} videoPublishedAt 那支影片在平臺上的發佈時刻
+ */
+const syndWith = (/** @type {string} */ videoPublishedAt) =>
+  JSON.stringify({
+    $schema: './syndication.schema.json',
+    generatedAt: new Date().toISOString(),
+    itemCount: 1,
+    sources: {
+      'youtube-x': {
+        status: 'ok',
+        platform: 'youtube',
+        itemCount: 1,
+        lastSuccessAt: new Date().toISOString(),
+      },
+    },
+    items: [
+      {
+        id: 'youtube-x--fixturevid01',
+        sourceId: 'youtube-x',
+        platform: 'youtube',
+        title: '一首詩的朗讀',
+        url: 'https://www.youtube.com/watch?v=FIXTUREvid01',
+        externalId: 'FIXTUREvid01',
+        publishedAt: videoPublishedAt,
+      },
+    ],
+  });
+
+/** 那支假影片的發佈時刻。臺北時間是 2024-10-22 —— 刻意選一個 UTC 已經跨日的 */
+const FIXTURE_VIDEO_AT = '2024-10-21T16:51:45.000Z';
+
+/** 把一首詩接上那支假影片 */
+const withVideo = (/** @type {string} */ md, /** @type {string} */ publishedAt) =>
+  md.replace(
+    'lang: zh-TW',
+    `lang: zh-TW\npublishedAt: ${publishedAt}\nvideoUrl: https://www.youtube.com/watch?v=FIXTUREvid01`,
+  );
+
 /* 真的那份寫作指南 —— field-undocumented 的案例拿它改一個字當 fixture */
 const REAL_GUIDE = await readFile(resolve(ROOT, 'docs/CONTENT.md'), 'utf8');
 
@@ -482,6 +528,24 @@ const CASES = {
     args: (/** @type {string} */ dir) => [`--syndication=${join(dir, 'synd', 'syndication.json')}`],
   },
   /*
+   * ── 站上的日期跟外站對不上 ──────────────────────
+   *
+   * 站主 2026-09-09 定了「接了外站作品就用外站的發佈時刻」之後加的。
+   * 這一格用的日期刻意選在**臺北已經跨日、UTC 還沒跨**的那一格
+   *（16:51 UTC ＝ 隔天 00:51 臺北）—— 規則比的是臺北日，
+   * 拿 UTC 比的話這一格會漏掉。
+   */
+  'external-date-drift': {
+    content: { 'poems/wu-yi-xiang.md': withVideo(poem(), '2026-09-08') },
+    dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花') },
+    mustMention: ['2024-10-22', FIXTURE_VIDEO_AT],
+    extra: {
+      'synd/syndication.json': syndWith(FIXTURE_VIDEO_AT),
+      'synd/syndication.schema.json': REAL_SYNDICATION_SCHEMA,
+    },
+    args: (/** @type {string} */ dir) => [`--syndication=${join(dir, 'synd', 'syndication.json')}`],
+  },
+  /*
    * ── 會指到她檔案的規則，她的文件裡要有 ────────────────
    *
    * 第 3 輪（第三十七圈）：這一支 20 條規則，`docs/CONTENT.md`、`CLAUDE.md`、
@@ -512,7 +576,7 @@ const CASES = {
     },
     dist: { 'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花') },
     extra: {
-      'guide.md': '寫錯的時候會看到什麼：`no-title`、`poem-title-bracketed`、`draft-page`、`draft-unscannable`、`draft-leaked`、`external-missing`、`missing-page`、`lang-leaked`、`bad-reference`、`search-index-missing`、`template-text-left`、`collection-unregistered`。\n',
+      'guide.md': '寫錯的時候會看到什麼：`no-title`、`poem-title-bracketed`、`draft-page`、`draft-unscannable`、`draft-leaked`、`external-missing`、`missing-page`、`lang-leaked`、`bad-reference`、`search-index-missing`、`template-text-left`、`collection-unregistered`、`external-date-drift`。\n',
     },
     args: (/** @type {string} */ dir) => [`--guide=${join(dir, 'guide.md')}`],
   },
@@ -781,7 +845,12 @@ const CASES = {
 /** 乾淨的一份：一篇正常的詩 + 一篇草稿，草稿的字一個都沒進產出 */
 const CLEAN = {
   content: {
-    'poems/wu-yi-xiang.md': poem(),
+    /*
+     * 接上假影片，而且日期**對得上** —— `external-date-drift` 的反向案例。
+     * 少了它那條規則在這份語料上主體是 0，「不該響的不響」就沒有人守，
+     * 把它改成「一律報」也會全綠。
+     */
+    'poems/wu-yi-xiang.md': withVideo(poem(), FIXTURE_VIDEO_AT),
     /*
      * 詩題本身含書名號是完全正常的（畫面會畫成〈題《赤壁圖》〉）。
      * 第 3 輪（第十六圈）之前的判斷是「開頭或結尾有括號」，這一份會被冤枉。
@@ -809,6 +878,15 @@ const CLEAN = {
      */
     'external/escaped-post.md':
       '---\ntitle: 談 <文心> & "雕龍" 的 \'體例\'\nlang: zh-TW\nplatform: threads\nurl: https://example.com/y\n---\n備忘。\n',
+  },
+  /*
+   * 自己帶一份 syndication，不吃 `src/data/syndication.json`。
+   * 吃真的那一份的話，這一格會隨著排程每天重寫的資料一起飄 ——
+   * 而它要驗的是「日期對得上就不響」，不是「今天的 feed 長什麼樣」。
+   */
+  extra: {
+    'synd/syndication.json': syndWith(FIXTURE_VIDEO_AT),
+    'synd/syndication.schema.json': REAL_SYNDICATION_SCHEMA,
   },
   dist: {
     'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
@@ -921,7 +999,8 @@ try {
      *
      * 指到真的那一份，這一格就順便在驗它：文件少寫一條，這裡會紅。
      */
-    const out = await check(dir, [`--guide=${resolve(ROOT, 'docs/CONTENT.md')}`]);
+    const syndArg = `--syndication=${join(dir, 'synd', 'syndication.json')}`;
+    const out = await check(dir, [`--guide=${resolve(ROOT, 'docs/CONTENT.md')}`, syndArg]);
     /*
      * ── CLEAN 護得到哪幾條規則的邊界 ────────────────────
      *
@@ -932,7 +1011,7 @@ try {
      * **只護得到它身上有東西可踩的那幾條**。主體是 0 的規則，
      * 邊界移一格也不會有人說話。所以把數字說出來。
      */
-    const verbose = await check(dir, ['--verbose', `--guide=${resolve(ROOT, 'docs/CONTENT.md')}`]);
+    const verbose = await check(dir, ['--verbose', `--guide=${resolve(ROOT, 'docs/CONTENT.md')}`, syndArg]);
     const subjects = new Map(
       [...verbose.matchAll(/^\s*(\d+)\s+([a-z0-9-]+)\s*$/gm)].map((m) => [m[2], Number(m[1])]),
     );

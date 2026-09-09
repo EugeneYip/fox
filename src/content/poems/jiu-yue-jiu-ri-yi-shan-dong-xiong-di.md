@@ -2,7 +2,7 @@
 title: 九月九日憶山東兄弟
 description: 前兩句人人會背。真正的技術在後面 —— 他不寫自己想家，他寫那邊少了一個人。
 lang: zh-TW
-publishedAt: 2026-09-08
+publishedAt: 2024-10-15T10:31:49.000Z
 tags: [唐詩, 王維, 七言絕句, 思鄉]
 translationKey: jiu-yue-jiu-ri-yi-shan-dong-xiong-di
 vertical: true

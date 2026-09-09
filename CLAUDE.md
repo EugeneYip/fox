@@ -67,6 +67,14 @@ ALLOWLIST 裡 —— 唯一含有個資的檔案，剛好豁免於自己的檢�
 **頁面不要直接呼叫 `getCollection`。** 走 `src/lib/content.ts`，
 草稿過濾、語言過濾、排序的規則都寫在那裡。
 
+**接了外站作品的內容，`publishedAt` 要用外站的發佈時刻。**
+站主 2026-09-09 定的：一篇如果連著她在別的平臺發過的東西（現在是
+`videoUrl` 接 YouTube，以後串別的平臺也一樣），日期寫**那個平臺上的
+發佈時刻**，不是把頁面寫出來的那一天 —— 那是同一件作品，
+在「各處」與在詩頁上不該寫著不同的日子。
+照抄 `syndication.json` 那一筆的 `publishedAt`，連時刻一起抄。
+`check:content` 的 `external-date-drift` 在守這一條（比的是臺北日）。
+
 ## 已知的坑
 
 - **Astro 的 scoped style 不會穿進子元件。**

@@ -2,7 +2,7 @@
 title: 山行
 description: 前三句一路往遠處、往冷的地方走。最後一句是紅的。
 lang: zh-TW
-publishedAt: 2026-09-08
+publishedAt: 2024-10-21T16:51:45.000Z
 tags: [唐詩, 杜牧, 七言絕句, 秋]
 translationKey: shan-xing
 vertical: true

@@ -2,7 +2,7 @@
 title: 靜夜思
 description: 二十個字，一個人，一地月光。李白把「想家」寫成了不用說出口的樣子。
 lang: zh-TW
-publishedAt: 2026-09-01
+publishedAt: 2024-10-19T10:40:40.000Z
 featured: true
 tags: [唐詩, 李白, 五言絕句, 思鄉]
 translationKey: jing-ye-si

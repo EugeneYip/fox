@@ -1213,6 +1213,7 @@ const RULES = [
   'syndication-schema',
   'collection-unregistered',
   'manifest-drift',
+  'external-date-drift',
   'rule-not-in-guide',
 ];
 /*
@@ -1562,30 +1563,66 @@ servedCss += dedupedInlineStyles(built.filter((b) => b.path.endsWith('.html')).m
      * 而測試的 fixture 項目短，第二個項目就看到了第一個的 `data-featured`。
      * 測試當場紅了 —— 這一圈第 2 輪也是同一種錯（判準是猜的，不是問出來的）。
      */
-    /** @type {{ d: string, f: boolean }[]} */
+    /*
+     * ── 一頁上可能有不只一份清單，而它們各自排各自的 ────────────
+     *
+     * 2026-09-09 之前這裡把**整頁的 `<time>` 當成一份清單**。首頁其實有兩份：
+     * 「最近」（`lib/content.ts` 排的站內內容）與「各處」
+     * （`syndication.json` 排的外站作品）。
+     *
+     * 那個假設一直沒被戳破，是因為站內內容的日期**剛好全都比影片新**
+     * —— 兩份接起來仍然遞減。站主 2026-09-09 把接了影片的詩改成用
+     * YouTube 的發佈時刻之後，站內內容掉進 2024 年，兩份一交錯就誤報：
+     *
+     *   ★2026-09-02 ★2026-08-30 2026-08-28 2026-08-20 2024-10-26 2024-10-23
+     *   │← 這六個是「最近」，自己是遞減的                              │
+     *                                          2024-10-26 2024-10-23 …
+     *                                          └← 這五個是「各處」，自己也是遞減的
+     *
+     * 兩份都對，接起來不對 —— **錯的是判準不是頁面**。
+     * 而且原本那句改法（「去看 lib/content.ts 的 getEntries()」）對第二份
+     * 根本不成立：那份的順序不是它排的。
+     *
+     * 改成按 `<section>` 分組。用 section 不用 `<ul>`：每一張卡片裡面
+     * 自己就有一個標籤用的 `<ul>`，拿 `</ul>` 切會把「最近」切成六份單筆的，
+     * 這條規則就形同廢掉（實測那六個 `<time>` 每一個前面都夾著一個 `</ul>`）。
+     */
+    /** @type {{ d: string, f: boolean, g: number }[]} */
     const items = [];
     let prevEnd = 0;
     for (const m of b.text.matchAll(/<time[^>]*datetime="([0-9-]+)"[^>]*>/g)) {
       const at = /** @type {number} */ (m.index);
-      items.push({ d: m[1], f: /data-featured/.test(b.text.slice(prevEnd, at)) });
+      const g = (b.text.slice(0, at).match(/<section[\s>]/g) ?? []).length;
+      items.push({ d: m[1], f: /data-featured/.test(b.text.slice(prevEnd, at)), g });
       prevEnd = at + m[0].length;
     }
     if (items.length < 2) continue;
     listings += 1;
     const desc = (/** @type {string[]} */ a) => a.every((v, i) => i === 0 || a[i - 1] >= v);
-    const plain = items.filter((x) => !x.f).map((x) => x.d);
-    const feat = items.filter((x) => x.f).map((x) => x.d);
-    if (desc(plain) && desc(feat)) continue;
-    problems.push({
-      file: b.path,
-      id: 'listing-order',
-      msg:
-        '這一頁的日期不是由新到舊：' +
-        items.map((x) => (x.f ? '★' : '') + x.d).join('　') +
-        '\n      （★ 是 data-featured。判準是：拿掉 featured 之後剩下的要遞減，' +
-        'featured 彼此之間也要遞減。）\n' +
-        '      改法：列表的順序是 src/lib/content.ts 的 getEntries()／getAllWriting() 排的 —— 去看那裡。',
-    });
+    /** @type {Map<number, { d: string, f: boolean }[]>} */
+    const groups = new Map();
+    for (const it of items) {
+      const bucket = groups.get(it.g) ?? [];
+      bucket.push(it);
+      groups.set(it.g, bucket);
+    }
+    for (const [, group] of groups) {
+      if (group.length < 2) continue;
+      const plain = group.filter((x) => !x.f).map((x) => x.d);
+      const feat = group.filter((x) => x.f).map((x) => x.d);
+      if (desc(plain) && desc(feat)) continue;
+      problems.push({
+        file: b.path,
+        id: 'listing-order',
+        msg:
+          '這一段的日期不是由新到舊：' +
+          group.map((x) => (x.f ? '★' : '') + x.d).join('　') +
+          '\n      （★ 是 data-featured。判準是：拿掉 featured 之後剩下的要遞減，' +
+          'featured 彼此之間也要遞減。一頁上每個 <section> 各自比。）\n' +
+          '      改法：站內清單的順序是 src/lib/content.ts 的 getEntries()／getAllWriting() 排的；' +
+          '「各處」那一份是 src/lib/syndication.ts 排的 —— 先看是哪一段。',
+      });
+    }
   }
   saw('listing-order', listings);
 }
@@ -2194,7 +2231,14 @@ const SYNC_STALE_DAYS = 3;
   if (raw === null) {
     notes.push('同步資料的新舊沒有檢查：讀不到 src/data/syndication.json。');
   } else {
-    /** @type {{ $schema?: string, generatedAt?: string, sources?: Record<string, { lastSuccessAt?: string | null, status?: string }> }} */
+    /**
+     * @type {{
+     *   $schema?: string,
+     *   generatedAt?: string,
+     *   sources?: Record<string, { lastSuccessAt?: string | null, status?: string }>,
+     *   items?: { externalId?: string, url?: string, publishedAt?: string }[],
+     * }}
+     */
     let data = {};
     let parsed = false;
     try {
@@ -2314,6 +2358,70 @@ const SYNC_STALE_DAYS = 3;
               notes.push(`syndication-schema 還有 ${errors.length - 12} 個錯誤沒列出來。`);
             }
           }
+        }
+      }
+    }
+
+    /*
+     * ── 站上那一篇的日期，要跟它在外站的發佈時刻一致 ──────────────
+     *
+     * 站主 2026-09-09 定的：接了外站作品的內容（現在是 `videoUrl`，
+     * 以後串別的平臺也一樣），`publishedAt` 用**那個平臺的發佈時刻**，
+     * 不是把頁面寫出來的那一天。
+     *
+     * 這條為什麼值得一條規則：這件事**沒有任何自動的力量在維持**。
+     * 那九篇的日期是人手抄過去的，而 `syndication.json` 是排程每天重寫的 ——
+     * 哪天 feed 那邊的時刻變了（重新上傳、改成公開的時間不同），
+     * 兩邊就分岔，而分岔的樣子是「同一支影片在 /elsewhere 寫 10月22日、
+     * 在詩頁寫 10月26日」，兩頁都不會壞，也沒有人會被通知。
+     *
+     * 訂之前這九篇**全部都不一致**（差了將近兩年），所以這不是預防性的規則。
+     *
+     * 比的是**臺北日**不是時刻：frontmatter 允許只寫到日
+     * （`publishedAt: 2024-10-22` 是合法的），而畫面上顯示的就是臺北日。
+     * 比到秒的話，寫成只有日期的那些會全部誤報。
+     */
+    const taipeiDay = (/** @type {string | undefined} */ iso) => {
+      const t = iso ? Date.parse(iso) : NaN;
+      if (Number.isNaN(t)) return null;
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Taipei',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date(t));
+    };
+
+    const feedItems = parsed ? (data.items ?? []) : [];
+    if (feedItems.length === 0) {
+      notes.push('外站日期一致性沒有檢查：syndication.json 裡沒有可比對的項目。');
+    } else {
+      const byVideoId = new Map(
+        feedItems.filter((it) => it.externalId).map((it) => [it.externalId, it]),
+      );
+      for (const e of entries) {
+        const videoUrl = field(e.text, 'videoUrl');
+        if (!videoUrl) continue;
+        /* watch?v= / youtu.be/ / shorts/ 三種都要認得 —— 跟詩頁那支 youtubeId() 對齊 */
+        const vid = videoUrl.split(/[?&]v=|youtu\.be\/|\/shorts\//).pop()?.split(/[?&]/)[0];
+        const item = vid ? byVideoId.get(vid) : undefined;
+        if (!item) {
+          notes.push(`外站日期：${e.rel} 的 videoUrl 在 syndication.json 裡找不到（${vid ?? '取不出 id'}）。`);
+          continue;
+        }
+        saw('external-date-drift', 1);
+        const mine = taipeiDay(field(e.text, 'publishedAt'));
+        const theirs = taipeiDay(item.publishedAt);
+        if (mine && theirs && mine !== theirs) {
+          problems.push({
+            file: e.rel,
+            id: 'external-date-drift',
+            msg:
+              `publishedAt 是 ${mine}，但這支影片在 YouTube 上是 ${theirs}（都換算成臺北日）。\n` +
+              '      站上這一篇跟外站是同一件作品，日期要一樣 ——\n' +
+              '      否則同一支影片在 /elsewhere 跟在詩頁上會寫著不同的日子。\n' +
+              `      改法：把 publishedAt 換成 ${item.publishedAt}（照抄 syndication.json 那一筆）。`,
+          });
         }
       }
     }

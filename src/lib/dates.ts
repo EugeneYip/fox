@@ -13,10 +13,38 @@ export function formatDate(input: Date | string | number, locale: Locale = 'zh-T
   }).format(d);
 }
 
-/** <time datetime> 用的 ISO 日期（只到日，不洩漏精確時刻） */
+/**
+ * `<time datetime>` 用的 ISO 日期（只到日，不洩漏精確時刻）。
+ *
+ * **也釘在臺北時間** —— 跟 `formatDate()`、`year()` 一樣。
+ *
+ * 2026-09-09 之前這一支用的是 `toISOString()`，也就是 UTC，而它每一個
+ * 呼叫端都是這樣寫的：`<time datetime={isoDate(x)}>{formatDate(x)}</time>`
+ * —— 同一個值，兩支函式，兩個時區。
+ *
+ * 平常看不出來，因為內容的 `publishedAt` 都只寫到日（會被當成 UTC 午夜，
+ * 加八小時還是同一天）。但 `/elsewhere` 上那幾支 YouTube 影片是**帶時刻的**，
+ * 於是那一頁當時就有兩處自相矛盾：
+ *
+ *   <time datetime="2024-10-21">2024年10月22日</time>   ←〈山行〉
+ *   <time datetime="2024-10-16">2024年10月17日</time>   ←〈月夜憶舍弟〉
+ *
+ * 螢幕上寫 22 日，機器讀到的是 21 日。九筆裡錯兩筆 —— 錯的正好是
+ * 臺北時間已經跨日、UTC 還沒跨的那兩筆。
+ *
+ * 站主 2026-09-09 決定詩頁的日期要跟外站的發佈時刻一致之後，
+ * 內容那一邊也開始帶時刻了，這個洞會從一頁擴散到全站。
+ */
 export function isoDate(input: Date | string | number): string {
   const d = input instanceof Date ? input : new Date(input);
-  return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+  if (Number.isNaN(d.getTime())) return '';
+  /* `en-CA` 給的就是 YYYY-MM-DD，不必自己拼 */
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Taipei',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
 }
 
 /**

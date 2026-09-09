@@ -2,7 +2,7 @@
 title: 登鸛雀樓
 description: 第一句是眼睛看到的，第二句已經不是。二十個字裡藏著一個看不見的轉折。
 lang: zh-TW
-publishedAt: 2026-09-08
+publishedAt: 2024-10-16T14:38:55.000Z
 tags: [唐詩, 王之渙, 五言絕句, 登臨]
 translationKey: deng-guan-que-lou
 vertical: true

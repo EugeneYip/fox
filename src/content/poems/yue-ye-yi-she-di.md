@@ -2,7 +2,7 @@
 title: 月夜憶舍弟
 description: 月亮哪裡看都一樣亮，杜甫不可能不知道。他還是寫了「月是故鄉明」。
 lang: zh-TW
-publishedAt: 2026-09-08
+publishedAt: 2024-10-16T17:28:27.000Z
 tags: [唐詩, 杜甫, 五言律詩, 思鄉]
 translationKey: yue-ye-yi-she-di
 vertical: true

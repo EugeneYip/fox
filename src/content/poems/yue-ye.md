@@ -2,7 +2,7 @@
 title: 月夜
 description: 杜甫被困在長安，整首詩卻在寫妻子在鄜州看月亮。八句沒有一句寫自己。
 lang: zh-TW
-publishedAt: 2026-09-08
+publishedAt: 2024-10-23T15:13:47.000Z
 tags: [唐詩, 杜甫, 五言律詩, 思念]
 translationKey: yue-ye
 vertical: true

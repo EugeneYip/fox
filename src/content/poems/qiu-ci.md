@@ -2,7 +2,7 @@
 title: 秋詞
 description: 第一句搬出「自古」，第二句用一個「我」去頂。劉禹錫不繞開悲秋，他正面推翻它。
 lang: zh-TW
-publishedAt: 2026-09-08
+publishedAt: 2024-10-20T15:46:23.000Z
 tags: [唐詩, 劉禹錫, 七言絕句, 秋]
 translationKey: qiu-ci
 vertical: true
