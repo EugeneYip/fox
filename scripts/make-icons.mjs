@@ -37,6 +37,12 @@ import sharp from 'sharp';
  * （`check:copy` 早就是這樣跑的），所以順手補了 `npm run icons`。
  */
 import { site } from '../src/config/site.ts';
+/*
+ * 狐狸的幾何也是同一種情況 —— 2026-09-09 改設計之前，這幾條路徑在
+ * 這裡、`FoxMark.astro`、`public/favicon.svg` 各抄了一份，三份都要手改。
+ * 現在只有 `src/config/fox-mark.ts` 一份，而 favicon.svg 也由這支產生。
+ */
+import { FOX_HEAD, FOX_EYE_L, FOX_EYE_R, FOX_NOSE, FOX_VIEWBOX } from '../src/config/fox-mark.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC = resolve(ROOT, 'public');
@@ -46,11 +52,37 @@ const FLAME = '#d2622a';
 const INK = '#1f1c18';
 const SOFT = '#55504a';
 
-const FOX_PATH =
-  'M10 3 L7.5 25 C7.5 36 13 44 32 62 C51 44 56.5 36 56.5 25 L54 3 L38.5 19.5 L25.5 19.5 Z';
-const EYE_L = 'M17 29 L25.5 32.5 L19.5 36 Z';
-const EYE_R = 'M47 29 L38.5 32.5 L44.5 36 Z';
-const NOSE = 'M32 47 L28.5 51.5 L35.5 51.5 Z';
+const FOX_PATH = FOX_HEAD;
+const EYE_L = FOX_EYE_L;
+const EYE_R = FOX_EYE_R;
+const NOSE = FOX_NOSE;
+const INK_DARK = '#14120f';
+const FLAME_DARK = '#e8834a';
+
+/**
+ * public/favicon.svg —— 分頁上的那一個。
+ *
+ * 現代瀏覽器讀 SVG，所以這一份可以帶 `prefers-color-scheme`，
+ * 深色分頁列上換成比較亮的火色。底下那段 `<style>` 靠屬性選擇器認顏色，
+ * 所以填色一定要跟選擇器裡寫的字串一字不差。
+ */
+function faviconSvg() {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${FOX_VIEWBOX} ${FOX_VIEWBOX}">
+  <rect width="${FOX_VIEWBOX}" height="${FOX_VIEWBOX}" rx="12" fill="${PAPER}"/>
+  <path d="${FOX_PATH}" fill="${FLAME}"/>
+  <path d="${EYE_L}" fill="${PAPER}"/>
+  <path d="${EYE_R}" fill="${PAPER}"/>
+  <path d="${NOSE}" fill="${PAPER}"/>
+  <style>
+    @media (prefers-color-scheme: dark) {
+      rect { fill: ${INK_DARK} }
+      path[fill="${PAPER}"] { fill: ${INK_DARK} }
+      path[fill="${FLAME}"] { fill: ${FLAME_DARK} }
+    }
+  </style>
+</svg>
+`;
+}
 
 /**
  * 方形圖示。padding 是內縮比例，maskable 版本要留安全區。
@@ -135,6 +167,9 @@ async function png(svg, outPath, background) {
 }
 
 console.log('\n產生圖示與分享圖\n' + '─'.repeat(40));
+
+await writeFile(resolve(PUBLIC, 'favicon.svg'), faviconSvg(), 'utf8');
+console.log('  favicon.svg');
 
 await png(iconSvg({ size: 192 }), resolve(PUBLIC, 'icon-192.png'), PAPER);
 await png(iconSvg({ size: 512 }), resolve(PUBLIC, 'icon-512.png'), PAPER);

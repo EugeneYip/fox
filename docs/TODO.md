@@ -169,6 +169,15 @@
 
 ## 工具與檢查
 
+- **`public/favicon.svg` 現在是產生的，但沒有東西在守它。**（2026-09-09）
+  狐狸的幾何本來在三個地方各抄一份（`FoxMark.astro`、`make-icons.mjs`、
+  `favicon.svg`），改設計那天才收攏到 `src/config/fox-mark.ts`，
+  而 favicon.svg 改由 `npm run icons` 產生。
+  問題是：**沒有跑 `npm run icons` 也不會有人說話**，
+  也沒有東西擋人去手改 favicon.svg —— `check:generated` 只認 PLATFORMS.md。
+  跟底下那條「`make-icons.mjs` 還手抄了四個顏色」是同一件事的兩半，
+  要做就一起做（顏色從 `tokens.css` 取，再補一個 `--check`）
+
 - **「script 造出來的元素配不到 scoped CSS」沒有東西在守。**（2026-09-09 的事故）
   `VideoFacade` 的 `.facade iframe` 被編譯成 `iframe[data-astro-cid-…]`，
   而那個 iframe 是按下播放時 `createElement` 出來的，身上沒有那個屬性 ——

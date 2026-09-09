@@ -10,6 +10,8 @@
  * `<FoxMark class="x" />` 搭配 `.x { color: ... }` 是沒有用的。
  * 要換顏色請包一層容器，把 color 設在容器上，讓它繼承下來。
  */
+import { FOX_HEAD, FOX_EYE_L, FOX_EYE_R, FOX_NOSE, FOX_VIEWBOX } from '@config/fox-mark';
+
 interface Props {
   size?: number | string;
   /** 'solid' 實心，適合小尺寸與 favicon；'line' 線條，適合大尺寸 */
@@ -27,7 +29,7 @@ const decorative = !title;
   class:list={['fox-mark', `fox-mark--${variant}`, className]}
   width={size}
   height={size}
-  viewBox="0 0 64 64"
+  viewBox={`0 0 ${FOX_VIEWBOX} ${FOX_VIEWBOX}`}
   fill="none"
   xmlns="http://www.w3.org/2000/svg"
   role={decorative ? 'presentation' : 'img'}
@@ -38,26 +40,18 @@ const decorative = !title;
 
   {variant === 'solid' ? (
     <>
-      <path
-        d="M10 3 L7.5 25 C7.5 36 13 44 32 62 C51 44 56.5 36 56.5 25 L54 3 L38.5 19.5 L25.5 19.5 Z"
-        fill="currentColor"
-      />
+      <path d={FOX_HEAD} fill="currentColor" />
       {/* 眼睛與鼻頭用底色挖空，這樣不管背景是什麼顏色都乾淨 */}
-      <path d="M17 29 L25.5 32.5 L19.5 36 Z" fill="var(--c-bg)" />
-      <path d="M47 29 L38.5 32.5 L44.5 36 Z" fill="var(--c-bg)" />
-      <path d="M32 47 L28.5 51.5 L35.5 51.5 Z" fill="var(--c-bg)" />
+      <path d={FOX_EYE_L} fill="var(--c-bg)" />
+      <path d={FOX_EYE_R} fill="var(--c-bg)" />
+      <path d={FOX_NOSE} fill="var(--c-bg)" />
     </>
   ) : (
     <>
-      <path
-        d="M10 3 L7.5 25 C7.5 36 13 44 32 62 C51 44 56.5 36 56.5 25 L54 3 L38.5 19.5 L25.5 19.5 Z"
-        stroke="currentColor"
-        stroke-width="3"
-        stroke-linejoin="round"
-      />
-      <path d="M17 29 L25.5 32.5 L19.5 36 Z" fill="currentColor" />
-      <path d="M47 29 L38.5 32.5 L44.5 36 Z" fill="currentColor" />
-      <path d="M32 47 L28.5 51.5 L35.5 51.5 Z" fill="currentColor" />
+      <path d={FOX_HEAD} stroke="currentColor" stroke-width="3" stroke-linejoin="round" />
+      <path d={FOX_EYE_L} fill="currentColor" />
+      <path d={FOX_EYE_R} fill="currentColor" />
+      <path d={FOX_NOSE} fill="currentColor" />
     </>
   )}
 </svg>
@@ -65,14 +59,30 @@ const decorative = !title;
 <style>
   .fox-mark {
     flex: none;
-    /* 眼睛微微跟著游標「醒過來」—— 只在支援 hover 的裝置上 */
+    /*
+     * 牠本來就歪著頭，游標移過去才挺起來。
+     *
+     * 站主 2026-09-09 選的方向：**靜止的畫面就已經有表情**，
+     * 而不是要等人把游標移過去才有。上一版是反過來的（靜止端正、
+     * 滑過去才歪 −4°），所以沒有游標的人（手機、鍵盤）從來沒看過那個巧思。
+     *
+     * 這個 rotate 轉的是整個 `<svg>` 元素，不是 viewBox 裡的內容，
+     * 所以跟格子裡留多少邊界無關 —— 真正要小心的是**祖先有沒有
+     * `overflow: hidden`**。頁首那條捲動帶是第 8 輪（第五十四圈）拿掉的，
+     * 現在沒有人會裁到它；哪天又有人加回去，先量一次再說。
+     *
+     * 靜止的傾斜不是動效，所以 prefers-reduced-motion 不用關掉它 ——
+     * global.css 已經把 transition-duration 壓成 0.01ms，
+     * 那會讓它直接切換而不是滑過去，正好是要的。
+     */
+    transform: rotate(-5deg);
     transition: transform var(--dur) var(--ease);
   }
 
   @media (hover: hover) {
     :global(a:hover) > .fox-mark,
     :global(button:hover) > .fox-mark {
-      transform: rotate(-4deg) scale(1.04);
+      transform: rotate(0deg) scale(1.06);
     }
   }
 </style>

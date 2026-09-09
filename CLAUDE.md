@@ -119,6 +119,12 @@ npm run build           # 建置
 改了 `platforms.data.mjs` 之後要跑 `node scripts/gen-platform-docs.mjs`
 更新 `docs/PLATFORMS.md`（那份是產生的，不要手改）。
 
+改了 `src/config/fox-mark.ts`（狐狸標記的路徑）之後要跑 `npm run icons`，
+它會重新產生五個 PNG、分享圖、**以及 `public/favicon.svg`**。
+那幾個檔案都是產生的，不要手改 —— 2026-09-09 之前那組路徑在三個地方
+各抄一份，改一份忘了別份，分頁上的小圖示會一直是舊的狐狸。
+（這一步目前**沒有檢查在守**，見 `docs/TODO.md`。）
+
 **忘記的話 `npm run check:generated` 會擋**（它在 `test:built` 裡，兩個 workflow
 都會跑）。那不只是文件整潔的問題：`platforms.data.mjs` 裡有 23 個中文字串
 **一個都沒有出現在 `dist/`**（站上只有 YouTube 一個來源），
