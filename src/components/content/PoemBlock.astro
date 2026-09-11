@@ -374,7 +374,41 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
     gap: var(--s-6);
   }
 
-  .poem__stanza { margin: 0; }
+  /*
+   * ── 界欄：直排時每一行之間的那道細線 ────────────────
+   *
+   * 刻本的版框裡，每一行字之間都有一條細線，叫「界欄」（烏絲欄）。
+   * 有了它，版框才不只是一個框，而是一葉真的書。
+   *
+   * 畫在 `.poem__stanza` 上而不是 `.poem__original` 上 ——
+   * 詩節之間有 `gap: var(--s-6)` 的空隙，畫在外層的話那道 2rem
+   * 會把後面每一節的線全部推歪（〈琵琶行〉有三節）。
+   * 每一節各自從自己的右緣起算，就永遠對得上。
+   *
+   * 週期用 2.1em：直排時一行的推進距離就是 line-height（--lh-loose），
+   * 而字距（letter-spacing）只影響行**內**，不影響行距。
+   * 所以這個數字不是量出來的，是算出來的 —— 改 --lh-loose 它自己跟著走。
+   */
+  .poem__stanza {
+    margin: 0;
+    background-image: repeating-linear-gradient(
+      to left,
+      var(--c-rule) 0 1px,
+      transparent 1px 2.1em
+    );
+  }
+
+  /*
+   * 橫排沒有界欄 —— 橫著寫的字之間畫線就成了稿紙，不是刻本。
+   * 三個選擇器對應「這首詩現在是橫排」的三種到達方式（理由見下面那段）。
+   */
+  .poem[data-orientation="horizontal"] .poem__stanza,
+  :root[data-poem-orientation="horizontal"] .poem:not([data-orientation]) .poem__stanza,
+  :root:not([data-poem-orientation])
+    .poem[data-default-orientation="horizontal"]:not([data-orientation])
+    .poem__stanza {
+    background-image: none;
+  }
 
   /*
    * 橫排：直接把 writing-mode 換掉，其餘沿用。
@@ -445,6 +479,9 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
       text-align: center;
       font-size: var(--t-md);
     }
+
+    /* 窄螢幕一律橫排，界欄跟著收起來 */
+    .poem__stanza { background-image: none; }
 
     .poem__toggle { display: none; }
   }

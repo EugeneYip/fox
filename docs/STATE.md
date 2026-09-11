@@ -227,6 +227,15 @@ git ls-files -- src/config/identity.local.ts   # 要沒有輸出
 詩與文章末尾那一方**留著** —— 那是落款不是標誌，站主要拿掉的話一行就好
 （`EntryLayout.astro` 與 `poems/[...slug].astro` 各一處 `<FoxSeal>`）。
 
+**五（續）、整體視覺再升級。** 站主 2026-09-11 說「期待的並不只是各處的
+小修改，而是非模板網站感覺的整體視覺呈現的大升級」，並點名捲動的畫面、
+畫面細節、游標。做了五件，全部是 CSS（內嵌 JS 只剩 89 B）：
+宣紙的纖維、界欄、跨頁轉場、捲動時的動作、游標。
+每一件的做法與代價寫在 [ARCHITECTURE.md](ARCHITECTURE.md) 的
+「材質、動作、跨頁」—— 尤其那條
+**`animation-timeline` 不可以跟 `animation` 簡寫寫在一起**，
+踩過一次而且六道關卡都沒響。
+
 **五、斷句要合邏輯。** 中文改成 `word-break: keep-all`，只在標點處斷；
 長文（`.prose`）退回預設。四種做法的實測、兩個代價的數字、
 以及為什麼 `.prose` 是例外，都寫在

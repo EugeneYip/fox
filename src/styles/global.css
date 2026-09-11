@@ -509,6 +509,226 @@ html:not([data-js]) .search {
   }
 }
 
+/* ═════════════════════════════════════════════════════
+ * 材質、動作、跨頁 —— 2026-09-11 的整體升級
+ *
+ * 站主要的是「非模板網站感覺的整體視覺呈現」，並且點名了
+ * 捲動的畫面、畫面細節、游標。四件事，**全部是 CSS**：
+ * 內嵌 JS 那條預算只剩 89 B（2.9／3.0 KB），一行都加不了。
+ *
+ *   一、宣紙的纖維   一張 SVG 雜訊當底紋，零請求
+ *   二、跨頁轉場     @view-transition，換頁不再是白一下
+ *   三、捲動時漸入   animation-timeline: view()／scroll()
+ *   四、游標         狐火的小點，只在有滑鼠的裝置上
+ *
+ * 全部包在 `prefers-reduced-motion: no-preference` 裡（除了底紋，
+ * 那不是動作），而且全部包在 `@supports` 裡 —— 舊瀏覽器少的是
+ * 一層裝飾，不是內容。
+ * ═════════════════════════════════════════════════════ */
+
+/* ── 一、宣紙的纖維 ────────────────────────────────────
+ *
+ * 一張 160×160 的 SVG 雜訊，`stitchTiles="stitch"` 讓它可以無縫重複，
+ * 灰階、低透明度，鋪在底色之上。data: URI 所以**零請求**
+ * （CSP 的 `img-src 'self' data:` 本來就允許）。
+ *
+ * ## 為什麼敢把它鋪在文字底下
+ *
+ * 這個站有一條關卡在守「不要有半透明表面」，理由是那會讓算出來的
+ * 對比度跟畫出來的不一樣。底紋的振幅是算過的：
+ *
+ *   雜訊最深的那一點 = 50% 灰、透明度 0.055，疊在 --c-bg 上
+ *   淺色 #faf6ee → 最深處約 #f3efe7
+ *   --c-ink-faint（全站最淡的字）在乾淨底色上是 4.94:1，
+ *   在最深的那一點上是 **4.68:1** —— 仍然高於 AA 的 4.5
+ *
+ * 而那是**單一一個雜訊像素**的極端值，不是一片背景的平均
+ * （雜訊有深有淺，平均起來幾乎不動）。
+ * 要再加深之前，回來把這個數字重算一次。
+ */
+body {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)' opacity='0.055'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  /* 固定在視窗上，捲動時紙不會跟著跑 —— 紙是底，字在紙上走 */
+  background-attachment: fixed;
+}
+
+/* ── 二、跨頁轉場 ──────────────────────────────────────
+ *
+ * `@view-transition { navigation: auto }` 是**純 CSS 的跨文件轉場**
+ * （Chrome 126+）。點一個站內連結時，瀏覽器會把舊頁面拍下來、
+ * 跟新頁面交叉淡出，而不是白一下再畫。
+ *
+ * 這是這一輪最大的一塊「不像模板」—— 它讓整個站讀起來像一本翻頁的書，
+ * 而不是一疊各自獨立的 HTML。而且它**不需要任何 JavaScript**
+ * （Astro 的 ClientRouter 要，這個不要）。
+ *
+ * 頁首與頁尾各給一個名字：它們在每一頁都一樣，取了名字就會被當成
+ * 「同一個東西」而不是「舊的消失、新的出現」，於是換頁時它們穩穩地待著。
+ */
+@view-transition {
+  navigation: auto;
+}
+
+.site-header { view-transition-name: site-header; }
+.site-footer { view-transition-name: site-footer; }
+
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root) {
+    animation: vt-fade-out var(--dur-fast) var(--ease) both;
+  }
+
+  ::view-transition-new(root) {
+    animation: vt-rise-in var(--dur) var(--ease) both;
+  }
+}
+
+/*
+ * 願意少看動畫的人，換頁就直接換。
+ * 用 `animation: none` 而不是關掉 @view-transition —— 轉場本身還在
+ * （它也負責讓捲動位置與焦點接得順），只是不動。
+ */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+@keyframes vt-fade-out {
+  to { opacity: 0; }
+}
+
+@keyframes vt-rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+}
+
+/* ── 三、捲動時的動作 ──────────────────────────────────
+ *
+ * `animation-timeline` 把動畫的「時間」換成「捲動的位置」——
+ * 所以這一段同樣沒有 JavaScript，也沒有 IntersectionObserver。
+ *
+ * 三個地方，都很克制（位移 10px 以內）：
+ *   列表的每一筆   進入視窗時浮起來
+ *   首頁的題辭     往上捲時淡出，像紙離開視線
+ *   頁首底下       一條狐火的細線，走完＝讀完
+ */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    /*
+     * `animation-range: entry` 的意思是「從元素剛進畫面到完全進來」。
+     * 已經在畫面上（首屏）的元素，那段範圍一開始就走完了，
+     * 所以它們是**直接呈現最終狀態**，不會先隱形再出現。
+     */
+    /*
+     * ── 這裡不可以用 `animation` 簡寫 ────────────────
+     *
+     * 第一版寫的是 `animation: rise-in linear both;` ＋
+     * `animation-timeline: view();`，而**產出裡整條被吃掉了**：
+     * 壓縮器（esbuild）把兩行併成一個簡寫
+     * `animation: linear both rise-in view()`，而 `animation` 簡寫
+     * 不能設時間軸 —— Chrome 判定整條無效，
+     * 算出來的 `animation-name` 是 `none`，畫面上什麼都不會動。
+     *
+     * 原始碼看起來完全正確、`CSS.supports()` 也都說支援，
+     * 而且**六道關卡一道都不會響**（沒有人在看產出的 CSS）。
+     * 是在瀏覽器裡讀 `getComputedStyle` 才發現的。
+     *
+     * 拆成長寫之後壓縮器就不併了（少了 `animation-duration`，
+     * 它湊不出一個完整的簡寫）。改這幾行的話，改完去
+     * `dist/_astro/*.css` 搜一次 `animation-timeline`，
+     * 確認它還是獨立的一條，不是被包進 `animation:` 裡。
+     */
+    .entry,
+    .synd__item,
+    .arc__item,
+    .poem__section,
+    .poem-page__section {
+      animation-name: rise-in;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 36%;
+    }
+
+    /* 題辭：捲過去的時候淡掉，露出底下的紙 */
+    .hero__inner {
+      animation-name: hero-recede;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: view(block);
+      animation-range: exit 0% exit 90%;
+    }
+  }
+}
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(10px); }
+}
+
+@keyframes hero-recede {
+  to { opacity: 0.15; transform: translateY(-16px); }
+}
+
+/*
+ * 讀到哪裡了 —— 頁首底下那條線。
+ *
+ * `scroll(root block)` 把整份文件的捲動當成時間軸，所以這條線的長度
+ * 就是「讀了多少」。短到不用捲的頁面，它停在 0（看不見），
+ * 那是對的：沒有進度可言。
+ */
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .site-header::after {
+      content: "";
+      position: absolute;
+      inset-inline: 0;
+      inset-block-end: -1px;
+      block-size: 2px;
+      background: var(--c-flame);
+      transform-origin: left center;
+      scale: 0 1;
+      animation-name: read-progress;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: scroll(root block);
+    }
+  }
+}
+
+@keyframes read-progress {
+  to { scale: 1 1; }
+}
+
+/* ── 四、游標 ──────────────────────────────────────────
+ *
+ * 站主點名要動游標。做法刻意保守：
+ *
+ *   · 只在 `pointer: fine`（真的有滑鼠）時換 —— 觸控裝置沒有游標
+ *   · 只換兩種狀態（一般、可按），其餘（文字、拖曳）交還給系統
+ *   · 每一個都留了 `, auto` / `, pointer` 的後備，data: URI 萬一
+ *     被擋掉也不會變成沒有游標
+ *   · 熱點寫清楚（`9 9`／`10 10`），不然點擊會偏掉
+ *
+ * 圖案是狐火色的一個小圈加一點墨 —— 跟站上的重點色同一套，
+ * 在深淺兩種底色上都看得見（圈是實心描邊，不靠對比）。
+ */
+@media (pointer: fine) {
+  body {
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18'%3E%3Ccircle cx='9' cy='9' r='6.5' fill='none' stroke='%23d2622a' stroke-width='1.5' opacity='0.85'/%3E%3Ccircle cx='9' cy='9' r='1.4' fill='%23d2622a'/%3E%3C/svg%3E") 9 9, auto;
+  }
+
+  :is(a, button, summary, [role="button"], label, select) {
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Ccircle cx='10' cy='10' r='7' fill='%23d2622a' opacity='0.18'/%3E%3Ccircle cx='10' cy='10' r='7' fill='none' stroke='%23d2622a' stroke-width='1.6'/%3E%3Ccircle cx='10' cy='10' r='2' fill='%23d2622a'/%3E%3C/svg%3E") 10 10, pointer;
+  }
+
+  /* 打字的地方交還給系統 —— 游標要指出「這裡可以插入文字」 */
+  :is(input, textarea) {
+    cursor: text;
+  }
+}
+
 /* ─────────────────────────────────────────────────────
  * 列印 —— 詩是會被印出來貼在牆上的
  * ───────────────────────────────────────────────────── */

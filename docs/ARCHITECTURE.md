@@ -281,6 +281,45 @@ Node 不能直接 import TypeScript（22.15 需要實驗性 flag，CI 上不可�
 - **「狐」印只剩內文的落款。** 站主說最下方不要用「狐」代表，
   所以頁尾那一方拿掉了；詩與文章末尾那一方留著 —— 那是落款，不是標誌。
 
+### 材質、動作、跨頁（2026-09-11）
+
+站主要的是「非模板網站感覺的整體視覺呈現」，並且點名了捲動的畫面、
+畫面細節、游標。五件事，**全部是 CSS** —— 內嵌 JS 那條預算只剩 89 B
+（2.9／3.0 KB），一行都加不了。
+
+| 做的 | 怎麼做 |
+|---|---|
+| **宣紙的纖維** | 一張 160×160 的 SVG 雜訊（`feTurbulence`）當底紋，data: URI 所以零請求 |
+| **界欄** | 直排詩每一行之間那道細線，畫在 `.poem__stanza` 上 |
+| **跨頁轉場** | `@view-transition { navigation: auto }`，純 CSS 的跨文件轉場 |
+| **捲動時的動作** | `animation-timeline: view()／scroll()`，沒有 IntersectionObserver |
+| **游標** | 狐火色的小圈，只在 `pointer: fine` 時換 |
+
+幾個要知道的：
+
+- **底紋的振幅是算過的。** 這個站有一條關卡在守「不要有半透明表面」
+  （那會讓算出來的對比度跟畫出來的不一樣）。雜訊最深的那一點是
+  50% 灰、透明度 0.055 疊在 `--c-bg` 上；`--c-ink-faint`（全站最淡的字）
+  在乾淨底色上是 4.94:1，在**最深的那一個雜訊像素**上是 **4.68:1**，
+  仍然高於 AA 的 4.5。要加深之前回來重算。
+- **界欄畫在 `.poem__stanza`，不是 `.poem__original`。** 詩節之間有
+  `gap: var(--s-6)`，畫在外層的話那道 2rem 會把後面每一節的線推歪
+  （〈琵琶行〉有三節）。週期用 `2.1em` —— 直排時一行的推進距離就是
+  `--lh-loose`，改那個 token 界欄會自己跟著走。
+- **`animation-timeline` 不可以跟 `animation` 簡寫寫在一起。**
+  第一版寫成 `animation: rise-in linear both` ＋ `animation-timeline: view()`，
+  壓縮器（esbuild）把兩行併成 `animation: linear both rise-in view()`，
+  而 `animation` 簡寫不能設時間軸 —— Chrome 判定整條無效，
+  `animation-name` 算出來是 `none`，**畫面上什麼都不會動，而六道關卡
+  一道都不會響**。拆成長寫就不會併。改那幾行之後去
+  `dist/_astro/*.css` 搜一次 `animation-timeline` 確認它還是獨立的。
+- **時間軸不作用時，效果不會套用。** 這是安全的那一邊：萬一
+  `view()` 的時間軸沒有啟動，元素是照常顯示，不是卡在 `opacity: 0`。
+  （在隱藏的瀏覽器窗格裡實測到的 —— 那裡時間軸是停的，而元素照樣是
+  `opacity: 1`。）
+- 全部包在 `prefers-reduced-motion: no-preference` 裡（底紋除外，
+  那不是動作），也全部包在 `@supports` 裡：舊瀏覽器少的是一層裝飾，不是內容。
+
 ### 斷句：只在標點處斷（2026-09-11）
 
 站主在 `/poems` 上看到的：
