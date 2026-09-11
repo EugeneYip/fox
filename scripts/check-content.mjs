@@ -1206,6 +1206,7 @@ const RULES = [
   'field-undocumented',
   'vertical-lost',
   'linebreak-lost',
+  'punct-orphan-risk',
   'listing-order',
   'locale-list-drift',
   'domain-drift',
@@ -1667,6 +1668,83 @@ servedCss += dedupedInlineStyles(built.filter((b) => b.path.endsWith('.html')).m
  * **它守不到「折了沒有」本身** —— 那要有排版引擎，而這個專案刻意沒有
  * 無頭瀏覽器（見 docs/ARCHITECTURE.md）。量法寫在 docs/A11Y.md。
  */
+/*
+ * ── `keep-all` 跟 `overflow-wrap` 不可以同時打在同一個地方 ──────────
+ *
+ * 中文的行首禁則是「`。`、`，`、`」` 這些不可以起一行」。2026-09-11 用
+ * 真的 WebKit（`WKWebView`，跟站主用的 Safari 同一個引擎）量出來：
+ *
+ *   word-break   overflow-wrap                     違規（321 種寬度）
+ *   normal       normal / break-word / anywhere          0
+ *   keep-all     normal                                  0
+ *   keep-all     break-word                             68
+ *   keep-all     anywhere                               68
+ *
+ * `keep-all` 把「兩個標點之間」變成一個斷不開的詞；WebKit 的 `overflow-wrap`
+ * 在那個詞放不進**這一行剩下的空間**時就地切開它，切的位置只看寬度不看禁則。
+ * 於是站主在 `/poems` 上看到「⋯還有一點自己的話／。」—— 句號自己站一行。
+ * 那一句在 560、768、1024、1280、1440px 每一個寬度都會出現，不是窄螢幕才有。
+ *
+ * **Chrome 沒有這個行為**，所以在只有 Chrome 的機器上看不到它 ——
+ * 這條規則的存在就是為了補那個看不到。
+ *
+ * 這條守的是那個組合不會被裝回去。它**守不到「有沒有折壞」本身**
+ *（那要排版引擎，這個專案刻意沒有無頭瀏覽器，見 docs/ARCHITECTURE.md）；
+ * 量法寫在 docs/ARCHITECTURE.md 的「斷句」那一節。
+ *
+ * 為什麼是這個判準而不是「body 上不准有 overflow-wrap」：保險本身是需要的
+ *（拉丁長字、窄欄），只是不能跟 `keep-all` 疊在一起。所以比的是
+ * **同一個選擇器＋同一組 @media 條件**底下有沒有同時出現這兩件事。
+ */
+{
+  if (servedCss === '') {
+    notes.push('標點會不會落單沒有檢查：產出裡找不到任何 CSS。');
+  } else {
+    /** 一條宣告的「生效條件」：選擇器 ＋ 外面包的 @media（排序過，才比得起來） */
+    const contextOf = (/** @type {number} */ at) =>
+      JSON.stringify([
+        selectorAt(servedCss, at).trim().replace(/\s+/g, ' '),
+        enclosingMedia(servedCss, at).slice().sort(),
+      ]);
+
+    /** @type {Map<string, string[]>} */
+    const keepAll = new Map();
+    for (const m of servedCss.matchAll(/word-break\s*:\s*keep-all/g)) {
+      const k = contextOf(m.index ?? 0);
+      keepAll.set(k, JSON.parse(k));
+    }
+    saw('punct-orphan-risk', keepAll.size);
+
+    /** @type {string[]} */
+    const clashes = [];
+    for (const m of servedCss.matchAll(/overflow-wrap\s*:\s*(break-word|anywhere)/g)) {
+      const k = contextOf(m.index ?? 0);
+      if (keepAll.has(k)) {
+        const [sel, media] = JSON.parse(k);
+        clashes.push(`${sel || '(?)'}${media.length ? `  @media ${media.join(' / ')}` : '（沒有任何 @media 條件）'}`);
+      }
+    }
+
+    if (keepAll.size === 0) {
+      notes.push('標點會不會落單沒有檢查：CSS 裡找不到 `word-break: keep-all`。');
+    } else if (clashes.length > 0) {
+      problems.push({
+        file: 'dist/（全站 CSS）',
+        id: 'punct-orphan-risk',
+        msg:
+          `有 ${clashes.length} 個地方同時打了 \`word-break: keep-all\` 與 ` +
+          '`overflow-wrap: break-word／anywhere`：\n' +
+          clashes.map((c) => `        ${c}`).join('\n') +
+          '\n      在 WebKit（Safari）上這個組合會讓「。」「，」「」」落到行首 ——\n' +
+          '      站主看過三次，最後一次是「⋯還有一點自己的話／。」。\n' +
+          '      Chrome 沒有這個行為，所以本機看不出來。\n' +
+          '      改法：保險只放在窄螢幕那一支（那裡是 `word-break: normal`，\n' +
+          '      量過 0 違規），寬螢幕靠 `minmax(0, 1fr)` 讓軌道不被內容撐開。\n' +
+          '      見 src/styles/global.css 的「中文要斷在講得通的地方」。',
+      });
+    }
+  }
+}
 {
   const poems = entries.filter((e) => e.collection === 'poems').length;
   if (poems > 0) {
@@ -2771,6 +2849,7 @@ const NOT_A_WRITER_RULE = new Map([
   ['locale-dead-end', '報的是產出的空狀態頁，改法在版面不在內容'],
   ['search-crosslang-mute', '報的是產出的搜尋頁，改法在那一頁的程式'],
   ['linebreak-lost', '報的是全站 CSS 的一條宣告，改法在 PoemBlock.astro 不在內容'],
+  ['punct-orphan-risk', '報的是全站 CSS 裡兩條宣告的組合，改法在 global.css 不在內容'],
   ['vertical-lost', '報的是全站 CSS'],
   ['listing-order', '報的是列表頁的排序，那是 lib/content.ts 的事不是內容的事'],
   ['domain-drift', '報的是三份設定檔（site.ts／astro.config／CNAME）'],

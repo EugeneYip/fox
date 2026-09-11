@@ -168,6 +168,26 @@
 
 ## 工具與檢查
 
+- **量斷行的 WebKit 探針還在 scratchpad 裡，沒有進 repo。**（2026-09-11）
+  站主用 Safari，而 Chrome 看不到他看到的斷行問題 —— 這件事猜了兩輪都沒中，
+  第三次是拿真的 WebKit 量出來的：macOS 上 `swiftc` 編一支 50 行的
+  `WKWebView` 命令列程式（`import Cocoa` ＋ `import WebKit`，把 webview
+  放進一個擺在螢幕外的 `NSWindow` 才會排版），載入 `astro preview` 的頁面，
+  用 `evaluateJavaScript` 逐字取 `Range.getClientRects()`
+  （**要取第一個寬度不為 0 的 rect**，換行處的字有兩個 rect）
+  把視覺上的行還原出來，再看有沒有哪一行以禁則字元開頭。
+  19 頁 × 12 種寬度跑一輪大約六分鐘。
+  值得放進 `scripts/`，但它只能在 macOS 上跑，接不進 CI（Ubuntu 沒有
+  WebKit），所以要先想清楚它在流程裡的位置 —— 是「視覺輪手動跑一次」
+  還是別的。**方法寫在 ARCHITECTURE.md 的「標點落單」那一節**，
+  照著寫得回來。
+
+- **`punct-orphan-risk` 比的是「同一個選擇器 ＋ 同一組 @media」。**（2026-09-11）
+  所以 `body { word-break: keep-all }` 配上 `p { overflow-wrap: break-word }`
+  它抓不到 —— 那兩條會套到同一個元素上，但選擇器不一樣。
+  要抓得到就得真的算特異性與繼承，那是半個 CSS 引擎。
+  現在這個判準守得住「一時手滑寫在一起」，守不住「拆到兩個選擇器」。
+
 - **沒有任何一道關卡量得到「算繪出來的幾何」。**（2026-09-11）
   第 8 輪（第五十四圈）的突變掃描量到的：把注的行距改回 `--lh-snug`、
   把頁首那條 `@media (max-height: 30em)` 改成 `0em`（＝把那一輪兩個改動

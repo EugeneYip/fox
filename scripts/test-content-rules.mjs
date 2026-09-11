@@ -635,6 +635,48 @@ const CASES = {
         '.poem__line{white-space:nowrap}\n',
     },
   },
+  /*
+   * ── `keep-all` 跟保險疊在同一個地方 ────────────────
+   *
+   * 2026-09-11 加的。站主用 Safari，而在 WebKit 上這個組合會讓
+   * 「。」「，」落到行首（實測表在 check-content.mjs 那條規則上面）。
+   * 他看到的是「⋯還有一點自己的話／。」—— 一個句號自己站一行。
+   *
+   * 這一格把兩條寫在同一個 `body{}` 裡，沒有任何 `@media` 條件。
+   */
+  'punct-orphan-risk': {
+    content: { 'poems/wu-yi-xiang.md': poem() },
+    dist: {
+      'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
+      '_astro/x.css':
+        '.poem__original{writing-mode:vertical-rl}' +
+        '@media (max-width:48rem){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}' +
+        '.poem__line{white-space:nowrap}' +
+        'body{word-break:keep-all;overflow-wrap:break-word}\n',
+    },
+  },
+  /*
+   * 反向：兩條都在、但**生效條件不一樣**就不該報。
+   *
+   * 少了這一格，把規則改成「CSS 裡同時找得到這兩個字串就報」也會全綠 ——
+   * 而那個判準會把正確的擺法也判成錯的（站上現在就是分開放的）。
+   */
+  'punct-orphan-risk（分開放就不報）': {
+    expect: 'no-title',
+    content: {
+      'poems/wu-yi-xiang.md': poem(),
+      'poems/broken.md': '---\nlang: zh-TW\n---\n沒有 title。\n',
+    },
+    dist: {
+      'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
+      '_astro/x.css':
+        '.poem__original{writing-mode:vertical-rl}' +
+        '@media (max-width:48rem){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}' +
+        '.poem__line{white-space:nowrap}' +
+        'body{word-break:keep-all}' +
+        '@media (max-width:34em){body{word-break:normal;overflow-wrap:break-word}}\n',
+    },
+  },
   'vertical-lost': {
     content: { 'poems/wu-yi-xiang.md': poem() },
     dist: {
@@ -995,7 +1037,17 @@ const CLEAN = {
     '_astro/x.css':
       '.poem__original{writing-mode:vertical-rl;max-inline-size:min(21rem,max(52vh,calc(var(--poem-longest-line,7)*1.14em + 0.5em)))}' +
       '@media (max-width:48rem){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}' +
-        '.poem__line{white-space:nowrap}\n',
+        '.poem__line{white-space:nowrap}' +
+        /*
+         * punct-orphan-risk 的反向，而且是**正確的擺法**：
+         * `keep-all` 自己一條（沒有保險），保險在窄螢幕那一支
+         * （那裡是 `word-break: normal`）。兩件事都在、就是不重疊。
+         *
+         * 少了這一段，那條規則在 CLEAN 上沒有主體 —— 綠燈只代表
+         * 「這份語料裡沒有 keep-all」，不代表判準對。
+         */
+        'body{word-break:keep-all}' +
+        '@media (max-width:34em){body{word-break:normal;overflow-wrap:break-word}}\n',
     /*
      * 反向的兩半，都放在 CLEAN 裡：
      *

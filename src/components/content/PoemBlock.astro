@@ -609,9 +609,17 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
     margin: 0;
   }
 
+  /*
+   * 第二軌是 `minmax(0, 1fr)` 而不是 `1fr`：`1fr` 的自動最小值是
+   * **min-content**，而 `word-break: keep-all` 之下一整段沒有標點的注
+   * 就是一個 min-content —— 那一軌會被它撐開，整頁往右跑。
+   *
+   * 2026-09-11 在 Safari（WebKit）實測：320px 下這一頁橫向溢出 551px，
+   * 1280px 下還有 51px。跟 `archive.astro` 那一列是同一個病。
+   */
   .poem__annotation {
     display: grid;
-    grid-template-columns: minmax(5rem, 9.5rem) 1fr;
+    grid-template-columns: minmax(5rem, 9.5rem) minmax(0, 1fr);
     gap: var(--s-4);
     align-items: baseline;
   }

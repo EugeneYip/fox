@@ -35,17 +35,16 @@ body {
   flex-direction: column;
   text-rendering: optimizeLegibility;
   /*
-   * 中文可以在任何字之間斷行，**拉丁文的一個字不行**。
-   * 中文句子裡夾一個像 `localStorage` 這樣的長字時，那個字要嘛整個放進去、
-   * 要嘛把整段推出去 —— 而窄欄或大字級之下就是後者。
+   * 這裡本來有一行 `overflow-wrap: break-word`，2026-09-11 挪到底下
+   * 「中文要斷在講得通的地方」那一節的窄螢幕分支去了。
    *
-   * 第 1 輪（第二十二圈）實測：視窗 320px、根字級 32px，隱私頁那句
-   * 「⋯都存在你自己的瀏覽器裡（localStorage）⋯」把整頁推出去 16px。
-   *
-   * `break-word` 只在「這個字整個放不下」時才拆，正常的排版完全不受影響。
-   * （行內 `code` 用的是更強的 `anywhere`，理由見那裡。）
+   * 它當初是為了拉丁文的長字（第 1 輪〔第二十二圈〕實測：視窗 320px、
+   * 根字級 32px，隱私頁那句「⋯存在你自己的瀏覽器裡（localStorage）⋯」
+   * 把整頁推出去 16px）。那個情境落在 `max-width: 34em` 裡面
+   *（`em` 跟著使用者字級走：32px 的字級之下 34em ＝ 1088px），
+   * 所以保險還在，只是不再跟 `word-break: keep-all` 同時生效 ——
+   * 那個組合會踩壞中文的行首禁則，理由與實測寫在那一節。
    */
-  overflow-wrap: break-word;
 }
 
 ::selection {
@@ -105,33 +104,48 @@ h4, h5, h6 { font-size: var(--t-base); }
  * 而且高度跟預設一模一樣（144px）——
  * 那一條只在「這個字串怎樣都放不下」時才會出手。
  *
- * ## 保險是 break-word，不是 anywhere —— 這裡換過兩次
+ * ## 保險不能跟 keep-all 同時在（WebKit 上量出來的）
  *
- * 先用 `break-word`，因為它不動內在尺寸。在 320px 的 `/archive` 上量到
- * 它不夠：〈為什麼要有一個自己的地方〉是一個**整串沒有標點**的標題，
- * `keep-all` 讓它變成一個斷不開的「詞」，那一列 grid 的第三軌被撐到
- * 195px、整列溢出 16px。於是 2026-09-11 上午改成 `anywhere`
- *（它把 min-content 算成一個字，軌道就不會被撐開）。
+ * 站主用 Safari。2026-09-11 用真的 WebKit（`WKWebView`，跟 Safari 同一個
+ * 引擎）把整站量過一遍，結論跟先前猜的不一樣，寫在這裡免得再猜一次：
  *
- * **同一天下午換回 break-word。** 站主在 `/poems` 上看到：
+ *   word-break   overflow-wrap   行首禁則違規（321 種寬度）
+ *   normal       normal / break-word / anywhere        0
+ *   keep-all     normal                                0
+ *   keep-all     break-word                           68
+ *   keep-all     anywhere                             68
+ *
+ * **`break-word` 跟 `anywhere` 一模一樣。** 所以 2026-09-11 上午那一次
+ * `anywhere` → `break-word` 的改動，對這個症狀**完全沒有作用**。
+ *
+ * 成因：`keep-all` 把「兩個標點之間」變成一個斷不開的詞，而 WebKit 的
+ * `overflow-wrap` 在那個詞**放不進這一行剩下的空間**時就地切開它
+ *（不是等到「整行都放不下」才出手），切的位置只看寬度、不看禁則。
+ * 於是 `。` 被留到了下一行的行首 —— 站主看到的就是這個：
  *
  *     一首一首讀過去。原文、注、白話，還有一點自己的話
  *     。
  *
- * 一個句號自己站一行。那違反中文的行首禁則（`。` 不能起一行）——
- * 而**會違反禁則的只有「最後手段」的斷行**，也就是 `overflow-wrap`。
- * `anywhere` 出手的時機比 `break-word` 早很多，於是在他的瀏覽器上
- * 提前把 `話` 和 `。` 拆開了。
+ * 那一句在 `/poems` 的 560、768、1024、1280、1440px **每一個寬度**都會出現，
+ * 不是窄螢幕才有。（先前寫「Chrome 重現不出來」是真的 —— Chrome 沒有這個
+ * 行為。手上只有 Chrome 的時候看不到它。）
  *
- * **這個 Chrome 重現不出來**（實測：連 `word-break: break-all` ＋
- * `anywhere` 都不會讓 `。` 起一行，126 種寬度掃過去 0 個）。
- * 所以這一改不是「看著它修好」，是**把最可能造成它的東西拿掉** ——
- * 換成只在「整個詞都放不下」時才出手的 `break-word`，
- * 讓禁則有機會生效。
+ * ## 所以改成「一行放得下夠多字，才有本錢只在標點斷」
  *
- * 當初改用 `anywhere` 要解的那個 grid 問題，改成在**那一條軌道**上
- * 寫 `minmax(0, 1fr)` 解決（見 `archive.astro`）—— 那本來就是
- * 「軌道不要被內容撐開」該用的工具，比全站放寬斷行精準得多。
+ * 兩邊都量過，這是唯一同時成立的分法：
+ *
+ *   寬的時候  keep-all，**不放保險** —— 0 違規。
+ *             溢出的只有兩個被內容撐開的格線軌道，那是容器的毛病，
+ *             用 `minmax(0, 1fr)` 修（`archive.astro`、`PoemBlock.astro`），
+ *             不是靠放寬斷行蓋過去。
+ *   窄的時候  一行只剩十幾個字，「只在標點斷」排不出來（320px 下量到
+ *             `entry__desc` 溢出 205px、`article__lead` 247px）。
+ *             退回預設斷法，保險放這裡 —— `normal` ＋ `break-word`
+ *             是上表裡 0 違規的那一格。
+ *
+ * 分界寫成 `em` 不是 `px`：媒體查詢裡的 `em` 跟著使用者的瀏覽器字級走，
+ * 所以「把字級調成兩倍」的人也會落到窄的那一邊 —— 那正是他該落的一邊，
+ * 因為那時候一行本來就放不下幾個字。
  *
  * 拉丁字母不受影響 —— keep-all 關掉的是漢字之間的隱含斷點，
  * 英文本來就只在空白處斷。
@@ -139,7 +153,13 @@ h4, h5, h6 { font-size: var(--t-base); }
 
 body {
   word-break: keep-all;
-  overflow-wrap: break-word;
+}
+
+@media (max-width: 34em) {
+  body {
+    word-break: normal;
+    overflow-wrap: break-word;
+  }
 }
 
 /*
@@ -160,7 +180,28 @@ body {
  * 所以 `.prose`（文章正文與詩頁的「狐狸說」都是它）退回預設，
  * 其餘照舊。白話只有三行、欄又寬，代價 2 個百分點，留著。
  */
-.prose {
+.prose,
+/*
+ * 這幾個跟 `.prose` 是同一個理由（「排得齊」比「斷得對」重要），
+ * 只是它們不在 `.prose` 底下。2026-09-11 用 WebKit 量出來的：寬螢幕
+ * 那一支沒有保險，而 `keep-all` 讓「兩個標點之間」斷不開 —— 這五個
+ * 地方的盒子（`52ch`／`62ch`／格線軌道）比最長的那一段還窄，於是整頁
+ * 往右捲。19 頁 × 12 種寬度掃過去，會溢出的**就只有它們**：
+ *
+ *   .synd__title / .synd__summary   1440px 下溢出 208／324px
+ *   .poem__annotation dd            1440px 下溢出 56px
+ *   .poem__plain                    768px 下溢出 19px
+ *   .article__lead                  600px 下溢出 4px
+ *
+ * 前兩個還有第二個理由：`.synd__*` 是**她在 YouTube 上打的字**，
+ * 站上沒有任何地方編輯它。那不是我們寫的句子，「只在標點斷」
+ * 對它本來就不是承諾。
+ */
+.synd__title,
+.synd__summary,
+.poem__annotation dd,
+.poem__plain,
+.article__lead {
   word-break: normal;
 }
 

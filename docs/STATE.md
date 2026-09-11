@@ -241,6 +241,28 @@ git ls-files -- src/config/identity.local.ts   # 要沒有輸出
 以及為什麼 `.prose` 是例外，都寫在
 [ARCHITECTURE.md](ARCHITECTURE.md) 的「斷句：只在標點處斷」。
 
+**五之二、標點落單（2026-09-11 收掉）。** 站主看到
+「⋯還有一點自己的話／。」—— 一個句號自己站一行。這件事**猜了兩輪都沒猜中**
+（先怪 `overflow-wrap: anywhere`，換成 `break-word`；量出來才知道那兩個值
+在 WebKit 上一模一樣，那一改對症狀毫無作用）。第三次他說了「我是用 safari」，
+於是拿真的 WebKit（`WKWebView`）把 19 頁 × 12 種寬度量了一遍：
+
+- `word-break: keep-all` 跟 `overflow-wrap` 的保險**在 WebKit 上不能同時在**，
+  同時在就會把 `。`「，」推到行首。Chrome 沒有這個行為。
+- 改成「寬螢幕 keep-all、不放保險；窄螢幕（`max-width: 34em`）退回預設斷法、
+  保險放那裡」，另加五個長文例外（`.synd__*`、`.poem__annotation dd`、
+  `.poem__plain`、`.article__lead`），並把兩個被內容撐開的格線軌道
+  改成 `minmax(0, 1fr)`。
+- 結果：228 格裡**行首禁則違規 0、整頁橫向捲動 0、文字超出視窗 0**
+  （改之前分別是 41／153、13／153、有）。
+- `check:content` 的 **`punct-orphan-risk`** 在守那個組合不會被裝回去，
+  突變掃描驗過會紅。
+
+量法與整段推導在 [ARCHITECTURE.md](ARCHITECTURE.md) 的
+「標點落單：`keep-all` 跟 `overflow-wrap` 不能同時在」。
+**探針本身還在 scratchpad，沒有進 repo**（見 [TODO.md](TODO.md)）。
+站主還沒有在 Safari 上回看過 —— 這一輪是量到的，不是他確認過的。
+
 **六、圖示的快取。** 站主回報「favicon 仍然是舊版狐狸」。當天實測：
 `bellafoxy.com` 供應的四個圖示跟版控裡的**逐位元組相同**，
 而版控裡的就是重畫過的那隻 —— **伺服器這一端是對的，舊的那隻活在瀏覽器裡**
