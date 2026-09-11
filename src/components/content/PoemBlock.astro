@@ -10,6 +10,7 @@
  * 使用者也可以手動切換，選擇會被記住。
  */
 import { useTranslations } from '@i18n/utils';
+import { poemMarks, wrapMarks, annotationId } from '@lib/content';
 import type { Locale } from '@config/site';
 
 interface Annotation { term: string; gloss: string }
@@ -25,6 +26,8 @@ interface Props {
   };
   plain?: string;
   annotations?: Annotation[];
+  /** 只拿來在詩上圈點；「讀音」那一區是頁面自己畫的 */
+  readings?: readonly { char: string }[];
   vertical?: boolean;
   locale: Locale;
   /**
@@ -34,7 +37,7 @@ interface Props {
   transitionName?: string;
 }
 
-const { poem, plain, annotations = [], vertical = true, locale, transitionName } = Astro.props;
+const { poem, plain, annotations = [], readings = [], vertical = true, locale, transitionName } = Astro.props;
 const t = useTranslations(locale);
 
 // 空行分段，單行斷句 —— 讓 frontmatter 裡的原文格式直接決定排版
@@ -84,6 +87,18 @@ const stanzas = poem.original
  */
 const PRINT_VERTICAL_MAX_LINES = 13;
 const lineCount = stanzas.reduce((n, block) => n + block.length, 0);
+
+/*
+ * 圈點（說明見 `lib/content.ts` 的 `poemMarks`）。
+ * `usedMarks` 跨詩題與所有句子共用 —— 一個圈點整首詩只出現一次。
+ * 順序就是文件順序：先詩題，再一句一句。
+ */
+const marks = poemMarks(annotations, readings);
+const usedMarks = new Set<number>();
+const titleParts = wrapMarks(poem.title, marks, usedMarks);
+/* 先把每一句包好，才數得出「有幾行帶圈點」—— 那個數字要餵給底下的字級算式 */
+const wrappedStanzas = stanzas.map((lines) => lines.map((line) => wrapMarks(line, marks, usedMarks)));
+const markedLines = wrappedStanzas.flat().filter((parts) => parts.some((x) => x.href)).length;
 const printOverflows = lineCount > PRINT_VERTICAL_MAX_LINES;
 
 /*
@@ -117,7 +132,9 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
     <h1
       class="poem__title"
       style={transitionName ? `view-transition-name:${transitionName}` : undefined}
-    >〈{poem.title}〉</h1>
+    >〈{titleParts.map((part) =>
+      part.href ? <a class="poem__mark" href={part.href}>{part.text}</a> : part.text,
+    )}〉</h1>
     <p class="poem__byline ui">
       {poem.dynasty && <span>{poem.dynasty}</span>}
       <span class="poem__author">{poem.author}</span>
@@ -160,13 +177,17 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
   */}
   <div class="poem__frame">
     <div class="poem__scroll">
-      <div class="poem__original" lang="zh-Hant" style={`--poem-longest-line:${longestLine};--poem-lines:${lineCount};--poem-stanzas:${stanzas.length}`}>
-        {stanzas.map((lines) => (
+      <div class="poem__original" lang="zh-Hant" style={`--poem-longest-line:${longestLine};--poem-lines:${lineCount};--poem-stanzas:${stanzas.length};--poem-marked:${markedLines}`}>
+        {wrappedStanzas.map((lines) => (
           <p class="poem__stanza">
-            {lines.map((line, i) => (
+            {lines.map((parts, i) => (
               <>
                 {i > 0 && <br />}
-                <span class="poem__line">{line}</span>
+                <span class="poem__line">
+                  {parts.map((part) =>
+                    part.href ? <a class="poem__mark" href={part.href}>{part.text}</a> : part.text,
+                  )}
+                </span>
               </>
             ))}
           </p>
@@ -206,8 +227,8 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
       <div class="poem__section poem__aside">
         <h2 class="poem__section-title ui">{t('poem.notes')}</h2>
         <dl class="poem__annotations">
-          {annotations.map((a) => (
-            <div class="poem__annotation">
+          {annotations.map((a, i) => (
+            <div class="poem__annotation" id={annotationId(i)}>
               <dt>{a.term}</dt>
               <dd>{a.gloss}</dd>
             </div>
@@ -443,8 +464,13 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
      *
      * 所以改成用容器寬度反推：一欄佔 `font-size × 2.1`（`--lh-loose`），
      * 扣掉版框與捲動層的內距約 3rem，剩下的除以句數就是「剛好放得下」的字級。
-     * 上限 `--t-xl`（短詩不必無限放大），下限 `--t-lg`（真的很長的詩
-     * 到這裡就停，讓它捲 —— 那時候捲是唯一的選項）。
+     * 上限 `--t-xl`（短詩不必無限放大），下限 `--t-md`。
+     *
+     * **下限從 `--t-lg` 降到 `--t-md` 是量出來的。** 加了圈點之後
+     * 〈琵琶行〉（10 句、3 節、6 行帶圈點）算出來要 27px 才放得下，
+     * 而 `--t-lg` 是 28px —— 下限把它頂上去，於是溢出 26px 要橫捲。
+     * 而直排是從右邊開始讀，一捲就是第一句被切掉。
+     * 「字小一點」跟「讀不到開頭」比，前者划算得多。
      *
      * 式子裡的三個減項都是量出來才補上的：
      *
@@ -453,6 +479,10 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
      *   詩節之間的 gap    第一版漏了這個，〈琵琶行〉**還是溢出 52px** ——
      *                     它有三節，`gap: var(--s-6)` 兩個 ＝ 64px
      *   句數 × 2.1        直排時一欄的推進距離就是 `--lh-loose`
+     *   帶圈點的行 × 0.35 圈點（`text-emphasis`）畫在字的旁邊，**會把那一欄
+     *                     撐寬**。量到的是一欄多 0.35em（40px 的字多 14px，
+     *                     〈靜夜思〉與〈月夜憶舍弟〉兩首各自算出同一個數）。
+     *                     只算真的有圈點的那幾行 —— 全部都算會白白縮小字級
      *
      * 橫排時這個式子算的不是對的維度（橫排受限於「一句幾個字」而不是句數），
      * 但兩個方向的值都落在安全範圍內，所以沒有另外分支。
@@ -469,10 +499,10 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
      * 是拿 `calc(100cqi / 10)` 印出 90px 才知道它量到的是 900。
      */
     font-size: clamp(
-      var(--t-lg),
+      var(--t-md),
       calc(
         (100cqw - 3rem - (var(--poem-stanzas, 1) - 1) * var(--s-6)) /
-          (var(--poem-lines, 4) * 2.1)
+          (var(--poem-lines, 4) * 2.1 + var(--poem-marked, 0) * 0.35)
       ),
       var(--t-xl)
     );
@@ -537,6 +567,47 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
    */
   .poem__line {
     white-space: nowrap;
+  }
+
+  /*
+   * ── 圈點 ──────────────────────────────────────────
+   *
+   * 有注、有讀音的字旁邊畫一個圈 —— 舊書上就是這樣做記號的。
+   * 用 `text-emphasis: circle`：它會自己看書寫方向，直排時圈在字的**右邊**，
+   * 橫排時在**下面**，兩個都是中文該有的位置。
+   *
+   * 跟 `.prose strong` 的著重號**刻意不同形**：那裡是點（強調），
+   * 這裡是圈（有話要說）。圈與點本來就是兩種記號。
+   *
+   * 平常是最淡的墨，碰到才轉狐火色 —— 一首詩上有四五個圈，
+   * 一開始就上色會變成一片橘。
+   */
+  .poem__mark {
+    color: inherit;
+    text-decoration: none;
+    text-emphasis: open circle;
+    text-emphasis-color: var(--c-ink-faint);
+    transition: text-emphasis-color var(--dur-fast) var(--ease);
+  }
+
+  .poem__mark:hover,
+  .poem__mark:focus-visible {
+    text-emphasis-color: var(--c-flame);
+  }
+
+  /*
+   * 跳過去之後，那一條要看得出來是哪一條。
+   * 用 `outline` 不用背景色：`outline` 不佔版面（格線不會被推歪），
+   * 而且它不是文字的背景 —— 不必為它多開一組 `check:contrast` 的前景×背景。
+   */
+  .poem__annotation:target {
+    outline: 1px solid var(--c-flame);
+    outline-offset: var(--s-3);
+  }
+
+  /* 頁首是釘住的，跳過去不要被蓋住 */
+  .poem__annotation {
+    scroll-margin-block-start: var(--s-9);
   }
 
   .poem__stanza {

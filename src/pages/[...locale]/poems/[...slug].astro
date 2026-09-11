@@ -2,7 +2,7 @@
 import { render, getEntry, type CollectionEntry } from 'astro:content';
 import Base from '@layouts/Base.astro';
 import { entryPaths } from '@i18n/paths';
-import { getEntries, getNeighbors, getTranslations, transitionName } from '@lib/content';
+import { getEntries, getNeighbors, getTranslations, transitionName, readingId } from '@lib/content';
 import { useTranslations, localizePath } from '@i18n/utils';
 import { formatDate, isoDate } from '@lib/dates';
 import { privacy } from '@config/privacy';
@@ -65,6 +65,7 @@ const description =
   <PoemBlock
     transitionName={transitionName('poems', entry.id)}
     poem={entry.data.poem}
+    readings={entry.data.readings}
     plain={entry.data.plain}
     annotations={entry.data.annotations}
     vertical={entry.data.vertical}
@@ -156,8 +157,8 @@ const description =
     <section class="poem-page__section" aria-label={t('poem.readings')}>
       <h2 class="poem-page__section-title ui">{t('poem.readings')}</h2>
       <ul class="poem-page__readings" lang="zh-Hant">
-        {entry.data.readings.map((r) => (
-          <li>
+        {entry.data.readings.map((r, i) => (
+          <li id={readingId(i)}>
             <span class="poem-page__reading-char">{r.char}</span>
             <span class="poem-page__reading-zhuyin">{r.zhuyin}</span>
             {/* 拼音是拉丁字母拼的官話，標成 zh-Latn-pinyin 螢幕閱讀器才不會用中文語音唸它 */}
@@ -287,6 +288,16 @@ const description =
    * 用 `auto-fill` 不用 `auto-fit`：只有一條讀音時 `auto-fit` 會把那一軌
    * 拉成滿版，一個字後面跟著一大片空白更怪。
    */
+  /* 從詩上的圈點跳過來的那一條 —— 做法與理由跟 PoemBlock 的注一樣 */
+  .poem-page__readings > li {
+    scroll-margin-block-start: var(--s-9);
+  }
+
+  .poem-page__readings > li:target {
+    outline: 1px solid var(--c-flame);
+    outline-offset: var(--s-2);
+  }
+
   .poem-page__readings {
     list-style: none;
     margin: 0;

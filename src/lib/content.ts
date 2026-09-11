@@ -143,6 +143,96 @@ export async function groupByYear(lang?: Locale) {
 
 /** 這篇文章的網址 */
 /**
+ * ── 圈點：注與讀音回到字上 ────────────────────────────
+ *
+ * 舊書上在字旁邊畫圈、點、線，標出「這裡有話要說」。站上的注與讀音
+ * 本來都排在頁面最底下的清單裡 —— 讀到「床」的時候，得自己把它找回去。
+ *
+ * 所以在詩上把有注、有讀音的字圈起來，點下去跳到那一條。
+ * 全部是連結 ＋ `:target`，**零 JavaScript**（詩頁的內嵌 JS 只剩 127 B）。
+ *
+ * 規則是量出來才定的（11 首、69 個詞／字）：
+ *
+ *   注解詞先佔位        49 個。注是比較大的單位，也比較有話說
+ *   讀音只補沒被蓋到的  4 個（還、鸛、咽、澀）
+ *   讀音落在注解詞裡的  12 個 —— **跳過**，否則會變成連結套連結
+ *   重複出現的只圈第一次 〈琵琶行〉的「嘈」在詩裡有四次
+ *   接不上的就不圈      4 個是篇題注（「出塞二首」「一作朱斌詩」），
+ *                       它們本來就不指向任何一個字，留在清單裡才對
+ */
+export const annotationId = (i: number) => `zhu-${i}`;
+export const readingId = (i: number) => `yin-${i}`;
+
+/** 詩上要圈起來的一段：`text` 的第一次出現會被包成指向 `href` 的連結 */
+export interface PoemMark {
+  text: string;
+  href: string;
+}
+
+/**
+ * 這首詩的候選圈點，**依優先序**排好（注在前、讀音在後）。
+ *
+ * 只回傳清單，不決定位置 —— 位置由 `wrapMarks` 逐段決定，
+ * 因為「第一次出現」要照**文件順序**（詩題、第一句、第二句⋯）算，
+ * 而不是照某個串起來的字串算。
+ */
+export function poemMarks(
+  annotations: readonly { term: string }[],
+  readings: readonly { char: string }[],
+): PoemMark[] {
+  const marks: PoemMark[] = [];
+  annotations.forEach((a, i) => {
+    /* 「舉頭 / 低頭」是一條注兩個詞，兩個都圈，都指向同一條 */
+    for (const part of a.term.split('/')) {
+      const text = part.trim();
+      if (text) marks.push({ text, href: `#${annotationId(i)}` });
+    }
+  });
+  readings.forEach((r, i) => marks.push({ text: r.char, href: `#${readingId(i)}` }));
+  return marks;
+}
+
+/** 一段文字被切成的片段；帶 `href` 的那幾段要包成連結 */
+export interface MarkedPart {
+  text: string;
+  href?: string;
+}
+
+/**
+ * 把一段文字（詩題或一句詩）切成「要圈的」與「不圈的」。
+ *
+ * `used` 跨段共用：一個圈點在整首詩裡只出現一次（站主選的「只圈第一次」）。
+ *
+ * 同一段裡兩個圈點重疊時，**開頭比較前面的贏**，被蓋住的那個整段放棄 ——
+ * 那正是「注優先、讀音補位」要的結果：〈出塞〉的注「不教」比讀音「教」
+ * 早一個字開始，所以圈的是「不教」，而「教」不會在裡面再套一層連結。
+ */
+export function wrapMarks(text: string, marks: readonly PoemMark[], used: Set<number>): MarkedPart[] {
+  /** @type {{ at: number; i: number }[]} */
+  const hits: { at: number; i: number }[] = [];
+  marks.forEach((m, i) => {
+    if (used.has(i)) return;
+    const at = text.indexOf(m.text);
+    if (at >= 0) hits.push({ at, i });
+  });
+  /* 開頭早的先，同一個開頭則優先序高的（注在讀音之前）先 */
+  hits.sort((a, b) => a.at - b.at || a.i - b.i);
+
+  const parts: MarkedPart[] = [];
+  let cursor = 0;
+  for (const h of hits) {
+    if (h.at < cursor) continue; // 跟前一個圈點重疊，放棄
+    const m = marks[h.i];
+    if (h.at > cursor) parts.push({ text: text.slice(cursor, h.at) });
+    parts.push({ text: m.text, href: m.href });
+    used.add(h.i);
+    cursor = h.at + m.text.length;
+  }
+  if (cursor < text.length) parts.push({ text: text.slice(cursor) });
+  return parts;
+}
+
+/**
  * 跨頁轉場用的名字：列表上的標題與內頁的標題取同一個，
  * 點下去時那個標題就會**原地長大**，而不是舊的淡出、新的淡入。
  *
