@@ -12,7 +12,7 @@
 import Base from '@layouts/Base.astro';
 import PageHeader from '@components/layout/PageHeader.astro';
 import { localePaths } from '@i18n/paths';
-import { privacy, externalLinkRel } from '@config/privacy';
+import { privacy } from '@config/privacy';
 import { pick } from '@i18n/utils';
 import { site } from '@config/site';
 import type { Locale } from '@config/site';
@@ -52,8 +52,6 @@ interface Section {
    * 一律留在外面。摺起來的只有「它叫什麼」「它怎麼運作」。
    */
   detail?: { summary: string; paragraphs?: string[]; items?: string[] };
-  /** 這一節末尾掛一條站外連結（現在只有「不相信的話」那一節用） */
-  link?: { href: string; label: string };
 }
 
 const embedSentence = {
@@ -96,8 +94,6 @@ const exceptionSentence = {
  * 最後一行「它沒有辦法認得你，不是選擇不認」是整頁的骨架 ——
  * 那正是 CSP 那一節在講的事，也是這個站跟一句空承諾的差別。
  */
-const REPO = 'https://github.com/EugeneYip/fox';
-
 const CONTENT: Record<Locale, { mark: string[]; lead: string; sections: Section[] }> = {
   'zh-TW': {
     mark: [
@@ -173,19 +169,6 @@ const CONTENT: Record<Locale, { mark: string[]; lead: string; sections: Section[
             : '站上的外部連結加上 rel="noopener"，沒有 noreferrer —— 對方網站會知道你是從這個站點過去的。',
         ],
       },
-      {
-        heading: '有一段不在我們手上',
-        paragraphs: [
-          `網站放在 GitHub Pages 上。GitHub 會保有伺服器層級的存取紀錄（IP 位址那一類），依它自己的隱私政策處理。我們既看不到，也關不掉 —— 上面那些「沒有」是這個站做得到的部分，這一段不是。`,
-        ],
-      },
-      {
-        heading: '不相信的話',
-        paragraphs: [
-          '這一頁說的每一件事都寫在原始碼裡，包括那幾個開關。整份是公開的 —— 你不必相信我們，可以自己去看。',
-        ],
-        link: { href: REPO, label: '原始碼' },
-      },
     ],
   },
   en: {
@@ -247,19 +230,6 @@ const CONTENT: Record<Locale, { mark: string[]; lead: string; sections: Section[
             : 'External links carry rel="noopener" but not noreferrer, so the site you land on is told that you came from here.',
         ],
       },
-      {
-        heading: 'One part is not ours to hold',
-        paragraphs: [
-          'The site is hosted on GitHub Pages. GitHub keeps server-level access logs (IP addresses and the like) under its own privacy policy. We can neither see them nor turn them off — everything above is what this site can do; this part is not.',
-        ],
-      },
-      {
-        heading: 'If you would rather check than trust',
-        paragraphs: [
-          'Everything on this page is written down in the source, including the switches. All of it is public — you do not have to take our word for it.',
-        ],
-        link: { href: REPO, label: 'the source' },
-      },
     ],
   },
 };
@@ -307,11 +277,6 @@ const withCode = (text: string) => text.replace(CODEY, '<code>$1</code>');
               </ul>
             )}
           </details>
-        )}
-        {section.link && (
-          <p>
-            <a href={section.link.href} target="_blank" rel={externalLinkRel}>{section.link.label}</a>
-          </p>
         )}
       </>
     ))}
