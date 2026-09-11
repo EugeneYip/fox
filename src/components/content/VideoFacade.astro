@@ -24,9 +24,18 @@ interface Props {
   poster?: string;
   /** 直版影片（9:16）。她的頻道現在整批都是，所以預設就是直版 */
   portrait?: boolean;
+  /**
+   * 自己畫的封面上要題哪一句（通常是詩的首句）。
+   *
+   * 沒有封面圖時，框裡本來只有一個「狐」字浮在漸層上 ——
+   * 2026-09-11 量下來那是全站最弱的一塊：280 × 498 的框，
+   * 裡面幾乎什麼都沒有。直版的框本來就是**條幅**的形狀，
+   * 題一句進去比放一個浮水印合理。
+   */
+  verse?: string;
 }
 
-const { videoId, title, locale, poster, portrait = true } = Astro.props;
+const { videoId, title, locale, poster, portrait = true, verse } = Astro.props;
 const t = useTranslations(locale);
 
 /*
@@ -65,6 +74,7 @@ const ids = { play: `facade-${videoId}-play`, title: `facade-${videoId}-title` }
       <img class="facade__poster" src={poster} alt="" loading="lazy" decoding="async" width="1280" height="720" />
     ) : (
       <div class="facade__poster facade__poster--drawn" aria-hidden="true">
+        {verse && <span class="facade__verse" lang="zh-Hant">{verse}</span>}
         <span class="facade__glyph">狐</span>
       </div>
     )}
@@ -139,18 +149,66 @@ const ids = { play: `facade-${videoId}-play`, title: `facade-${videoId}-title` }
       var(--c-bg-sunken);
   }
 
+  /*
+   * ── 自己畫的封面：一幅條幅 ──────────────────────────
+   *
+   * 直版的框是 280 × 498 —— 那本來就是條幅的比例。
+   * 所以題一句詩進去（直排、淡、置中），底下左邊押一個「狐」當落款。
+   * 兩個都是裝飾，整塊 `aria-hidden` —— 那一句在這一頁上方已經有全文了。
+   *
+   * 疊在同一格（`grid-area: art`）而不是用絕對定位：
+   * 這一層沒有其他東西要定位，格線疊放比較好讀，也不必管 `inset`。
+   */
+  .facade__poster--drawn {
+    grid-template-areas: 'art';
+  }
+
+  .facade__verse,
+  .facade__glyph {
+    grid-area: art;
+    user-select: none;
+  }
+
+  .facade__verse {
+    writing-mode: vertical-rl;
+    /*
+     * 直排區塊一定要自己寫 `word-break`（`check:content` 的
+     * `vertical-keep-all` 在守）：全站是 `keep-all`，而 WebKit 在直排底下
+     * 對 `keep-all` 不產生斷點 —— 那會讓一句題字整條漏到框外面。
+     */
+    word-break: normal;
+    font-family: var(--f-serif);
+    /*
+     * 框是定寬（17.5rem）不跟著視窗走，所以字級也不必跟 —— 寫死比較準。
+     * 44px × 七個字 ＋ 字距約 370px，框內高 498px，最長的一句也放得下。
+     */
+    font-size: 2.75rem;
+    line-height: 1.15;
+    letter-spacing: 0.18em;
+    color: var(--c-ink);
+    /* 跟底下那個「狐」同一個做法：這是紙上的淡墨，不是可讀的字 */
+    opacity: 0.14;
+    /*
+     * 題在右上、落款在左下 —— 條幅就是這樣擺的（直排從右邊起頭）。
+     * 這也順便讓開了正中央的播放鍵：第一版把題字置中，
+     * 截圖上那顆鈕正好橫過「前」與「月」之間。
+     */
+    place-self: start end;
+    margin: var(--s-5) var(--s-4) 0 0;
+  }
+
   .facade__glyph {
     font-family: var(--f-serif);
     /*
-     * 上限從 6rem 收到 2.5rem：2026-09-11 量到 96px 的它是**詩頁上最大的字**，
-     * 而它只是一個空影片框裡的浮水印。上限訂在 2.5rem 是因為詩本身是
-     * `--t-xl`（桌機 40px ＝ 2.5rem）—— 裝飾**不高於**內容，不是差不多就好。
-     * （這個框整塊還要重做，見 docs/VISUAL.md 的 F。）
+     * 從 96px 一路收到 28px，而且從正中央挪到左下 —— 它現在是**落款**，
+     * 不是主角。2026-09-11 量到 96px 的它曾經是詩頁上最大的字，
+     * 而它只是一個空框裡的浮水印。
      */
-    font-size: clamp(2rem, 6vw, 2.5rem);
+    font-size: var(--t-lg);
+    place-self: end start;
+    margin: var(--s-4);
     color: var(--c-flame);
-    opacity: 0.28;
-    user-select: none;
+    opacity: 0.32;
   }
 
   .facade__play {

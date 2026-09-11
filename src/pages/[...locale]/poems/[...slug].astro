@@ -112,6 +112,23 @@ const description =
               title={`〈${entry.data.poem.title}〉${entry.data.poem.author}`}
               locale={locale}
               portrait={entry.data.videoPortrait}
+              verse={
+                /*
+                 * 詩的首句 —— 自己畫的封面把它題成一幅條幅，
+                 * 理由見 VideoFacade 的 `verse`。
+                 *
+                 * 註解寫在**大括號裡面**。這裡改對了兩次：
+                 * 夾在屬性之間、以及當成三元運算子分支裡的兄弟節點，
+                 * 兩種 `astro build` 都吃得下去，`astro check` 會噴
+                 * 五、六個 ts 錯誤，而且指的行號跟真正的問題差很遠
+                 *（「section 沒有結束標籤」指到 20 行以外）。
+                 * 這個檔案只有 `npm run check` 會擋，build 不會。
+                 */
+                entry.data.poem.original
+                  .split('\n')
+                  .map((line) => line.trim())
+                  .find(Boolean)
+              }
             />
           )}
         </section>
