@@ -258,8 +258,21 @@ git ls-files -- src/config/identity.local.ts   # 要沒有輸出
 - `check:content` 的 **`punct-orphan-risk`** 在守那個組合不會被裝回去，
   突變掃描驗過會紅。
 
+**五之三、倒十字架（2026-09-11，五之二的後遺症）。** 拿掉保險之後站主第一眼
+就看到首頁題辭壞了：「青青子衿，悠悠我心」擠成一條直線，出處那一行橫著穿過去。
+量到的是 **`keep-all` 在 `vertical-rl` 底下根本不產生斷點**（橫排會在標點斷，
+直排不會），九個字一整欄、往下溢出盒子 112px；**而且縮小盒子沒有用**
+（`max-inline-size` 越小溢出越大）。改成 `word-break: normal` 就回到原本的兩欄。
+
+上一輪 228 格全綠卻漏掉它，是因為三個判準**全部是橫向的** ——
+直排往下溢出，`scrollWidth` 與「超出視窗右緣」都看不見。
+補了一支往下量的，全站直排的溢出只有這一處。
+`check:content` 的 **`vertical-keep-all`** 要求每個直排區塊自己寫出
+`word-break`（不限定值，要的是「有做決定」）。
+
 量法與整段推導在 [ARCHITECTURE.md](ARCHITECTURE.md) 的
-「標點落單：`keep-all` 跟 `overflow-wrap` 不能同時在」。
+「標點落單：`keep-all` 跟 `overflow-wrap` 不能同時在」與
+「直排底下 `keep-all` 不產生斷點」。
 **探針本身還在 scratchpad，沒有進 repo**（見 [TODO.md](TODO.md)）。
 站主還沒有在 Safari 上回看過 —— 這一輪是量到的，不是他確認過的。
 

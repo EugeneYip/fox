@@ -185,6 +185,28 @@ const gloss = pick(site.epigraph.gloss, locale) ?? '';
     max-inline-size: 6.4em;
     /* 兩列之間留一點氣口，不要黏在一起 */
     line-height: 2;
+    /*
+     * ── 直排底下一定要 `word-break: normal` ──────────────
+     *
+     * 2026-09-11 站主回報：這兩句變成一條直線，底下那行
+     * 《詩經・鄭風・子衿》橫著穿過去，「像倒十字架」。
+     *
+     * 成因是同一天早上把 `overflow-wrap` 的保險從 `body` 上拿掉
+     *（那是為了不讓標點落到行首，見 global.css）。在真的 WebKit 上量：
+     * **`word-break: keep-all` 在 `vertical-rl` 底下根本不產生斷點** ——
+     * 連「，」後面都不斷。九個字擠成一欄，超出盒子 112px 蓋到出處那一行。
+     * 而且**縮盒子沒有用**：`max-inline-size` 改成 6.2em、5.5em，
+     * 溢出反而變成 117px、135px —— 盒子變小，字一個都沒有讓。
+     *
+     * `word-break: normal` 量到的就是這一節註解描述的樣子：
+     * 「青青子衿，」一欄、「悠悠我心」一欄，文字比盒子短 5px，
+     * 而且「，」沒有被丟到左邊那一欄的開頭（`normal` 底下禁則是生效的，
+     * 321 種寬度掃過去 0 個違規）。
+     *
+     * 所以上面那句「全形逗號佔一格，而它照行首禁則不會被丟到下一列的開頭」
+     * 仍然成立 —— 只是**靠的是 `normal`，不是 `keep-all`**。
+     */
+    word-break: normal;
   }
 
   .hero__epigraph figcaption {

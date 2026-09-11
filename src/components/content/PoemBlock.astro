@@ -356,6 +356,18 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
   .poem__original {
     writing-mode: vertical-rl;
     text-orientation: mixed;
+    /*
+     * 直排底下**一定要**把 `word-break` 講明白。全站 body 是 `keep-all`，
+     * 而在 WebKit 上 `keep-all` 在 `vertical-rl` 底下根本不產生斷點 ——
+     * 該換欄的地方不換，整欄往下溢出（2026-09-11 首頁的題辭就是這樣壞的，
+     * 實測寫在 index.astro 的 `.hero__epigraph blockquote`）。
+     *
+     * 這裡今天**不影響畫面**：每一句都是 `.poem__line { white-space: nowrap }`，
+     * 本來就不換行。寫著是為了哪天那個 `nowrap` 被拿掉時，
+     * 壞的是「折了一句詩」（`linebreak-lost` 會說），
+     * 而不是安靜地把整首詩漏到方塊外面。
+     */
+    word-break: normal;
 
     /*
      * ── 直排時軸向是反的 ────────────────────────────

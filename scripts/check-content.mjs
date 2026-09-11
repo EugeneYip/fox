@@ -1207,6 +1207,7 @@ const RULES = [
   'vertical-lost',
   'linebreak-lost',
   'punct-orphan-risk',
+  'vertical-keep-all',
   'listing-order',
   'locale-list-drift',
   'domain-drift',
@@ -1668,6 +1669,71 @@ servedCss += dedupedInlineStyles(built.filter((b) => b.path.endsWith('.html')).m
  * **它守不到「折了沒有」本身** —— 那要有排版引擎，而這個專案刻意沒有
  * 無頭瀏覽器（見 docs/ARCHITECTURE.md）。量法寫在 docs/A11Y.md。
  */
+/*
+ * ── 直排的區塊要自己講清楚 `word-break` ────────────────────────
+ *
+ * 全站 `body` 是 `word-break: keep-all`，它會繼承到每一個直排區塊裡。
+ * 2026-09-11 在真的 WebKit 上量到：**`keep-all` 在 `vertical-rl` 底下
+ * 根本不產生斷點**，連「，」後面都不斷。該換欄的地方不換，
+ * 整欄的字直接往下溢出盒子 —— 而且**把盒子縮小沒有用**
+ *（`max-inline-size` 6.4em → 6.2em → 5.5em，溢出反而是 112 → 117 → 135px）。
+ *
+ * 站主當天看到的：首頁的題辭「青青子衿，悠悠我心」擠成一條直線，
+ * 底下那行《詩經・鄭風・子衿》橫著穿過去 ——「像倒十字架」。
+ *
+ * 這條要求每一個 `writing-mode: vertical-*` 的區塊在**同一個大括號裡**
+ * 自己寫出 `word-break`。不是要它寫某個值，是要它別用繼承來的那個 ——
+ * 直排要不要斷、怎麼斷，是寫那個區塊的人該決定的事。
+ *
+ * 為什麼不是「量有沒有溢出」：那要排版引擎，而且**橫向的量法量不到它**
+ *（直排是往**下**溢出，`scrollWidth` 與「超出視窗右緣」兩個判準都看不見）——
+ * 上一輪 228 格全綠卻漏掉這個 bug，就是因為只量了橫向。
+ */
+{
+  if (servedCss === '') {
+    notes.push('直排區塊的 `word-break` 沒有檢查：產出裡找不到任何 CSS。');
+  } else {
+    /** 這個位置所在區塊的內容（`{` 到配對的 `}`） */
+    const blockAt = (/** @type {number} */ at) => {
+      const start = servedCss.lastIndexOf('{', at);
+      let depth = 0;
+      for (let i = start; i < servedCss.length; i++) {
+        if (servedCss[i] === '{') depth++;
+        else if (servedCss[i] === '}' && --depth === 0) return servedCss.slice(start, i);
+      }
+      return servedCss.slice(start);
+    };
+
+    /** @type {string[]} */
+    const silent = [];
+    let verticalBlocks = 0;
+    for (const m of servedCss.matchAll(/writing-mode\s*:\s*vertical-[a-z]+/g)) {
+      const at = m.index ?? 0;
+      verticalBlocks += 1;
+      if (!/word-break\s*:/.test(blockAt(at))) silent.push(selectorAt(servedCss, at).trim().slice(0, 70));
+    }
+    saw('vertical-keep-all', verticalBlocks);
+
+    if (verticalBlocks === 0) {
+      notes.push('直排區塊的 `word-break` 沒有檢查：CSS 裡找不到 `writing-mode: vertical-*`。');
+    } else if (silent.length > 0) {
+      problems.push({
+        file: 'dist/（全站 CSS）',
+        id: 'vertical-keep-all',
+        msg:
+          `${silent.length}／${verticalBlocks} 個直排區塊沒有自己寫 \`word-break\`，` +
+          '會繼承到 `body` 的 `keep-all`：\n' +
+          silent.map((sel) => `        ${sel}`).join('\n') +
+          '\n      在 WebKit（Safari）上 `keep-all` 在直排底下**不產生斷點** ——\n' +
+          '      該換欄的地方不換，整欄往下溢出，而且縮小盒子沒有用。\n' +
+          '      站主 2026-09-11 看到的是首頁題辭擠成一條直線、\n' +
+          '      出處那一行橫著穿過去，「像倒十字架」。\n' +
+          '      改法：在那個區塊裡寫出來 —— 會換欄的寫 `word-break: normal`，\n' +
+          '      每一行都 `white-space: nowrap` 的也寫（那是說「我想過了」）。',
+      });
+    }
+  }
+}
 /*
  * ── `keep-all` 跟 `overflow-wrap` 不可以同時打在同一個地方 ──────────
  *
@@ -2850,6 +2916,7 @@ const NOT_A_WRITER_RULE = new Map([
   ['search-crosslang-mute', '報的是產出的搜尋頁，改法在那一頁的程式'],
   ['linebreak-lost', '報的是全站 CSS 的一條宣告，改法在 PoemBlock.astro 不在內容'],
   ['punct-orphan-risk', '報的是全站 CSS 裡兩條宣告的組合，改法在 global.css 不在內容'],
+  ['vertical-keep-all', '報的是直排區塊的一條 CSS 宣告，改法在那個元件不在內容'],
   ['vertical-lost', '報的是全站 CSS'],
   ['listing-order', '報的是列表頁的排序，那是 lib/content.ts 的事不是內容的事'],
   ['domain-drift', '報的是三份設定檔（site.ts／astro.config／CNAME）'],

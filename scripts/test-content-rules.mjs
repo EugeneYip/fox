@@ -595,7 +595,7 @@ const CASES = {
     dist: {
       'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
       '_astro/x.css':
-        '.poem__original{writing-mode:vertical-rl;max-inline-size:min(21rem,max(52vh,calc(var(--poem-longest-line,7)*1.14em + 0.5em)))}' +
+        '.poem__original{writing-mode:vertical-rl;word-break:normal;max-inline-size:min(21rem,max(52vh,calc(var(--poem-longest-line,7)*1.14em + 0.5em)))}' +
         '@media (max-width:48rem){.poem__original{writing-mode:horizontal-tb!important}}\n',
     },
   },
@@ -616,7 +616,7 @@ const CASES = {
     dist: {
       'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
       '_astro/x.css':
-        '.poem__original{writing-mode:vertical-rl}' +
+        '.poem__original{writing-mode:vertical-rl;word-break:normal}' +
         '@media (max-width:48rem){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}\n',
     },
   },
@@ -630,7 +630,7 @@ const CASES = {
     dist: {
       'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
       '_astro/x.css':
-        '.poem__original{writing-mode:vertical-rl;max-inline-size:min(21rem,max(52vh,calc(var(--poem-longest-line,7)*1.14em + 0.5em)))}' +
+        '.poem__original{writing-mode:vertical-rl;word-break:normal;max-inline-size:min(21rem,max(52vh,calc(var(--poem-longest-line,7)*1.14em + 0.5em)))}' +
         '@media (max-width:48rem){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}' +
         '.poem__line{white-space:nowrap}\n',
     },
@@ -649,7 +649,7 @@ const CASES = {
     dist: {
       'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
       '_astro/x.css':
-        '.poem__original{writing-mode:vertical-rl}' +
+        '.poem__original{writing-mode:vertical-rl;word-break:normal}' +
         '@media (max-width:48rem){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}' +
         '.poem__line{white-space:nowrap}' +
         'body{word-break:keep-all;overflow-wrap:break-word}\n',
@@ -670,11 +670,53 @@ const CASES = {
     dist: {
       'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
       '_astro/x.css':
-        '.poem__original{writing-mode:vertical-rl}' +
+        '.poem__original{writing-mode:vertical-rl;word-break:normal}' +
         '@media (max-width:48rem){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}' +
         '.poem__line{white-space:nowrap}' +
         'body{word-break:keep-all}' +
         '@media (max-width:34em){body{word-break:normal;overflow-wrap:break-word}}\n',
+    },
+  },
+  /*
+   * ── 直排區塊沒有自己寫 `word-break` ──────────────────
+   *
+   * 2026-09-11 加的。站主看到首頁題辭擠成一條直線、出處橫著穿過去
+   *（「像倒十字架」）—— 成因是那個區塊繼承了 `body` 的 `keep-all`，
+   * 而 WebKit 在直排底下對 `keep-all` 不產生斷點。
+   *
+   * 這一格的 CSS 直排那一段在（vertical-lost 不會跟著響）、
+   * 下限也在（linebreak-lost 不會響），就是少了 `word-break`。
+   */
+  'vertical-keep-all': {
+    content: { 'poems/wu-yi-xiang.md': poem() },
+    dist: {
+      'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
+      '_astro/x.css':
+        '.poem__original{writing-mode:vertical-rl}' +
+        '@media (max-width:48rem){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}' +
+        '.poem__line{white-space:nowrap}\n',
+    },
+  },
+  /*
+   * 反向：寫出來了就不該報，**而且寫什麼值都算**。
+   *
+   * 這一格刻意寫 `keep-all`（不是 `normal`）—— 這條規則要的是
+   * 「那個區塊自己做了決定」，不是某一個特定的值。少了這一格，
+   * 把規則改成「非得是 normal 不可」也會全綠，而那會擋掉
+   * 每一行都 nowrap、根本不會換欄的正當寫法。
+   */
+  'vertical-keep-all（寫出來了就不報）': {
+    expect: 'no-title',
+    content: {
+      'poems/wu-yi-xiang.md': poem(),
+      'poems/broken.md': '---\nlang: zh-TW\n---\n沒有 title。\n',
+    },
+    dist: {
+      'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
+      '_astro/x.css':
+        '.poem__original{writing-mode:vertical-rl;word-break:keep-all}' +
+        '@media (max-width:48rem){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}' +
+        '.poem__line{white-space:nowrap}\n',
     },
   },
   'vertical-lost': {
@@ -695,7 +737,7 @@ const CASES = {
     },
     dist: {
       'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
-      '_astro/x.css': '.poem__original{writing-mode:vertical-rl}\n',
+      '_astro/x.css': '.poem__original{writing-mode:vertical-rl;word-break:normal}\n',
     },
   },
   /*
@@ -714,7 +756,7 @@ const CASES = {
     dist: {
       'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
       '_astro/x.css':
-        '.poem__original{writing-mode:vertical-rl}' +
+        '.poem__original{writing-mode:vertical-rl;word-break:normal}' +
         '@media (width>=0){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}' +
         '.poem__line{white-space:nowrap}\n',
     },
@@ -734,7 +776,7 @@ const CASES = {
     dist: {
       'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
       '_astro/x.css':
-        '.poem__original{writing-mode:vertical-rl}' +
+        '.poem__original{writing-mode:vertical-rl;word-break:normal}' +
         '@media (width<=48rem){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}' +
         '.poem__line{white-space:nowrap}\n',
     },
@@ -757,7 +799,7 @@ const CASES = {
     dist: {
       'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
       '_astro/x.css':
-        '.poem__original{writing-mode:vertical-rl}' +
+        '.poem__original{writing-mode:vertical-rl;word-break:normal}' +
         '.some-note{writing-mode:horizontal-tb!important}\n',
     },
   },
@@ -1035,7 +1077,7 @@ const CLEAN = {
      * 綠燈證明不了任何事。
      */
     '_astro/x.css':
-      '.poem__original{writing-mode:vertical-rl;max-inline-size:min(21rem,max(52vh,calc(var(--poem-longest-line,7)*1.14em + 0.5em)))}' +
+      '.poem__original{writing-mode:vertical-rl;word-break:normal;max-inline-size:min(21rem,max(52vh,calc(var(--poem-longest-line,7)*1.14em + 0.5em)))}' +
       '@media (max-width:48rem){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}' +
         '.poem__line{white-space:nowrap}' +
         /*
@@ -2200,7 +2242,7 @@ console.log('─'.repeat(64));
     content: { 'poems/wu-yi-xiang.md': poem() },
     dist: {
       'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
-      '_astro/x.css': '@media (max-width: 34rem){.a{color:red}}.poem__original{writing-mode:vertical-rl}\n',
+      '_astro/x.css': '@media (max-width: 34rem){.a{color:red}}.poem__original{writing-mode:vertical-rl;word-break:normal}\n',
     },
   });
   const outNone = await check(none);
