@@ -2,7 +2,7 @@
 import { render, getEntry, type CollectionEntry } from 'astro:content';
 import Base from '@layouts/Base.astro';
 import { entryPaths } from '@i18n/paths';
-import { getEntries, getNeighbors, getTranslations } from '@lib/content';
+import { getEntries, getNeighbors, getTranslations, transitionName } from '@lib/content';
 import { useTranslations, localizePath } from '@i18n/utils';
 import { formatDate, isoDate } from '@lib/dates';
 import { privacy } from '@config/privacy';
@@ -63,6 +63,7 @@ const description =
   {entry.data.cover && <CoverImage src={entry.data.cover} alt={entry.data.coverAlt} width={760} />}
 
   <PoemBlock
+    transitionName={transitionName('poems', entry.id)}
     poem={entry.data.poem}
     plain={entry.data.plain}
     annotations={entry.data.annotations}

@@ -142,6 +142,23 @@ export async function groupByYear(lang?: Locale) {
 }
 
 /** 這篇文章的網址 */
+/**
+ * 跨頁轉場用的名字：列表上的標題與內頁的標題取同一個，
+ * 點下去時那個標題就會**原地長大**，而不是舊的淡出、新的淡入。
+ *
+ * 靠的是 `global.css` 裡那個純 CSS 的 `@view-transition`
+ *（站上不用 Astro 的 ClientRouter —— 那要 JavaScript，而預算只剩 100 B）。
+ *
+ * 值寫在元素的 `style` 屬性上，**不花 CSP 雜湊**：
+ * 站上的 CSP 有 `style-src-attr 'unsafe-inline'`，而花雜湊的是
+ * 多一個 `<style>` 區塊，不是多一個 style 屬性。
+ *
+ * 名字必須是合法的 custom-ident，而且**同一頁裡不能重複** ——
+ * 重複的話瀏覽器會把整個轉場關掉。集合名加 id 就夠獨特了。
+ */
+export const transitionName = (collection: string, id: string) =>
+  `entry-${collection}-${String(id).replace(/[^a-zA-Z0-9-]+/g, '-')}`;
+
 export function entryUrl(collection: WritingCollection, entry: AnyEntry): string {
   const segment = { posts: 'writing', poems: 'poems', notes: 'notes' }[collection];
   return `/${segment}/${entry.id}`;

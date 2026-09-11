@@ -2,7 +2,7 @@
 import { render, type CollectionEntry } from 'astro:content';
 import EntryLayout from '@layouts/EntryLayout.astro';
 import { entryPaths } from '@i18n/paths';
-import { getEntries, getNeighbors, getSeries, estimateReadingTime, getTranslations } from '@lib/content';
+import { getEntries, getNeighbors, getSeries, estimateReadingTime, getTranslations, transitionName } from '@lib/content';
 import type { Locale } from '@config/site';
 
 export async function getStaticPaths() {
@@ -29,6 +29,7 @@ const minutes =
 <EntryLayout
   locale={locale}
   availableLocales={availableLocales}
+  transitionName={transitionName('posts', entry.id)}
   title={entry.data.title}
   description={entry.data.description}
   publishedAt={entry.data.publishedAt}

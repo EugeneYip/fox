@@ -85,7 +85,22 @@ const t = useTranslations(locale);
      *
      * `min(…, 100%)` 讓下限在容器變窄時跟著讓步。
      */
-    grid-template-columns: repeat(auto-fill, minmax(min(14rem, 100%), 1fr));
+    /*
+     * `auto-fit` ＋ 上限 20rem ＋ `justify-content: start`，不是 `auto-fill` ＋ `1fr`。
+     *
+     * 2026-09-11 量到：站上**只有一個平臺**（YouTube），而 `auto-fill`
+     * 在 1024px 的容器裡照樣鋪出 `247px × 4` 四條軌道 —— 一張卡，
+     * 三個空位。那看起來不像「只有一個」，像「壞掉了」。
+     *
+     * `auto-fit` 會把空軌道收掉；但只留 `1fr` 的話那張卡會撐滿 1024px，
+     * 而卡片裡是直排的兩三行字，撐開只是換一種難看。所以上限夾在 20rem，
+     * 剩下的空間用 `justify-content: start` 留在右邊 —— 那是留白，
+     * 不是「這裡少了三張卡」。
+     *
+     * 下限那個 `min(14rem, 100%)` 不要動，理由在下面。
+     */
+    grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 20rem));
+    justify-content: start;
     gap: var(--s-3);
     list-style: none;
     margin: 0;

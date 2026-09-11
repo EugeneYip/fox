@@ -2,7 +2,7 @@
 import { render, type CollectionEntry } from 'astro:content';
 import EntryLayout from '@layouts/EntryLayout.astro';
 import { entryPaths } from '@i18n/paths';
-import { getEntries, getNeighbors, estimateReadingTime, getTranslations } from '@lib/content';
+import { getEntries, getNeighbors, estimateReadingTime, getTranslations, transitionName } from '@lib/content';
 import { externalLinkRel } from '@config/privacy';
 import { useTranslations } from '@i18n/utils';
 import type { Locale } from '@config/site';
@@ -28,6 +28,7 @@ const source = entry.data.inResponseTo;
 <EntryLayout
   locale={locale}
   availableLocales={availableLocales}
+  transitionName={transitionName('notes', entry.id)}
   title={entry.data.title}
   description={entry.data.description}
   publishedAt={entry.data.publishedAt}

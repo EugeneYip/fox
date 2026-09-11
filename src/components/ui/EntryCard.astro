@@ -6,7 +6,7 @@
  * 讓時間軸看起來是連續的，而不是三個各自為政的清單。
  */
 import type { AnyEntry, WritingCollection } from '@lib/content';
-import { entryUrl } from '@lib/content';
+import { entryUrl, transitionName } from '@lib/content';
 import { formatDate, isoDate } from '@lib/dates';
 import { useTranslations } from '@i18n/utils';
 import type { Locale } from '@config/site';
@@ -79,7 +79,11 @@ const shapeRows = shapeLines.length
 <article class="entry">
   <div class="entry__body">
     <a class="entry__link" href={href}>
-      <Heading class="entry__title" data-featured={data.featured ? '' : undefined}>
+      <Heading
+        class="entry__title"
+        data-featured={data.featured ? '' : undefined}
+        style={`view-transition-name:${transitionName(collection, entry.id)}`}
+      >
         {poem ? poem.title : data.title}
       </Heading>
     </a>

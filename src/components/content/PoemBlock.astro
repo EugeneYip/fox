@@ -27,9 +27,14 @@ interface Props {
   annotations?: Annotation[];
   vertical?: boolean;
   locale: Locale;
+  /**
+   * 跨頁轉場的名字。列表上那一列的標題取同一個，
+   * 點下去時〈詩名〉就原地長大（見 `lib/content.ts` 的 `transitionName`）。
+   */
+  transitionName?: string;
 }
 
-const { poem, plain, annotations = [], vertical = true, locale } = Astro.props;
+const { poem, plain, annotations = [], vertical = true, locale, transitionName } = Astro.props;
 const t = useTranslations(locale);
 
 // 空行分段，單行斷句 —— 讓 frontmatter 裡的原文格式直接決定排版
@@ -109,7 +114,10 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
   data-print-overflows={printOverflows ? 'true' : undefined}
 >
   <header class="poem__head">
-    <h1 class="poem__title">〈{poem.title}〉</h1>
+    <h1
+      class="poem__title"
+      style={transitionName ? `view-transition-name:${transitionName}` : undefined}
+    >〈{poem.title}〉</h1>
     <p class="poem__byline ui">
       {poem.dynasty && <span>{poem.dynasty}</span>}
       <span class="poem__author">{poem.author}</span>
