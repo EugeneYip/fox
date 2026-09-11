@@ -130,6 +130,23 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
   </header>
 
   {/*
+    ── 詩與旁注並排 ────────────────────────────────────
+
+    2026-09-11 量到：1680px 的螢幕上左右各空 424px（50%），
+    而這一頁的主角只佔 16%。空的不是「留白」，是沒被使用的地方。
+
+    所以注挪到詩的**右邊** —— 線裝書的旁注。
+
+    要不要並排**不寫斷點，讓 flex 自己決定**：詩那一欄照內容寬
+    （`flex: 0 0 auto`），注那一欄最少 20rem（`flex: 1 1 20rem`）。
+    736px 的內容欄裡，四句的詩佔 380px，剩 324px 夠注站著；
+    八句（716px）與十句（728px）剩不到，注就自己掉到下一行。
+    也就是「**留得下就並排，留不下就疊起來**」，而這件事跟視窗寬度無關，
+    跟這首詩多寬有關 —— 斷點問不到這個。
+  */}
+  <div class="poem__spread">
+    <div class="poem__main">
+  {/*
     版框 —— 木刻本書葉四周的那圈框線。這一層只負責畫框，
     捲動與遮罩仍然在裡面那一層（見 .poem__scroll 的說明）。
   */}
@@ -175,20 +192,22 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
     <span aria-hidden="true" data-when="vertical">{t('poem.toHorizontal')}</span>
     <span aria-hidden="true" data-when="horizontal">{t('poem.toVertical')}</span>
   </button>
-
-  {annotations.length > 0 && (
-    <div class="poem__section">
-      <h2 class="poem__section-title ui">{t('poem.notes')}</h2>
-      <dl class="poem__annotations">
-        {annotations.map((a) => (
-          <div class="poem__annotation">
-            <dt>{a.term}</dt>
-            <dd>{a.gloss}</dd>
-          </div>
-        ))}
-      </dl>
     </div>
-  )}
+
+    {annotations.length > 0 && (
+      <div class="poem__section poem__aside">
+        <h2 class="poem__section-title ui">{t('poem.notes')}</h2>
+        <dl class="poem__annotations">
+          {annotations.map((a) => (
+            <div class="poem__annotation">
+              <dt>{a.term}</dt>
+              <dd>{a.gloss}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    )}
+  </div>
 
   {plain && (
     <div class="poem__section">
@@ -651,10 +670,42 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
 
   /* ── 注與白話 ────────────────────────────────────── */
 
+  .poem__spread {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: start;
+    justify-content: center;
+    gap: var(--s-6);
+  }
+
+  /* 詩那一欄照自己的寬，不被拉長也不被壓扁 */
+  .poem__main {
+    flex: 0 0 auto;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+  }
+
   .poem__section {
     margin-block-start: var(--s-7);
     padding-block-start: var(--s-5);
     border-block-start: var(--border-thin);
+  }
+
+  /*
+   * 注那一欄：最少 20rem 才留在同一行，否則整欄掉下來。
+   *
+   * 不要那條分隔線與上緣留白：並排時它會變成一條飄在詩旁邊的橫槓，
+   * 掉下來時上面已經有 `gap` 了。**這一段一定要在 `.poem__section`
+   * 後面** —— 元素兩個 class 都有、特異性一樣，是後面那條贏。
+   * 第一版寫在前面，量到注的上緣比詩低 48px（`--s-7` 原封不動地生效了）。
+   */
+  .poem__aside {
+    flex: 1 1 20rem;
+    min-inline-size: 0;
+    margin-block-start: 0;
+    padding-block-start: 0;
+    border-block-start: 0;
+    container-type: inline-size;
   }
 
   .poem__section-title {
@@ -685,6 +736,22 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
     grid-template-columns: minmax(5rem, 9.5rem) minmax(0, 1fr);
     gap: var(--s-4);
     align-items: baseline;
+  }
+
+  /*
+   * 注的欄變窄時，詞條與解釋改成上下排 —— 用**容器查詢**而不是視窗寬度。
+   * 那一格本來就是「這一欄有多寬」的問題：跟詩並排時它只有 324px，
+   * 而視窗可能是 1680px —— 媒體查詢問不到這件事。
+   *
+   * **位置要在上面那條基本規則後面**：容器查詢不加特異性，
+   * 兩條一樣重的時候是後面那條贏。第一版寫在前面，量到詞條那一軌
+   * 仍然是 152px、解釋只剩 156px（約十個字），看起來像沒生效。
+   */
+  @container (max-width: 26rem) {
+    .poem__annotation {
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--s-1);
+    }
   }
 
   .poem__annotation dt {
