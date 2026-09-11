@@ -764,7 +764,9 @@ if (textFiles.length > 0) {
     why:
       'feed、sitemap、CSS、robots.txt⋯⋯凡是純文字的都算在這裡 —— 它們壓縮率 3–13:1，' +
       '用「最大單一檔案」那把量圖片的 raw 尺去量會得到沒有意義的結論。' +
-      '目前最大的是全站樣式表，gzip 4.5 KB（feed 那一側 rss-all.xml 只有 2.0 KB）。' +
+      '目前最大的是全站樣式表，gzip 5.0 KB（feed 那一側 rss-all.xml 只有 2.0 KB）。' +
+      '2026-09-11 的視覺升級讓它從 4.5 長到 5.0 —— 那一輪加的全是 CSS' +
+      '（詩的格律、旁注、書口、牌記、摺疊、引詩的框）。' +
       '上限是從 feed 推的：筆數**有上限**（rss-all.xml.ts 的 ' +
       'slice(0, 100)、rss.xml 的 limit: 60），滿載時推估 gzip 約 27 KB，' +
       '留餘裕到 40 —— 會先撞到這條線的仍然是 feed，不是樣式表。' +
