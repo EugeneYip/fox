@@ -29,8 +29,13 @@ const { char = '狐', size = 44, class: className } = Astro.props;
     place-items: center;
     inline-size: var(--seal-size);
     block-size: var(--seal-size);
-    background: var(--c-seal);
-    color: var(--c-bg);
+    /*
+     * 底與字用印面自己的 token，不是 --c-seal ＋ --c-bg ——
+     * 理由寫在 tokens.css 那兩行上面（深色時那兩個會把印章變成
+     * 一塊亮紅色的晶片）。
+     */
+    background: var(--c-seal-face);
+    color: var(--c-seal-char);
     border-radius: var(--r-seal);
     font-family: var(--f-serif);
     font-weight: 600;

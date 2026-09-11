@@ -78,10 +78,22 @@ const otherTotal =
 <style>
   .arc__year + .arc__year { margin-block-start: var(--s-7); }
 
+  /*
+   * ── 年份是這一頁的骨架，不該用最淡的那一階 ──────────
+   *
+   * 2026-09-11 在 1280px 上看到的：年份用的是 `--c-ink-faint` ——
+   * 那一階是給日期、註記這種**小字**用的（三階是 15.74 → 7.40 → 4.94，
+   * 它是最淡的一階）。結果是一個 --t-lg、粗體的標題，顏色卻比它底下
+   * 每一篇的標題還淡：**負責分段的東西看起來比被分的東西不重要。**
+   *
+   * 改成 `--c-ink-soft`（7.40:1），並掛上站上分節標題共用的魚尾 ——
+   * 「這裡換一段了」在全站就只有一種說法。
+   * 不用 `--c-ink`：一頁上會重複出現好幾個年份，滿黑的話會蓋過內容。
+   */
   .arc__year-label {
     font-size: var(--t-lg);
     font-weight: 600;
-    color: var(--c-ink-faint);
+    color: var(--c-ink-soft);
     padding-block-end: var(--s-2);
     border-block-end: var(--border-thin);
     margin-block-end: var(--s-3);

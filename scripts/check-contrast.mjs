@@ -318,7 +318,7 @@ const PAIRS = [
   { fg: '--c-flame-ink', bg: '--c-flame-wash', kind: 'text', where: '彙整頁的詩詞標記' },
   { fg: '--c-moss', bg: '--c-bg', kind: 'text', where: '「手動挑選」標記' },
   { fg: '--c-seal', bg: '--c-bg', kind: 'text', where: '同步異常訊息' },
-  { fg: '--c-bg', bg: '--c-seal', kind: 'large', where: '印章裡的字' },
+  { fg: '--c-seal-char', bg: '--c-seal-face', kind: 'large', where: '印章裡的字' },
   { fg: '--c-ink', bg: '--c-selection', kind: 'text', where: '選取範圍' },
   { fg: '--c-flame', bg: '--c-bg', kind: 'ui', where: '狐狸標記、目前頁面的底線' },
   { fg: '--c-focus', bg: '--c-bg', kind: 'ui', where: '鍵盤焦點框' },

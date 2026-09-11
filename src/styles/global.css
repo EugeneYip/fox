@@ -403,7 +403,8 @@ input, textarea, select {
   .section-heading > h2,
   .section-heading > h3,
   .poem__section-title,
-  .poem-page__section-title
+  .poem-page__section-title,
+  .arc__year-label
 )::before {
   content: "";
   display: inline-block;
