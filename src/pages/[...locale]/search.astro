@@ -15,6 +15,7 @@ import { useTranslations, localizePath } from '@i18n/utils';
  */
 import { externalLinkRel } from '@config/privacy';
 import { getSyndication } from '@lib/syndication';
+import { getTagCloud } from '@lib/content';
 import type { Locale } from '@config/site';
 
 export const getStaticPaths = () => localePaths();
@@ -23,6 +24,22 @@ const { locale } = Astro.props as { locale: Locale };
 const t = useTranslations(locale);
 /* 只為了知道索引裡會出現哪些平臺代號，好在結果列上顯示它們的名字 */
 const syndicated = await getSyndication();
+
+/*
+ * ── 還沒打字的時候，這一頁是空的 ────────────────────
+ *
+ * 2026-09-11 在瀏覽器裡看到的：輸入框底下**有 570px 什麼都沒有**，
+ * 然後就是頁尾。一個讀者到這裡，除了那句「可以找標題、內文、標籤」之外
+ * 沒有任何線索 —— 不知道站上有什麼，也不知道該打什麼。
+ *
+ * 放幾個真的入口，不是裝飾：取站上**出現次數最多**的幾個標籤
+ * （`getTagCloud()` 就是 `/tags` 在用的那一支，已經按次數排好），
+ * 做成 `?q=` 的連結。這一頁本來就會讀 `?q=`，所以按下去就是一次真的搜尋。
+ *
+ * 六個是看版面訂的：一行放得下、又足以看出站上寫的是哪幾類東西。
+ * 標籤是從內容長出來的，所以這份清單會自己跟著站長大 —— 不用維護。
+ */
+const suggestions = (await getTagCloud(locale)).slice(0, 6);
 
 /*
  * ── 搜不到的時候，英文讀者不知道為什麼 ──────────
@@ -119,6 +136,21 @@ const strings = JSON.stringify({
   <p class="search__status ui faint" data-search-status aria-live="polite"></p>
   <ol class="search__results" data-search-results></ol>
 
+  {/*
+    放在結果**後面**是刻意的：底下那條 CSS 用
+    `.search__results:not(:empty) ~ .search__start` 把它藏起來 ——
+    有結果就不再指路，而兄弟選擇器只看得到後面的元素。
+    這樣不需要任何一行 JavaScript（這一頁的內嵌腳本已經 4.3 KB）。
+  */}
+  {suggestions.length > 0 && (
+    <p class="search__start ui">
+      <span class="search__start-label faint">{t('search.startWith')}</span>
+      {suggestions.map((s) => (
+        <a href={`?q=${encodeURIComponent(s.tag)}`}>{s.tag}</a>
+      ))}
+    </p>
+  )}
+
   {/* JavaScript 關掉時至少告訴使用者發生什麼事，而不是給一個死掉的輸入框 */}
   <noscript>
     <p class="muted">
@@ -155,6 +187,44 @@ const strings = JSON.stringify({
     font-size: var(--t-xs);
     min-block-size: 1.2em;
   }
+
+  /*
+   * 入口那一列。樣子跟標籤的籤條一致（方角、左邊一道苔色的邊），
+   * 但這裡是動詞不是名詞 —— 按下去會搜尋，不是去標籤頁。
+   */
+  .search__start {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--s-2) var(--s-3);
+    margin-block-start: var(--s-6);
+  }
+
+  .search__start-label { flex: none; }
+
+  .search__start a {
+    font-size: var(--t-xs);
+    padding: 0.2em 0.7em;
+    border: 0;
+    border-inline-start: 2px solid var(--c-moss);
+    background: var(--c-bg-sunken);
+    color: var(--c-ink-soft);
+    text-decoration: none;
+    transition:
+      border-color var(--dur-fast) var(--ease),
+      background var(--dur-fast) var(--ease),
+      color var(--dur-fast) var(--ease);
+  }
+
+  .search__start a:hover,
+  .search__start a:focus-visible {
+    border-inline-start-color: var(--c-flame);
+    background: var(--c-flame-wash);
+    color: var(--c-flame-ink);
+  }
+
+  /* 有結果就不用再指路了 */
+  .search__results:not(:empty) ~ .search__start { display: none; }
 
   .search__results {
     list-style: none;

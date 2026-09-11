@@ -301,6 +301,7 @@ export const ui = {
   'search.noResults': { 'zh-TW': '沒有找到相符的東西。', en: 'No matches found.' },
   'search.resultCount': { 'zh-TW': '{n} 個結果', en: '{n} results' },
   'search.resultCount_one': { 'zh-TW': '{n} 個結果', en: '{n} result' },
+  'search.startWith': { 'zh-TW': '從這幾個開始', en: 'Start with these' },
   'search.loading': { 'zh-TW': '載入索引中…', en: 'Loading index…' },
   'search.failed': { 'zh-TW': '索引載入失敗，請重新整理。', en: 'Could not load the index. Try reloading.' },
   'search.hint': {
