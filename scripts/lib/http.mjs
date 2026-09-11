@@ -19,10 +19,10 @@
 
 /** 同步：老實說明自己是誰、多久來一次 */
 export const UA_SYNC =
-  'bellafoxy.com feed sync (+https://bellafoxy.com/colophon); polite, runs twice a day';
+  'bellafoxy.com feed sync (+https://bellafoxy.com/privacy); polite, runs twice a day';
 
 /** 檢查來源是否還通：一次性的檢查，同樣老實說明 */
-export const UA_VERIFY = 'bellafoxy.com source check (+https://bellafoxy.com/colophon)';
+export const UA_VERIFY = 'bellafoxy.com source check (+https://bellafoxy.com/privacy)';
 
 /*
  * 查帳號存不存在時假裝成瀏覽器。
@@ -49,6 +49,6 @@ export const UA_BROWSER =
  * 那個 403 花掉的時間，跟第 4 輪（第一圈）那個全形破折號是同一種 ——
  * **UA 的問題會偽裝成平臺的問題。** 所以預設值改成一個誠實的自我介紹。
  */
-export const UA_DEFAULT = 'bellafoxy.com (+https://bellafoxy.com/colophon)';
+export const UA_DEFAULT = 'bellafoxy.com (+https://bellafoxy.com/privacy)';
 
 export const ALL_USER_AGENTS = { UA_SYNC, UA_VERIFY, UA_BROWSER, UA_DEFAULT };

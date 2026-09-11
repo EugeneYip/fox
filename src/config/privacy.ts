@@ -178,7 +178,7 @@ const localModules = import.meta.glob<{ identity?: Identity }>('./identity.local
 
 const identity: Identity = Object.values(localModules)[0]?.identity ?? {};
 
-/** 這台機器上有沒有本機身分檔（給 /colophon 之類的地方判斷用） */
+/** 這台機器上有沒有本機身分檔（給頁面判斷「要不要顯示身分那一塊」用） */
 export const hasLocalIdentity = Object.keys(localModules).length > 0;
 
 export type GuardedKey = 'realName' | 'education' | 'location' | 'email';

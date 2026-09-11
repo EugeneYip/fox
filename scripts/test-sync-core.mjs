@@ -255,7 +255,7 @@ const CHK = (/** @type {boolean} */ cond, /** @type {string} */ name) => check(n
     '內容變了 → 要寫',
   );
 
-  /* 來源從 ok 變成 error 也是內容變了 —— /colophon 上看得到 */
+  /* 來源從 ok 變成 error 也是內容變了 —— /elsewhere 上看得到 */
   CHK(
     !sameAndAlreadyToday(
       base,

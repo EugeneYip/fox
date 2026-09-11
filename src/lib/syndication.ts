@@ -20,7 +20,7 @@
  * `/about` 那兩個容易漏掉：它**不畫項目清單**，它用 `getActivePlatforms()`
  * 拿每個平臺的「共 N 篇」，所以筆數一變它就變。
  * 沒有變的：`rss.xml`（那是站內內容的 feed，刻意不含外站）、
- * `sitemap-0.xml`（沒有 `lastmod`，見 `docs/TODO.md`）、`/colophon`。
+ * `sitemap-0.xml`（沒有 `lastmod`，見 `docs/TODO.md`）。
  *
  * ── 而搜尋索引裡，站外的比站內的多一倍 ──────────────
  *
@@ -267,7 +267,8 @@ export function lastSyncedAt(): Date | null {
 }
 
 /**
- * 同步來源的健康狀況 —— 顯示在 /colophon。
+ * 同步來源的健康狀況 —— 顯示在 /elsewhere（2026-09-11 從移除的 /colophon 搬過來，
+ * 而且改成只在有來源讀不到時才出現；全部正常時不佔畫面）。
  *
  * ## 為什麼不看 `status`
  *

@@ -22,7 +22,7 @@ const t = useTranslations(locale);
  * 跟其他四個一模一樣。
  *
  * 這裡用**完全相符**，不像 Header 那樣往下比對前綴 ——
- * 頁尾放的是單頁的工具連結（封存、標籤、搜尋、隱私、colophon），
+ * 頁尾放的是單頁的工具連結（彙整、標籤、搜尋、隱私），
  * 在 /tags/唐詩 上把 /tags 標成 `page` 是錯的：那不是同一頁。
  * 兩個 nav 的語意本來就不同，硬要共用一個判斷反而會錯一邊。
  */
@@ -149,7 +149,7 @@ const penName = pick(site.penName, locale) ?? site.penName[DEFAULT_LOCALE];
    * 第 1 輪（第三十圈）補了 `aria-current` —— 螢幕閱讀器從此聽得出來，
    * 但**畫面上五頁完全沒有差別**（頁尾的連結全是 `--c-ink-soft`）。
    * 第 8 輪（第四十五圈）量到：`/about`、`/notes`、`/writing`、`/poems`、
-   * `/colophon` 五頁的頁尾都印著 `aria-current="page"`，
+   * 那五頁的頁尾都印著 `aria-current="page"`，
    * 而全站只有 `.site-nav`、`.pager__numbers`、`.lang__menu` 三組有樣式。
    *
    * 不照抄導覽列那道 2px 的短線：頁尾是 `--t-sm` 的工具連結，

@@ -126,11 +126,19 @@ export const nav: NavItem[] = [
   { href: '/about', label: { 'zh-TW': '關於', en: 'About' } },
 ];
 
+/*
+ * 頁尾的工具連結。2026-09-11 站主拿掉兩項：
+ *
+ *   /colophon  整頁移除 —— 內容大半是對內的（「關於追蹤」跟隱私頁重複、
+ *              「登錄了 24 個平臺」講的是能力不是現況）
+ *   /rss.xml   feed **留著**，只是不佔頁尾一格。`<head>` 的
+ *              `rel="alternate"` 還在，訂閱器自己認得出來；
+ *              真的想訂的人在 `/elsewhere` 有入口（而且那一份含各平臺，
+ *              比頁尾這個只有站上文章的更完整）
+ */
 export const footerNav: NavItem[] = [
   { href: '/archive', label: { 'zh-TW': '彙整', en: 'Archive' }, secondary: true },
   { href: '/tags', label: { 'zh-TW': '標籤', en: 'Tags' }, secondary: true },
   { href: '/search', label: { 'zh-TW': '搜尋', en: 'Search' }, secondary: true },
-  { href: '/rss.xml', label: { 'zh-TW': 'RSS', en: 'RSS' }, secondary: true },
-  { href: '/colophon', label: { 'zh-TW': '關於本站', en: 'Colophon' }, secondary: true },
   { href: '/privacy', label: { 'zh-TW': '隱私', en: 'Privacy' }, secondary: true },
 ];

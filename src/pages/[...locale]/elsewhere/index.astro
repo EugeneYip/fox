@@ -2,7 +2,7 @@
 import Base from '@layouts/Base.astro';
 import PageHeader from '@components/layout/PageHeader.astro';
 import { localePaths } from '@i18n/paths';
-import { getSyndication, getActivePlatforms, lastSyncedAt } from '@lib/syndication';
+import { getSyndication, getActivePlatforms, lastSyncedAt, syncHealth } from '@lib/syndication';
 import { useTranslations } from '@i18n/utils';
 import { formatDate } from '@lib/dates';
 import type { Locale } from '@config/site';
@@ -48,6 +48,15 @@ const platforms = await getActivePlatforms();
  */
 const items = await getSyndication({ limit: 20 });
 const synced = lastSyncedAt();
+/*
+ * 讀不到的來源。2026-09-11 從移除的 `/colophon` 搬過來的 ——
+ * `ARCHITECTURE.md` 記著「網站自己知道自己壞在哪裡」是一條刻意的決定，
+ * 頁面沒了那個性質不能跟著沒。
+ *
+ * 差別是：那一頁**無條件**印「來源狀態：1 個正常」，這裡**只在壞掉時說話**。
+ * 全部正常時那一行對讀者是噪音；真的讀不到時它才值得佔一行。
+ */
+const cold = syncHealth().failed;
 ---
 
 <Base locale={locale} title={t('elsewhere.title')} description={t('elsewhere.intro')} class="wrap--wide">
@@ -56,6 +65,10 @@ const synced = lastSyncedAt();
     lead={t('elsewhere.intro')}
     count={synced ? t('elsewhere.lastSynced', { date: formatDate(synced, locale) }) : undefined}
   />
+
+  {cold.length > 0 && (
+    <p class="els__cold ui">{t('elsewhere.sourcesCold', { ids: cold.join('、') })}</p>
+  )}
 
   {platforms.length > 0 && (
     <section class="els__section" aria-label={t('elsewhere.byPlatform')}>
@@ -85,4 +98,14 @@ const synced = lastSyncedAt();
 
 <style>
   .els__section + .els__section { margin-block-start: var(--s-8); }
+
+  /*
+   * 讀不到來源時那一句。用 `--c-seal` 是接手 `/colophon` 的做法 ——
+   * 那個 token 的兩個用途之一就寫著「當文字（同步異常訊息）」，
+   * 對比在 `check:contrast` 的 PAIRS 裡（見 tokens.css 那一段註解）。
+   */
+  .els__cold {
+    color: var(--c-seal);
+    margin-block-start: var(--s-4);
+  }
 </style>

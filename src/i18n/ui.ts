@@ -159,6 +159,22 @@ export const ui = {
    * check-a11y 的 fullwidth-in-english 規則守著這件事。
    */
   'elsewhere.lastSynced': { 'zh-TW': '上次同步：{date}', en: 'Last synced: {date}' },
+  /*
+   * 來源讀不到時才出現的一句。
+   *
+   * 2026-09-11 把 `/colophon` 整頁移除時搬過來的：那一頁本來印著
+   * 「來源狀態：N 個正常」，而 `ARCHITECTURE.md` 記著一條刻意的決定 ——
+   * **「網站自己知道自己壞在哪裡」**。頁面沒了，那個性質不能跟著沒。
+   *
+   * 但它不再無條件出現：全部正常的時候說「1 個正常」對讀者是噪音，
+   * 只有真的讀不到才值得佔一行。`syncHealth()` 看的是「有沒有一陣子
+   * 沒成功」而不是「最後一次成不成功」—— YouTube 的 feed 會一陣一陣
+   * 地壞，單次失敗不算數（見 `lib/syndication.ts`）。
+   */
+  'elsewhere.sourcesCold': {
+    'zh-TW': '{ids} 已經一陣子讀不到了',
+    en: 'Could not read {ids} for a while now',
+  },
   'elsewhere.notSyncedYet': {
     'zh-TW': '這個平臺還沒有同步到內容',
     en: 'Nothing synced from this platform yet',

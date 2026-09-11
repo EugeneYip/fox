@@ -213,7 +213,7 @@ export function buildPayload({ byId, sourceStatus, now = () => new Date().toISOS
  *
  * ## 為什麼不是「完全不寫」
  *
- * `generatedAt` 有在畫面上（/elsewhere 與 /colophon 的「上次同步：<日期>」）。
+ * `generatedAt` 有在畫面上（/elsewhere 的「上次同步：<日期>」）。
  * 完全不寫的話那會變成「上次**有新東西**的日期」—— 頻道安靜三個月，
  * 頁面就顯示三個月前，看起來像壞掉了，而其實每天都同步成功。那比 churn 更糟。
  *
