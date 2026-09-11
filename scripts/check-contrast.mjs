@@ -297,6 +297,21 @@ const PAIRS = [
   { fg: '--c-ink', bg: '--c-bg-sunken', kind: 'text', where: '程式碼區塊' },
   { fg: '--c-ink-soft', bg: '--c-bg', kind: 'text', where: '次要文字（.muted、摘要）' },
   { fg: '--c-ink-soft', bg: '--c-bg-raised', kind: 'text', where: '浮起表面上的次要文字' },
+  /*
+   * ── 籤條那一組，是我自己加進來又沒有人守的 ──────────
+   *
+   * 2026-09-11 把標籤改成「籤條」（`--c-ink-soft` 的字配 `--c-bg-sunken`
+   * 的底），搜尋頁的入口列也照抄了同一套。對比是**手算**的
+   *（淺 6.78:1、深 8.09:1），而這張表裡**沒有這一組** ——
+   * 也就是說哪天有人動了那兩個 token，沒有任何東西會說話。
+   *
+   * 這不是新規則，是把一組真的畫出來的組合補進這張手寫的表。
+   * 上面那句「涵蓋率⋯都在 PAIRS 裡 ✓」看的是**單個 token** 有沒有出現過，
+   * 不是**組合**有沒有被算過 —— 這一組就是從那個縫隙掉下去的。
+   * （這支腳本自己的註解早就寫著：「加元件、換 class 都可能多出一組
+   * 沒有人算過的」。）
+   */
+  { fg: '--c-ink-soft', bg: '--c-bg-sunken', kind: 'text', where: '籤條（標籤、搜尋的入口）' },
   { fg: '--c-ink-faint', bg: '--c-bg', kind: 'text', where: '.faint（日期、註記）' },
   { fg: '--c-ink-faint', bg: '--c-bg-raised', kind: 'text', where: '浮起表面上的 .faint' },
   /*

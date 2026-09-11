@@ -254,7 +254,7 @@ async function check(label, files, want) {
 }
 
 // 正常的 tokens 應該全過
-await check('原本的顏色全部合格', {}, { exit: 0, checked: 44 });
+await check('原本的顏色全部合格', {}, { exit: 0, checked: 46 });
 
 // 正文顏色改成幾乎跟底色一樣 → 一定要擋，而且只有用到 --c-ink 的那四組
 /*
@@ -318,7 +318,7 @@ await check(
   { tokens: withColor('--c-ink', '#f5f2ea', '#17150f') },
   {
     exit: 1,
-    checked: 44,
+    checked: 46,
     fails: [
       '淺色／正文', '淺色／浮起表面上的正文', '淺色／程式碼區塊', '淺色／選取範圍',
       '深色／正文', '深色／浮起表面上的正文', '深色／程式碼區塊', '深色／選取範圍',
@@ -332,7 +332,7 @@ await check(
   { tokens: withColor('--c-focus', '#f7ede2', '#1a1712') },
   {
     exit: 1,
-    checked: 44,
+    checked: 46,
     fails: ['淺色／鍵盤焦點框', '淺色／浮起表面上的焦點框', '深色／鍵盤焦點框', '深色／浮起表面上的焦點框'],
   },
 );
@@ -349,7 +349,7 @@ await check(
   { tokens: withColor('--c-ink', '#1f1c18', '#17150f') },
   {
     exit: 1,
-    checked: 44,
+    checked: 46,
     fails: ['深色／正文', '深色／浮起表面上的正文', '深色／程式碼區塊', '深色／選取範圍'],
   },
 );
@@ -365,7 +365,14 @@ await check(
   { tokens: realTokens.replaceAll('--c-ink-faint:', '--c-ink-dim:') },
   {
     exit: 1,
-    checked: 38, // 42 減掉算不出來的那 4 組
+    /*
+     * 46 減掉 --c-ink-faint 那 6 組（淺深各 3）。
+     * 這裡本來寫「42 減掉算不出來的那 4 組」—— 兩個數字都不對，
+     * 是更早以前 PAIRS 還比較短的時候留下來的（底下的 `missing`
+     * 列的就是 6 個，自己打自己的臉）。2026-09-11 加了「籤條」
+     * 那一組、總數 44 → 46 的時候順手改掉。
+     */
+    checked: 40,
     missing: [
       '淺色／.faint（日期、註記）', '淺色／浮起表面上的 .faint',
       '淺色／程式碼區塊／定義清單上的 .faint',
@@ -394,7 +401,7 @@ await check(
   { tokens: withColor('--c-bg-raised', '#fffdf880', '#1d1a16') },
   {
     exit: 1,
-    checked: 38, // 44 減掉用到 --c-bg-raised 的那 6 組（只有淺色那一半壞掉）
+    checked: 40, // 46 減掉用到 --c-bg-raised 的那 6 組（只有淺色那一半壞掉）
     missing: [
       '淺色／浮起表面上的正文', '淺色／浮起表面上的次要文字', '淺色／浮起表面上的 .faint',
       '淺色／浮起表面上的連結', '淺色／浮起表面上的焦點框', '淺色／浮起表面上的邊界',
@@ -407,7 +414,7 @@ await check(
   { tokens: withColor('--c-bg-raised', '#abcd', '#1d1a16') },
   {
     exit: 1,
-    checked: 38,
+    checked: 40,
     missing: [
       '淺色／浮起表面上的正文', '淺色／浮起表面上的次要文字', '淺色／浮起表面上的 .faint',
       '淺色／浮起表面上的連結', '淺色／浮起表面上的焦點框', '淺色／浮起表面上的邊界',
@@ -506,7 +513,7 @@ await check(
     },
     {
       exit: 0,
-      checked: 44,
+      checked: 46,
       /* 死的那一組兩個都要列出來；活的那一組一個都不能列 */
       unusedHas: ['--probe-dead', '--probe-dead-part'],
       unusedHasNot: ['--probe-live', '--probe-live-part'],
@@ -557,13 +564,13 @@ await check(
 await check(
   'fallback 跟 light-dark() 的淺色值分岔時會擋',
   { tokens: realTokens.replace('  --c-bg-raised: #fffdf8;', '  --c-bg-raised: #ffffff;') },
-  { exit: 1, checked: 44, fallback: ['--c-bg-raised（不一致）'] },
+  { exit: 1, checked: 46, fallback: ['--c-bg-raised（不一致）'] },
 );
 
 await check(
   '有 light-dark() 卻沒有單值 fallback 時會擋',
   { tokens: realTokens.replace('  --c-bg-raised: #fffdf8;\n', '') },
-  { exit: 1, checked: 44, fallback: ['--c-bg-raised（缺）'] },
+  { exit: 1, checked: 46, fallback: ['--c-bg-raised（缺）'] },
 );
 
 /*
@@ -583,7 +590,7 @@ await check(
       '  /*\n  --c-bg-raised: #000000;\n  */\n  --c-bg-raised: light-dark(#fffdf8, #1d1a16);',
     ),
   },
-  { exit: 0, checked: 44 },
+  { exit: 0, checked: 46 },
 );
 
 /*
@@ -610,7 +617,7 @@ await check(
     ),
     global: realGlobal + '\n.zzz-probe { width: var(--zzz-never-used-more); }\n',
   },
-  { exit: 0, checked: 44, unusedHas: ['--zzz-never-used'], unusedHasNot: ['--zzz-never-used-more'] },
+  { exit: 0, checked: 46, unusedHas: ['--zzz-never-used'], unusedHasNot: ['--zzz-never-used-more'] },
 );
 await check(
   '有人用的 token 不會被列成沒人用',
@@ -618,7 +625,7 @@ await check(
     tokens: realTokens.replace(':root {', ':root {\n  --zzz-never-used: 1px;'),
     global: realGlobal + '\n.zzz-probe { width: var(--zzz-never-used); }\n',
   },
-  { exit: 0, checked: 44, unusedHasNot: ['--zzz-never-used'] },
+  { exit: 0, checked: 46, unusedHasNot: ['--zzz-never-used'] },
 );
 
 /*
@@ -637,7 +644,7 @@ await check(
       '$1  /*\n  --c-ink: light-dark(#faf6ee, #14120f);\n  */\n',
     ),
   },
-  { exit: 0, checked: 44 },
+  { exit: 0, checked: 46 },
 );
 
 /*
@@ -661,14 +668,14 @@ await check(
         '  --shadow-soft-near: light-dark(rgba(31, 28, 24, 0.04), rgb(0 0 0 / 0.3));',
       ),
   },
-  { exit: 0, checked: 44, fallback: [] },
+  { exit: 0, checked: 46, fallback: [] },
 );
 
 /* 反向：三位是合法的不透明短寫法，不能一起擋掉 */
 await check(
   '三位 hex 是合法的短寫法，照樣算得出來',
   { tokens: withColor('--c-bg-raised', '#fff', '#111') },
-  { exit: 0, checked: 44 },
+  { exit: 0, checked: 46 },
 );
 
 /*
@@ -690,7 +697,7 @@ await check(
      */
     extra: { 'src/components/content/Probe.astro': '<style>.zz-probe { color: var(--c-not-in-pairs); }</style>\n' },
   },
-  { exit: 1, checked: 44, coverage: ['--c-not-in-pairs'] },
+  { exit: 1, checked: 46, coverage: ['--c-not-in-pairs'] },
 );
 
 // 列印區塊只寫 :root（第 8 輪〔第三圈〕那個活了兩圈的 bug）
@@ -704,7 +711,7 @@ await check(
   },
   {
     exit: 1,
-    checked: 44,
+    checked: 46,
     /*
      * **兩個都要**。只要求「有東西缺」的話，「比對前不去掉 CSS 註解」
      * 那個突變會靜靜通過 —— 列印區塊的說明文字裡就寫著
