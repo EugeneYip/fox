@@ -193,6 +193,29 @@ const alternates = LOCALES.filter((l) => availableLocales.includes(l)).map((l) =
 
     <Header locale={locale} availableLocales={availableLocales} />
 
+    {/*
+      ── 書口 ──────────────────────────────────────────
+
+      線裝書的書口是每一葉對折的那一邊，上面印著書名、卷次、頁碼。
+      這裡印的是這一頁的標題。
+
+      為什麼放在留白裡：2026-09-11 量到 1680px 的螢幕上左右各空 424px
+      （佔一半），而那裡什麼都沒有 —— 連一條線都沒有。線裝書的版框外面
+      是有東西的。
+
+      為什麼是標題而不是站名：站名在頁首，而頁首是釘住的，一直看得到；
+      標題捲下去就不見了。詩頁捲到「狐狸說」的時候，
+      邊上那一行〈靜夜思〉才是這一頁還在說什麼。
+
+      `aria-hidden` ＋ `pointer-events: none`：它是同一個標題的第二次露出，
+      讀出來是重複的，也不該擋到任何東西。
+    */}
+    {!bare && seoInput.title && (
+      <div class="bookedge" aria-hidden="true">
+        <span class="bookedge__label">{seoInput.title}</span>
+      </div>
+    )}
+
     <main id="main" class:list={[!bare && 'wrap', className]}>
       <slot />
     </main>
@@ -205,5 +228,62 @@ const alternates = LOCALES.filter((l) => availableLocales.includes(l)).map((l) =
   main {
     flex: 1 0 auto;
     padding-block: var(--s-7) var(--s-9);
+  }
+
+  /*
+   * ── 書口（說明見上面的標記）────────────────────────
+   *
+   * 預設**不顯示**。只在兩個條件同時成立時才出現：
+   *
+   *   1. 視窗夠寬（72rem ＝ 1152px）
+   *   2. 這一頁的量測寬度是窄的那兩種（`--w-content` 46rem／`--w-prose` 34rem）
+   *
+   * 第 2 條用 `:has()` 問，不用媒體查詢 —— 因為它問的不是視窗，
+   * 是**這一頁用哪一種欄寬**。平鋪的那幾頁（`.wrap` 是 `--w-full` 78rem）
+   * 在 1152px 底下根本沒有留白，書口會壓到內容上。
+   *
+   * 算過：1152px ＋ `wrap--content` 的 main 是 832px，左右各 160px；
+   * 書口靠右 2rem、自己約 40px，離內容還有 88px。
+   */
+  .bookedge {
+    display: none;
+    position: fixed;
+    inset-block-start: 0;
+    inset-inline-end: var(--s-6);
+    block-size: 100svh;
+    align-items: center;
+    pointer-events: none;
+    /* 界線：跟版框、界欄同一條線的顏色 */
+    border-inline-start: 1px solid var(--c-rule);
+    padding-inline-start: var(--s-3);
+  }
+
+  .bookedge__label {
+    writing-mode: vertical-rl;
+    /*
+     * 直排區塊一定要自己寫 `word-break`（`check:content` 的
+     * `vertical-keep-all` 在守）—— 繼承來的 `keep-all` 在 WebKit 的直排
+     * 底下不產生斷點，長標題會整條漏到畫面外。
+     */
+    word-break: normal;
+    font-family: var(--f-serif);
+    font-size: var(--t-xs);
+    letter-spacing: var(--ls-wide);
+    color: var(--c-ink-faint);
+    /* 長標題就讓它斷成兩欄，不要漏出去 */
+    max-block-size: 70svh;
+    overflow: hidden;
+  }
+
+  @media (min-width: 72rem) {
+    body:has(main.wrap--content) .bookedge,
+    body:has(main.wrap--prose) .bookedge {
+      display: flex;
+    }
+  }
+
+  /* 紙上沒有「捲動」這回事，而書口那條線在紙上會變成一條莫名的直線 */
+  @media print {
+    .bookedge { display: none !important; }
   }
 </style>
