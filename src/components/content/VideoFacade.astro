@@ -36,6 +36,8 @@ interface Props {
 }
 
 const { videoId, title, locale, poster, portrait = true, verse } = Astro.props;
+/* 題字有幾個字 —— 底下用它反推「這個框放得下多大的字」，見 `.facade__verse` */
+const verseChars = verse ? [...verse].length : 0;
 const t = useTranslations(locale);
 
 /*
@@ -74,7 +76,11 @@ const ids = { play: `facade-${videoId}-play`, title: `facade-${videoId}-title` }
       <img class="facade__poster" src={poster} alt="" loading="lazy" decoding="async" width="1280" height="720" />
     ) : (
       <div class="facade__poster facade__poster--drawn" aria-hidden="true">
-        {verse && <span class="facade__verse" lang="zh-Hant">{verse}</span>}
+        {verse && (
+          <span class="facade__verse" lang="zh-Hant" style={`--verse-chars:${verseChars}`}>
+            {verse}
+          </span>
+        )}
         <span class="facade__glyph">狐</span>
       </div>
     )}
@@ -103,6 +109,9 @@ const ids = { play: `facade-${videoId}-play`, title: `facade-${videoId}-title` }
 
   .facade__frame {
     position: relative;
+    /* 讓題字量得到「這個框有多高」（`100cqh`）—— 高度由 aspect-ratio 決定，
+       跟內容無關，所以 `size` 的containment 成立 */
+    container-type: size;
     aspect-ratio: 16 / 9;
     border-radius: var(--r-md);
     overflow: hidden;
@@ -161,6 +170,21 @@ const ids = { play: `facade-${videoId}-play`, title: `facade-${videoId}-title` }
    */
   .facade__poster--drawn {
     grid-template-areas: 'art';
+    /*
+     * 內距寫在**容器**上，不是寫在題字的 margin 上。
+     *
+     * 2026-09-11 站主回報〈月夜〉的封面錯位。量出來的：題字
+     *「今夜鄜州月」在 430px 的視窗下折成兩欄，而且**超出框右緣 33px**。
+     * 逐項試掉才找到是 `margin` —— 拿掉就變回一欄、不溢出。
+     *
+     * 成因：題字是 `vertical-rl`，跟這層格線**軸向是交錯的**。
+     * WebKit 對這種交錯的格線項目，inline 軸上的 margin 是從
+     * **它自己的內容尺寸**裡扣，不是從可用空間裡扣 ——
+     * 量到 `inline-size` 正好是「內容 259.6px 減掉 margin 24px」＝ 235.6px，
+     * 於是明明還有 474px 可用，字卻折行了。
+     * （這是「直排的軸向是反的」那一家的又一個成員，CLAUDE.md 有記。）
+     */
+    padding: var(--s-5) var(--s-4);
   }
 
   .facade__verse,
@@ -182,7 +206,19 @@ const ids = { play: `facade-${videoId}-play`, title: `facade-${videoId}-title` }
      * 框是定寬（17.5rem）不跟著視窗走，所以字級也不必跟 —— 寫死比較準。
      * 44px × 七個字 ＋ 字距約 370px，框內高 498px，最長的一句也放得下。
      */
-    font-size: 2.75rem;
+    /*
+     * 一句題字**不折**（跟 `.poem__line` 同一個道理：一句詩折成兩截是讀錯）。
+     * 而 `nowrap` 之下折不了就會溢出，框又是 `overflow: hidden` ——
+     * 那會變成「安靜地被裁掉」。所以字級直接從框高反推：
+     * 一個字佔 `font-size × 1.18`（1 ＋ `letter-spacing` 的 0.18em），
+     * 扣掉上下內距 4rem，剩下的除以字數，最大 2.75rem。
+     *
+     * 量出來：五個字 44px、七個字 44px、十二個字 30.6px，都放得下。
+     * 是 `cqh` 不是 `cqi` —— 容器單位跟的是元素自己的行向，
+     * 直排上 `cqi` 會量到高度以外的東西（CLAUDE.md 記過一次）。
+     */
+    white-space: nowrap;
+    font-size: min(2.75rem, calc((100cqh - 4rem) / (var(--verse-chars, 7) * 1.18)));
     line-height: 1.15;
     letter-spacing: 0.18em;
     color: var(--c-ink);
@@ -194,7 +230,6 @@ const ids = { play: `facade-${videoId}-play`, title: `facade-${videoId}-title` }
      * 截圖上那顆鈕正好橫過「前」與「月」之間。
      */
     place-self: start end;
-    margin: var(--s-5) var(--s-4) 0 0;
   }
 
   .facade__glyph {
@@ -206,7 +241,6 @@ const ids = { play: `facade-${videoId}-play`, title: `facade-${videoId}-title` }
      */
     font-size: var(--t-lg);
     place-self: end start;
-    margin: var(--s-4);
     color: var(--c-flame);
     opacity: 0.32;
   }
