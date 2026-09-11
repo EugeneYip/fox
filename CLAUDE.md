@@ -80,6 +80,14 @@ ALLOWLIST 裡 —— 唯一含有個資的檔案，剛好豁免於自己的檢�
 - **Astro 的 scoped style 不會穿進子元件。**
   `<FoxMark class="x" />` + `.x { color: … }` 沒有用。要包一層容器，
   把 `color` 設在容器上讓它繼承。
+
+  **`> *` 也一樣配不到別的元件，而且它的特異性比你想的高。**
+  2026-09-11 在 `EntryCard` 踩到，兩件事疊在一起：
+  `.entry > *` 會被改寫成 `.entry[cid] > *[cid]`，於是
+  （1）`<TagList>` 的根元素帶的是**別的 cid**，整條配不到它；
+  （2）兩個屬性選擇器讓它的特異性**高過** `.entry__shape[cid]`，
+  連同一個元件裡的元素都被它壓過去。
+  要排版一排混著別的元件的子元素，**包一層容器**比寫 `> *` 可靠。
 - **直排的軸向是反的。** `writing-mode: vertical-rl` 之下，
   `inline-size` 是「一行的長度（高度）」，`block-size` 是整體寬度。
   flex 的 `column` 方向才是「由右往左」。見 `PoemBlock.astro` 的註解。

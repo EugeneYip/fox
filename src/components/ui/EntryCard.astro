@@ -46,31 +46,87 @@ const data = entry.data;
 // 詩詞的摘要用詩題與作者，比用 description 更有資訊量
 const poem = 'poem' in data ? data.poem : undefined;
 const subtitle = poem ? `${poem.author}${poem.dynasty ? `・${poem.dynasty}` : ''}` : undefined;
+
+/*
+ * ── 詩的形狀 ────────────────────────────────────────
+ *
+ * 2026-09-11 量到的問題：`/poems` 十一列長得一模一樣（標題／日期／一句描述／
+ * 四個標籤），**一個字的詩都沒有** —— 這是詩詞站的列表頁。
+ *
+ * 所以每一列帶一格「格律」：句數 × 每句字數，畫成一個小方格陣。
+ * 一眼分得出絕句（4 句）、律詩（8 句）、樂府（更長），
+ * 以及五言與七言。那是資訊，不是裝飾。
+ *
+ * **不新增欄位**：直接數 `poem.original`。站上十一首全部解析乾淨
+ *（4×5 兩首、4×7 六首、8×5 兩首、10×7 一首）。
+ * 標點不算 —— 格律算的是字，而〈琵琶行〉的原文裡有逗號。
+ *
+ * 直排的詩是「由右往左一句一句」，所以**欄數 ＝ 句數、列數 ＝ 每句字數**，
+ * 跟詩頁上那個版框同一個方向。
+ */
+const shapeLines = poem?.original
+  ? poem.original
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+  : [];
+const shapeCols = shapeLines.length;
+const shapeRows = shapeLines.length
+  ? Math.max(...shapeLines.map((line) => [...line].filter((c) => !/[，。、；：！？「」『』（）]/.test(c)).length))
+  : 0;
 ---
 
 <article class="entry">
-  <a class="entry__link" href={href}>
-    <Heading class="entry__title" data-featured={data.featured ? '' : undefined}>
-      {poem ? poem.title : data.title}
-    </Heading>
-  </a>
+  <div class="entry__body">
+    <a class="entry__link" href={href}>
+      <Heading class="entry__title" data-featured={data.featured ? '' : undefined}>
+        {poem ? poem.title : data.title}
+      </Heading>
+    </a>
 
-  <div class="entry__meta ui">
-    <time datetime={isoDate(data.publishedAt)}>{formatDate(data.publishedAt, locale)}</time>
-    {showType && <><span aria-hidden="true">·</span><span>{typeLabel}</span></>}
-    {subtitle && <><span aria-hidden="true">·</span><span>{subtitle}</span></>}
+    <div class="entry__meta ui">
+      <time datetime={isoDate(data.publishedAt)}>{formatDate(data.publishedAt, locale)}</time>
+      {showType && <><span aria-hidden="true">·</span><span>{typeLabel}</span></>}
+      {subtitle && <><span aria-hidden="true">·</span><span>{subtitle}</span></>}
+    </div>
+
+    {data.description && <p class="entry__desc muted">{data.description}</p>}
+
+    <TagList tags={data.tags} locale={locale} max={4} />
   </div>
 
-  {data.description && <p class="entry__desc muted">{data.description}</p>}
-
-  <TagList tags={data.tags} locale={locale} max={4} />
+  {/*
+    aria-hidden：格律已經以文字的形式在標籤裡（「五言絕句」），
+    這一格是同一件事的第二種說法，讀出來只會變成噪音。
+  */}
+  {shapeCols > 0 && shapeRows > 0 && (
+    <span
+      class="entry__shape"
+      aria-hidden="true"
+      style={`--shape-cols:${shapeCols};--shape-rows:${shapeRows}`}
+    />
+  )}
 </article>
 
 <style>
+  /*
+   * 這一層是橫的：左邊是原本那一疊東西，右邊是「詩的形狀」。
+   *
+   * 本來想用 grid ＋ `.entry > * { grid-column: 1 }`，**那一版是錯的**，
+   * 兩個原因疊在一起，而且都跟 Astro 的 scoped CSS 有關：
+   *
+   *   1. `TagList` 是另一個元件，**它的根元素帶的是別的 cid**，
+   *      所以 `.entry > *`（會被改寫成 `.entry[cid] > *[cid]`）配不到它 ——
+   *      它被自動排到第二軌，跟描述並排。
+   *   2. `.entry > *` 改寫後是 `.entry[cid] > *[cid]`，兩個屬性選擇器，
+   *      **特異性比 `.entry__shape[cid]` 高**，於是形狀也被壓回第一軌。
+   *
+   * 包一層 `.entry__body` 就兩個問題都沒有了，代價是每一列多一個 div。
+   */
   .entry {
     display: flex;
-    flex-direction: column;
-    gap: var(--s-2);
+    align-items: center;
+    gap: var(--s-5);
     padding-block: var(--s-5);
     border-block-end: var(--border-thin);
     /* 跟 /彙整 的列同一個做法：底色往外咬一點，對齊線不動 */
@@ -87,6 +143,56 @@ const subtitle = poem ? `${poem.author}${poem.dynasty ? `・${poem.dynasty}` : '
   }
 
   .entry:last-child { border-block-end: 0; }
+
+  .entry__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-2);
+    /* 不加這個的話，長的描述會把這一項撐開、把形狀擠出去 */
+    min-inline-size: 0;
+    flex: 1;
+  }
+
+  /*
+   * ── 那一格方格陣 ──────────────────────────────────
+   *
+   * 用兩道 repeating gradient 畫，**沒有任何子元素** ——
+   * 一首七言絕句是 4 × 7 ＝ 28 格，十一列就是 308 個元素，
+   * 而 HTML 的預算只剩 3.1 KB。漸層讓每一列只多一個 span。
+   *
+   * 外框用 `--c-rule-strong`、格線用 `--c-rule`，跟詩頁上的
+   * 版框（外粗內細）與界欄是同一套說法。角是方的，理由同版框。
+   */
+  .entry__shape {
+    flex: none;
+    inline-size: calc(var(--shape-cols) * var(--shape-cell));
+    block-size: calc(var(--shape-rows) * var(--shape-cell));
+    --shape-cell: 7px;
+    border: 1px solid var(--c-rule-strong);
+    background-image:
+      repeating-linear-gradient(
+        to right,
+        var(--c-rule) 0 1px,
+        transparent 1px var(--shape-cell)
+      ),
+      repeating-linear-gradient(
+        to bottom,
+        var(--c-rule) 0 1px,
+        transparent 1px var(--shape-cell)
+      );
+    transition: border-color var(--dur-fast) var(--ease);
+  }
+
+  /* 整列有回應時這一格也跟著 —— `:focus-within` 是鍵盤的那一半 */
+  .entry:hover .entry__shape,
+  .entry:focus-within .entry__shape {
+    border-color: var(--c-flame);
+  }
+
+  /* 窄螢幕收起來：那裡橫向的每一格都要省 */
+  @media (max-width: 34rem) {
+    .entry__shape { display: none; }
+  }
 
   .entry__link { text-decoration: none; }
 
