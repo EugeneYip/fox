@@ -29,6 +29,20 @@ const platforms = await getActivePlatforms();
 const name = pick(site.name, locale) ?? site.name[DEFAULT_LOCALE];
 const tagline = pick(site.tagline, locale) ?? '';
 const gloss = pick(site.epigraph.gloss, locale) ?? '';
+
+/*
+ * 題辭逐句切開，一句一欄。
+ *
+ * 本來是靠 `max-inline-size` 剛好等於「五個字」，讓它自己斷在逗號上 ——
+ * 那是碰運氣不是規則。2026-09-11 接出後兩句時當場破功：
+ * 放寬到六個字之後，它斷成「青青子衿，悠」與「悠我心」。
+ *
+ * （`word-break` 在這裡是 `normal`，那是修「倒十字架」時定的：
+ * WebKit 在直排底下對 `keep-all` 不產生斷點。所以斷在哪裡由字數決定，
+ * 不由標點決定 —— 除非像現在這樣自己把句子分開。）
+ */
+const epigraphLines = (text: string) =>
+  text.split(/(?<=，)/).map((line) => line.trim()).filter(Boolean);
 ---
 
 <Base locale={locale} bare>
@@ -51,7 +65,47 @@ const gloss = pick(site.epigraph.gloss, locale) ?? '';
           「《詩經・鄭風・子衿》」。用 zh-Hant 而不是 zh-Hant-TW —— 古典漢文
           不屬於任何一個地區。
         */}
-        <blockquote lang="zh-Hant">{site.epigraph.text}</blockquote>
+        {/*
+          點一下把〈子衿〉的後兩句接出來。
+
+          為什麼是 `<details>` 而不是 `:hover`：手機沒有 hover。
+          `<summary>` 本來就能用鍵盤走到、能點、能按空白鍵 ——
+          換成 hover 的話這個互動在手機上等於不存在。
+
+          `<details>` 放在 `<blockquote>` **裡面**不是外面：
+          `<summary>` 只收 phrasing content，`<blockquote>` 是 flow，
+          塞進去是不合法的 HTML。反過來包就兩邊都對。
+
+          直排之下，接出來的那兩句會落在第一句的**左邊** ——
+          那正是直排的下一行該在的位置，不必另外排。
+        */}
+        <blockquote lang="zh-Hant">
+          <details class="epi">
+            <summary class="epi__head">
+              {epigraphLines(site.epigraph.text).map((line, i) => (
+                <>
+                  {i > 0 && <br />}
+                  {/*
+                    `lang` 標在**每一句**上，不是只標在外面的 `<blockquote>`。
+                    繼承在語意上沒問題，但 `check:a11y` 的 `unlabelled-cjk`
+                    是用「往前 1200 字元內有沒有 lang、中間不能有關閉標籤」
+                    近似祖先的 —— 兄弟元素的 `</span>` 就把它擋住了。
+                    標明白比依賴繼承可靠，別的工具也未必都做完整的祖先查詢。
+                  */}
+                  <span class="epi__line" lang="zh-Hant">{line}</span>
+                </>
+              ))}
+            </summary>
+            <span class="epi__more">
+              {epigraphLines(site.epigraph.more).map((line, i) => (
+                <>
+                  {i > 0 && <br />}
+                  <span class="epi__line" lang="zh-Hant">{line}</span>
+                </>
+              ))}
+            </span>
+          </details>
+        </blockquote>
         <figcaption>
           <span class="hero__source" lang="zh-Hant">{site.epigraph.source}</span>
           {locale !== 'zh-TW' && <span class="hero__gloss faint">{gloss}</span>}
@@ -182,7 +236,11 @@ const gloss = pick(site.epigraph.gloss, locale) ?? '';
     letter-spacing: 0.2em;
     margin-inline-end: -0.2em;
     writing-mode: vertical-rl;
-    max-inline-size: 6.4em;
+    /*
+     * 欄長不再寫死。哪裡換欄由上面那個 `epigraphLines` 的 `<br>` 決定 ——
+     * 一句一欄，跟字數無關。（本來是 `max-inline-size: 6.4em`
+     * ＝「剛好放得下五個字」，靠的是運氣，接出後兩句就破功了。）
+     */
     /* 兩列之間留一點氣口，不要黏在一起 */
     line-height: 2;
     /*
@@ -207,6 +265,47 @@ const gloss = pick(site.epigraph.gloss, locale) ?? '';
      * 仍然成立 —— 只是**靠的是 `normal`，不是 `keep-all`**。
      */
     word-break: normal;
+  }
+
+  /*
+   * ── 題辭的後兩句 ───────────────────────────────────
+   *
+   * 收起來時只有那兩句，跟以前一模一樣；點一下第二聯接在左邊。
+   * 直排之下這是「下一行」該在的位置，所以版面不必另外排。
+   *
+   * 不畫三角形：`.prose details` 那個標記是給文章裡的補充用的，
+   * 這裡是一句詩，旁邊掛一個記號會壞掉。改成**碰到才變色** ——
+   * 不明說「可以點」，讓它像書上一處被翻得比較舊的地方。
+   * （`list-style: none` ＋ `::-webkit-details-marker` 兩個都要，
+   * 這個站的 `.prose details` 已經踩過一次。）
+   */
+  .epi {
+    display: contents;
+  }
+
+  .epi__head {
+    cursor: pointer;
+    list-style: none;
+    transition: color var(--dur-fast) var(--ease);
+  }
+
+  .epi__head::-webkit-details-marker {
+    display: none;
+  }
+
+  .epi__head:hover,
+  .epi__head:focus-visible {
+    color: var(--c-flame-ink);
+  }
+
+  /* 接出來的那兩句比前兩句淡一點 —— 它是往下走的那一步，不是並列 */
+  .epi__more {
+    color: var(--c-ink-soft);
+  }
+
+  /* 一句不折 —— 跟詩頁的 `.poem__line` 同一個道理 */
+  .epi__line {
+    white-space: nowrap;
   }
 
   .hero__epigraph figcaption {

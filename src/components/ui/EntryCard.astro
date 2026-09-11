@@ -173,6 +173,11 @@ const shapeRows = shapeLines.length
     block-size: calc(var(--shape-rows) * var(--shape-cell));
     --shape-cell: 7px;
     border: 1px solid var(--c-rule-strong);
+    /*
+     * 三層：兩層格線（上面），一層狐火的暈染（最底下）。
+     * 暈染平常寬度是 0，碰到整列時從**右邊**掃進來 ——
+     * 右邊起頭是因為直排的詩就是從右邊讀起的。
+     */
     background-image:
       repeating-linear-gradient(
         to right,
@@ -183,14 +188,26 @@ const shapeRows = shapeLines.length
         to bottom,
         var(--c-rule) 0 1px,
         transparent 1px var(--shape-cell)
-      );
-    transition: border-color var(--dur-fast) var(--ease);
+      ),
+      linear-gradient(var(--c-flame-wash), var(--c-flame-wash));
+    background-repeat: repeat, repeat, no-repeat;
+    background-position: 0 0, 0 0, right center;
+    background-size: auto, auto, 0% 100%;
+    transition:
+      border-color var(--dur-fast) var(--ease),
+      background-size var(--dur-slow) var(--ease);
   }
 
   /* 整列有回應時這一格也跟著 —— `:focus-within` 是鍵盤的那一半 */
   .entry:hover .entry__shape,
   .entry:focus-within .entry__shape {
     border-color: var(--c-flame);
+    background-size: auto, auto, 100% 100%;
+  }
+
+  /* 會動的只有那層暈染；不要動就只留顏色的變化 */
+  @media (prefers-reduced-motion: reduce) {
+    .entry__shape { transition: border-color var(--dur-fast) var(--ease); }
   }
 
   /* 窄螢幕收起來：那裡橫向的每一格都要省 */
