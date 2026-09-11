@@ -109,8 +109,8 @@ export const ui = {
    * 可及名稱本來就是動詞（`poem.nowVertical`：「目前是直排，按一下改為橫排」），
    * 所以這一改也讓看得見的字跟聽得到的話對上了。
    */
-  'poem.toVertical': { 'zh-TW': '直著讀', en: 'Read in columns' },
-  'poem.toHorizontal': { 'zh-TW': '橫著讀', en: 'Read across' },
+  'poem.toVertical': { 'zh-TW': '直讀', en: 'Read in columns' },
+  'poem.toHorizontal': { 'zh-TW': '橫讀', en: 'Read across' },
   'poem.listen': { 'zh-TW': '聽朗讀', en: 'Listen' },
   'poem.readings': { 'zh-TW': '讀音', en: 'How to read it' },
   /*

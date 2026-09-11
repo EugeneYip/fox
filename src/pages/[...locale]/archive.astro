@@ -117,7 +117,20 @@ const otherTotal =
      *
      * 跟 PlatformGrid 的 `minmax(min(14rem, 100%), 1fr)` 是同一種修法。
      */
-    grid-template-columns: min(5.5rem, 30%) min(1.6rem, 10%) 1fr;
+    /*
+     * 第三軌是 `minmax(0, 1fr)` 不是 `1fr`。
+     *
+     * `1fr` 的自動最小值是 min-content，而 `word-break: keep-all` 之下
+     * 一個**沒有標點的標題**（〈為什麼要有一個自己的地方〉）整串就是
+     * 一個 min-content —— 320px 下那一軌被撐到 195px，整列溢出 16px。
+     * `minmax(0, …)` 讓軌道可以縮，縮不下時才由 `overflow-wrap: break-word`
+     * 把那個標題斷開。
+     *
+     * 這比全站用 `overflow-wrap: anywhere` 精準：那一版會讓**每一段文字**
+     * 都提前用最後手段斷行，而最後手段的斷行不理會中文的行首禁則
+     *（站主 2026-09-11 因此看到一個句號自己站一行）。
+     */
+    grid-template-columns: min(5.5rem, 30%) min(1.6rem, 10%) minmax(0, 1fr);
     gap: var(--s-2);
     align-items: baseline;
     padding-block: var(--s-3);
@@ -190,6 +203,6 @@ const otherTotal =
   .arc__item a:hover { color: var(--c-flame-ink); }
 
   @media (max-width: 34rem) {
-    .arc__item { grid-template-columns: min(4.5rem, 30%) min(1.6rem, 10%) 1fr; }
+    .arc__item { grid-template-columns: min(4.5rem, 30%) min(1.6rem, 10%) minmax(0, 1fr); }
   }
 </style>
