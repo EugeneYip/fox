@@ -227,6 +227,21 @@ git ls-files -- src/config/identity.local.ts   # 要沒有輸出
 詩與文章末尾那一方**留著** —— 那是落款不是標誌，站主要拿掉的話一行就好
 （`EntryLayout.astro` 與 `poems/[...slug].astro` 各一處 `<FoxSeal>`）。
 
+**五、斷句要合邏輯。** 中文改成 `word-break: keep-all`，只在標點處斷；
+長文（`.prose`）退回預設。四種做法的實測、兩個代價的數字、
+以及為什麼 `.prose` 是例外，都寫在
+[ARCHITECTURE.md](ARCHITECTURE.md) 的「斷句：只在標點處斷」。
+
+**六、圖示的快取。** 站主回報「favicon 仍然是舊版狐狸」。當天實測：
+`bellafoxy.com` 供應的四個圖示跟版控裡的**逐位元組相同**，
+而版控裡的就是重畫過的那隻 —— **伺服器這一端是對的，舊的那隻活在瀏覽器裡**
+（分頁圖示存在瀏覽器自己的 favicon 資料庫，鍵是網址，重新整理換不掉）。
+做了三件事：
+`<link rel=icon>` 的網址加上檔案內容的短雜湊（`src/lib/icons.ts`）、
+`favicon.ico` 從「副檔名叫 .ico 的 PNG」改成真正的 ICO 容器、
+以及 `npm run icons -- --check` 接進 `check:generated`
+（守的是 2026-09-09 那次「改了狐狸忘了重跑」）。
+
 ---
 
 ## 週期性檢查（loop）現在跑到哪

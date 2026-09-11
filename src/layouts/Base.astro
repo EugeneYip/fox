@@ -7,6 +7,7 @@
  */
 import { site, LOCALES, LOCALE_HREFLANG, DEFAULT_LOCALE, type Locale } from '@config/site';
 import { buildSeo, buildJsonLd, type SeoInput } from '@lib/seo';
+import { iconHref } from '@lib/icons';
 import { useTranslations, switchLocalePath } from '@i18n/utils';
 import Header from '@components/layout/Header.astro';
 import Footer from '@components/layout/Footer.astro';
@@ -87,9 +88,17 @@ const alternates = LOCALES.filter((l) => availableLocales.includes(l)).map((l) =
       <meta property="article:modified_time" content={seo.updatedAt} />
     )}
 
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="icon" href="/favicon.ico" sizes="32x32" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    {/*
+      網址後面那個 `?v=` 是圖示檔案內容的短雜湊 —— 理由寫在
+      `src/lib/icons.ts`：分頁圖示存在瀏覽器自己的 favicon 資料庫裡，
+      鍵是網址，所以換掉舊圖的唯一可靠方法是換一個網址。
+      檔案沒變雜湊就不變，不會每次建置都讓人重抓。
+      （`site.webmanifest` 裡那幾個沒加 —— 那是安裝 PWA 時才讀的，
+      而它是一份手寫的靜態檔，加了就得有人記得同步。）
+    */}
+    <link rel="icon" href={iconHref('/favicon.svg')} type="image/svg+xml" />
+    <link rel="icon" href={iconHref('/favicon.ico')} sizes="32x32" type="image/x-icon" />
+    <link rel="apple-touch-icon" href={iconHref('/apple-touch-icon.png')} />
     <link rel="manifest" href="/site.webmanifest" />
 
     <link

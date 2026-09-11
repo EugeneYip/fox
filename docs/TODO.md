@@ -170,21 +170,6 @@
   import 不了 `.ts`。要收掉的話得先決定 `check:content` 要不要跟
   `check:copy`／`make-icons` 一樣帶那個旗標
 
-- **`public/favicon.svg` 現在是產生的，但沒有東西在守它。**（2026-09-09）
-  狐狸的幾何本來在三個地方各抄一份（`FoxMark.astro`、`make-icons.mjs`、
-  `favicon.svg`），改設計那天才收攏到 `src/config/fox-mark.ts`，
-  而 favicon.svg 改由 `npm run icons` 產生。
-  問題是：**沒有跑 `npm run icons` 也不會有人說話**，
-  也沒有東西擋人去手改 favicon.svg —— `check:generated` 只認 PLATFORMS.md。
-  本來跟「顏色也是手抄的」是同一件事的兩半，**顏色那一半第 8 輪
-  （第五十四圈）做完了**（六個值改成從 `tokens.css` 剖析 `light-dark()`，
-  重跑七個檔案 md5 逐一相同；把 `--c-flame` 改成藍色再跑，七個全部跟著變）。
-  剩下的是守的那一半：`npm run icons -- --check`（重算一次跟磁碟上的比，
-  有差就 exit 1），再接進 `check:generated`。
-  **這個事故不是假設的**：2026-09-09 改狐狸設計那天，站上換了新狐狸而
-  `favicon.svg` 還是舊的 —— 分頁上的小圖示與站上的標記不一樣，
-  六道關卡與 `test:tools` 全綠
-
 - **「script 造出來的元素配不到 scoped CSS」沒有東西在守。**（2026-09-09 的事故）
   `VideoFacade` 的 `.facade iframe` 被編譯成 `iframe[data-astro-cid-…]`，
   而那個 iframe 是按下播放時 `createElement` 出來的，身上沒有那個屬性 ——

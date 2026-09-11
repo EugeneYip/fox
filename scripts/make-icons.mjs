@@ -187,6 +187,41 @@ function ogSvg({ title, tagline, epigraph }) {
  * - WebP q85 → 17.3 KB，最小，但部分社群平臺與通訊軟體不吃 WebP 的 og:image
  */
 /**
+ * 把一張 PNG 包成真正的 ICO 容器。
+ *
+ * ── 為什麼要這一段 ────────────────────────────────
+ *
+ * `public/favicon.ico` 原本是**一張 PNG，只是副檔名叫 .ico**
+ * （`file` 回報 "PNG image data, 32 x 32"）。現代瀏覽器會嗅探內容所以看得懂，
+ * 但這個檔名對外宣告的是 ICO 格式，而瀏覽器在沒有 `<link>` 指路時
+ * 會自己去要網站根目錄的 `/favicon.ico` —— 那條路上還有 Windows 的
+ * 捷徑、部分 RSS 閱讀器、以及各種連結預覽機器人，它們不一定會嗅探。
+ *
+ * ICO 從 Vista 起就允許直接裝一張 PNG，所以包一層 22 位元組的頭就好，
+ * 不必真的去產生 BMP。
+ *
+ * @param {Buffer} pngBuffer 32×32 的 PNG
+ * @param {number} size
+ * @returns {Buffer}
+ */
+function icoFromPng(pngBuffer, size) {
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(0, 0);  // 保留欄位，必須是 0
+  header.writeUInt16LE(1, 2);  // 類型：1 = 圖示（2 是滑鼠游標）
+  header.writeUInt16LE(1, 4);  // 這個檔案裡有幾張圖
+  const entry = Buffer.alloc(16);
+  entry.writeUInt8(size % 256, 0);  // 寬（256 要寫成 0，這裡是 32）
+  entry.writeUInt8(size % 256, 1);  // 高
+  entry.writeUInt8(0, 2);           // 調色盤色數，0 = 不用調色盤
+  entry.writeUInt8(0, 3);           // 保留欄位
+  entry.writeUInt16LE(1, 4);        // 色彩平面數
+  entry.writeUInt16LE(32, 6);       // 每像素位元數
+  entry.writeUInt32LE(pngBuffer.length, 8);
+  entry.writeUInt32LE(6 + 16, 12);  // 影像資料從第 22 個位元組開始
+  return Buffer.concat([header, entry, pngBuffer]);
+}
+
+/**
  * @param {string} svg
  * @param {string} outPath
  * @param {string} [background]
@@ -198,6 +233,42 @@ async function png(svg, outPath, background) {
   await mkdir(dirname(outPath), { recursive: true });
   await writeFile(outPath, buffer);
   console.log(`  ✓ ${outPath.replace(ROOT + '/', '')}  ${(buffer.length / 1024).toFixed(1)} KB`);
+}
+
+/*
+ * ── `--check`：有沒有人改了狐狸卻忘了重跑 ──────────────
+ *
+ * 2026-09-09 的事故：狐狸重畫那天，`FoxMark.astro` 換了新的，
+ * 而 `favicon.svg` 還是舊的 —— 分頁上的小圖示跟站上的標記不一樣，
+ * 而六道關卡與 `test:tools` **全綠**（PNG 是二進位，掃字串的檢查看不進去）。
+ * 幾何後來收攏到 `src/config/fox-mark.ts` 一份了，但「忘記重跑」這件事
+ * 仍然沒有人在守。這就是那道守門。
+ *
+ * **只比對 `favicon.svg`**，理由是它是這裡唯一**逐位元組確定**的產物：
+ * 它是一串字，同一份輸入在任何機器上都一樣。
+ *
+ * PNG 與分享圖刻意不比：
+ *   · PNG 由 sharp／libvips 編碼，換一個版本就可能換一組位元組
+ *   · 分享圖上的中文要靠**系統字型**算出來，CI 的 Ubuntu 上會變豆腐格
+ * 拿它們去比，CI 會紅在跟狐狸無關的事情上 —— 那種檢查會被學會忽略。
+ *
+ * 它證明的是「有人跑過 `npm run icons`」（六個檔案是同一支腳本
+ * 一次寫出來的），不是「六個檔案都對」。這個分寸寫在這裡，不要誤讀。
+ */
+const CHECK = process.argv.includes('--check');
+
+if (CHECK) {
+  const want = faviconSvg();
+  const have = await readFile(resolve(PUBLIC, 'favicon.svg'), 'utf8').catch(() => '');
+  if (have === want) {
+    console.log('✓ public/favicon.svg 跟 src/config/fox-mark.ts 對得上');
+    process.exit(0);
+  }
+  console.error('X public/favicon.svg 跟 src/config/fox-mark.ts 對不上了。');
+  console.error('  改法：跑 `npm run icons` 重新產生（六個圖示與分享圖會一起更新）。');
+  console.error('  這不只是檔案整潔：分頁上的小圖示會一直是舊的那隻狐狸，');
+  console.error('  而 PNG 是二進位，其他每一道檢查都看不進去。');
+  process.exit(1);
 }
 
 console.log('\n產生圖示與分享圖\n' + '─'.repeat(40));
@@ -215,8 +286,17 @@ await png(
 );
 await png(iconSvg({ size: 180, padding: 0.1 }), resolve(PUBLIC, 'apple-touch-icon.png'), PAPER);
 
-// favicon.ico：現代瀏覽器讀 SVG，這個是給舊瀏覽器與部分 RSS 閱讀器的備援
-await png(iconSvg({ size: 32, padding: 0.06 }), resolve(PUBLIC, 'favicon.ico'), PAPER);
+// favicon.ico：現代瀏覽器讀 SVG，這個是給舊瀏覽器與部分 RSS 閱讀器的備援。
+// 包成真的 ICO 容器 —— 副檔名說什麼，檔案就該是什麼（見 icoFromPng 的說明）。
+{
+  const body = await sharp(Buffer.from(iconSvg({ size: 32, padding: 0.06 })))
+    .flatten({ background: PAPER })
+    .png({ compressionLevel: 9, effort: 10 })
+    .toBuffer();
+  const ico = icoFromPng(body, 32);
+  await writeFile(resolve(PUBLIC, 'favicon.ico'), ico);
+  console.log(`  ✓ public/favicon.ico  ${(ico.length / 1024).toFixed(1)} KB（真的 ICO 容器）`);
+}
 
 await png(
   ogSvg({
