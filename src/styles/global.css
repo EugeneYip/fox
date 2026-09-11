@@ -616,7 +616,17 @@ body {
  *   頁首底下       一條狐火的細線，走完＝讀完
  */
 @supports (animation-timeline: view()) {
-  @media (prefers-reduced-motion: no-preference) {
+  /*
+   * `screen and` 不是多餘的。
+   *
+   * 2026-09-11 用 CSSOM 把 `@media print` 打開實測：列印時這幾條
+   * **照樣掛著**（`animation-name` 算出來是 `rise-in`）。
+   * 內容沒有被藏起來（透明度量到 1 —— 時間軸不作用時效果不套用），
+   * 但紙上沒有捲動這回事，這幾條在那裡沒有任何意義，
+   * 而「它現在剛好沒事」跟「它不會有事」是兩件事。
+   * 這個站的詩是會被印出來貼在牆上的，那條路不值得賭。
+   */
+  @media screen and (prefers-reduced-motion: no-preference) {
     /*
      * `animation-range: entry` 的意思是「從元素剛進畫面到完全進來」。
      * 已經在畫面上（首屏）的元素，那段範圍一開始就走完了，
@@ -680,7 +690,8 @@ body {
  * 那是對的：沒有進度可言。
  */
 @supports (animation-timeline: scroll()) {
-  @media (prefers-reduced-motion: no-preference) {
+  /* 同上：紙上沒有「讀到哪裡了」這回事 */
+  @media screen and (prefers-reduced-motion: no-preference) {
     .site-header::after {
       content: "";
       position: absolute;
@@ -771,7 +782,21 @@ body {
     --c-ink-soft: #333;
   }
 
-  body { font-size: 11pt; }
+  body {
+    font-size: 11pt;
+    /*
+     * 紙上不需要紙紋 —— **那本來就是紙**。
+     *
+     * 2026-09-11 實測（CSSOM 把 @media print 打開）：那張 SVG 雜訊
+     * **一路活到列印樣式裡**。預設的列印設定不印背景圖，所以多數人看不到；
+     * 但只要勾了「列印背景圖形」，每一頁都會蓋上一層灰色的雜訊 ——
+     * 白白耗墨，而且在真的紙上模擬紙的質感沒有意義。
+     *
+     * 界欄（`.poem__stanza` 的背景）沒有一起關：那一條在紙上是**對的**，
+     * 勾了背景圖形的人印出來會拿到一張更完整的書葉。
+     */
+    background-image: none;
+  }
 
   .site-header,
   .site-footer { display: none !important; }
