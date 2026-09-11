@@ -633,6 +633,7 @@ CSS token 的層級、對比表上的「這是哪裡」），再去對照它真�
 | 想知道 | 看 |
 |---|---|
 | 為什麼要這樣設計 | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| 視覺現在量到什麼、下一步做什麼 | [VISUAL.md](VISUAL.md) |
 | 怎麼上線 | [DEPLOY.md](DEPLOY.md) |
 | 怎麼寫文章（給不寫程式的人） | [CONTENT.md](CONTENT.md) |
 | 隱私開關怎麼調 | [PRIVACY.md](PRIVACY.md) |

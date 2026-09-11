@@ -63,6 +63,7 @@ npm run dev        # http://localhost:4321
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | 為什麼這樣設計 |
 | [PRIVACY.md](docs/PRIVACY.md) | 隱私開關怎麼調 |
 | [A11Y.md](docs/A11Y.md) | 無障礙：自動守住的，與**只能靠人的那三件怎麼做** |
+| [VISUAL.md](docs/VISUAL.md) | 視覺：量到的現況、這個瀏覽器上能用什麼、打算怎麼做 |
 | [PLATFORMS.md](docs/PLATFORMS.md) | 24 個平臺的對照表（自動產生） |
 | [REVIEW-LOG.md](docs/REVIEW-LOG.md) | 週期性自我檢查的輪替順序與紀錄 |
 
