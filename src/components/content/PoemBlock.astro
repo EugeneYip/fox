@@ -135,8 +135,8 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
       data-label-vertical={t('poem.nowVertical')}
       data-label-horizontal={t('poem.nowHorizontal')}
     >
-      <span aria-hidden="true" data-when="vertical">{t('poem.horizontal')}</span>
-      <span aria-hidden="true" data-when="horizontal">{t('poem.vertical')}</span>
+      <span aria-hidden="true" data-when="vertical">{t('poem.toHorizontal')}</span>
+      <span aria-hidden="true" data-when="horizontal">{t('poem.toVertical')}</span>
     </button>
   </header>
 
@@ -214,20 +214,36 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
 
   .poem__author { font-weight: 600; }
 
+  /*
+   * ── 這顆按鈕本來太像一行註記 ────────────────────────
+   *
+   * 2026-09-11 量到的：51×31px，字是 `--c-ink-faint` —— 全站**最淡**的
+   * 那一階（那一階的用途是日期與註記）。一個可以按的東西，顏色比它旁邊
+   * 的作者名還淡，而且字是名詞。站主因此以為這個功能不見了。
+   *
+   * 三件事一起改：字改成動詞（見 ui.ts）、顏色升到 `--c-ink-soft`、
+   * 補上 `:focus-visible` —— 原本只有 `:hover` 有回饋，鍵盤只拿得到
+   * 全域的焦點框，拿不到這顆按鈕自己的那一份。
+   */
   .poem__toggle {
     margin-block-start: var(--s-2);
     font-size: var(--t-xs);
-    color: var(--c-ink-faint);
+    color: var(--c-ink-soft);
     /* 這是按鈕，邊界要看得出來 */
     border: 1px solid var(--c-edge);
     border-radius: 999px;
-    padding: 0.2em 0.9em;
-    transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+    padding: 0.3em 1em;
+    transition:
+      color var(--dur-fast) var(--ease),
+      border-color var(--dur-fast) var(--ease),
+      background var(--dur-fast) var(--ease);
   }
 
-  .poem__toggle:hover {
+  .poem__toggle:hover,
+  .poem__toggle:focus-visible {
     color: var(--c-flame-ink);
     border-color: var(--c-flame);
+    background: var(--c-flame-wash);
   }
 
   /* 按鈕上顯示的是「切換到哪個模式」，所以跟目前狀態相反 */

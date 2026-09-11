@@ -96,8 +96,21 @@ export const ui = {
   'poem.plain': { 'zh-TW': '白話', en: 'In plain words' },
   'poem.notes': { 'zh-TW': '注', en: 'Notes' },
   'poem.thoughts': { 'zh-TW': '狐狸說', en: 'The fox says' },
-  'poem.vertical': { 'zh-TW': '直排', en: 'Vertical' },
-  'poem.horizontal': { 'zh-TW': '橫排', en: 'Horizontal' },
+  /*
+   * ── 按鈕上的字是動詞，不是名詞 ──────────────────────
+   *
+   * 本來是「直排」／「橫排」。站主 2026-09-11 在畫面上**找不到這顆按鈕**，
+   * 問「詩詞是不是沒了橫向版本及直向版本」。
+   *
+   * 量到的其中一半是螢幕寬度（768px 以下刻意藏起來），另一半是這兩個字：
+   * 一首**直排**的詩底下擺著「橫排」兩個字，看起來像在標示這是什麼，
+   * 而且標的還是相反的東西 —— 名詞沒有辦法分辨「這是橫排」與「改成橫排」。
+   *
+   * 可及名稱本來就是動詞（`poem.nowVertical`：「目前是直排，按一下改為橫排」），
+   * 所以這一改也讓看得見的字跟聽得到的話對上了。
+   */
+  'poem.toVertical': { 'zh-TW': '改為直排', en: 'Switch to vertical' },
+  'poem.toHorizontal': { 'zh-TW': '改為橫排', en: 'Switch to horizontal' },
   'poem.listen': { 'zh-TW': '聽朗讀', en: 'Listen' },
   'poem.readings': { 'zh-TW': '讀音', en: 'How to read it' },
   /*
