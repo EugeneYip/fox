@@ -18,8 +18,17 @@ export const LOCALE_PATH: Record<Locale, string> = {
   en: 'en',
 };
 
+/*
+ * 語言自己的名字，用它自己的文字寫。
+ *
+ * 站主 2026-09-11 定的：這個站說「中文」就是指正體中文，
+ * 標籤不必寫「繁體中文」—— 那是用來跟別種中文區分時才需要的說法，
+ * 而這裡沒有別種中文可以混淆。
+ * （`<html lang>` 與 hreflang 仍然是 zh-Hant-TW，見下面那一張表 ——
+ * 機器需要那個精確度，讀者不需要。）
+ */
 export const LOCALE_LABEL: Record<Locale, string> = {
-  'zh-TW': '繁體中文',
+  'zh-TW': '中文',
   en: 'English',
 };
 

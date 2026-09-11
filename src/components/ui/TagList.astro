@@ -50,19 +50,50 @@ const overflow = max && tags.length > max ? tags.length - max : 0;
 
   .taglist li { margin: 0; }
 
+  /*
+   * ── 標籤改成「籤條」──────────────────────────────
+   *
+   * 本來是四周描邊的圓角膠囊 —— 那是一般網站的形狀，跟這個站
+   * 其他地方（髮絲線、方角的版框）不是同一套語彙，而且一排圓角
+   * 泡泡在一頁紙的下方特別吵。
+   *
+   * 改成夾在書裡的紙籤：方角、左邊一道書口似的粗線、底色比紙沉一點。
+   * 描邊四條變一條，一排標籤就從「一串泡泡」變成「一疊書籤」。
+   *
+   * 對比算過（--c-ink-soft 在 --c-bg-sunken 上）：淺色 6.78:1、
+   * 深色 8.09:1，兩套都過 AA 的 4.5。滑過去換成狐火那一組
+   * （--c-flame-ink 在 --c-flame-wash 上），那一組是 /archive 的
+   * 類型標記本來就在用的，已經在 check:contrast 的清單裡。
+   */
   .taglist a {
     display: inline-block;
     font-size: var(--t-xs);
-    padding: 0.15em 0.6em;
-    border: 1px solid var(--c-rule);
-    border-radius: 999px;
+    padding: 0.2em 0.7em;
+    border: 0;
+    /*
+     * 邊上那一道用苔色。tokens.css 給 --c-moss 寫的用途就是
+     * 「青綠，用在次要標記」，而在這之前它只出現在一個從來沒有算繪過的
+     * 地方（手動登錄的來源標記，站上 0 筆）—— 調色盤上有一個顏色
+     * 定義好了卻沒有在用。
+     *
+     * 也刻意不用狐火：狐火是結構的顏色（魚尾、當前頁、重點連結），
+     * 標籤是次要的。兩種紅橘色的東西擠在同一張卡片上會互相搶。
+     */
+    border-inline-start: 2px solid var(--c-moss);
+    border-radius: 0;
+    background: var(--c-bg-sunken);
     color: var(--c-ink-soft);
     text-decoration: none;
-    transition: border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+    transition:
+      border-color var(--dur-fast) var(--ease),
+      background var(--dur-fast) var(--ease),
+      color var(--dur-fast) var(--ease);
   }
 
-  .taglist a:hover {
-    border-color: var(--c-flame);
+  .taglist a:hover,
+  .taglist a:focus-visible {
+    border-inline-start-color: var(--c-flame);
+    background: var(--c-flame-wash);
     color: var(--c-flame-ink);
   }
 

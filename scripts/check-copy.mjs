@@ -1358,7 +1358,10 @@ if (process.argv.includes('--verbose')) {
  *
  * 順序反過來的話，`rule-not-documented` 與 `unused-i18n-key` 這兩條
  * **不吃語料**的規則會被蓋掉 —— 它們看的是 CLAUDE.md 與 ui.ts，
- * 而 CLAUDE.md 在 SKIP 裡、不算「掃到的檔案」。
+ * 而那兩份都不是**逐行掃語料**的主體。
+ * （這裡本來寫「CLAUDE.md 在 SKIP 裡」—— 那句話在第 6 輪〔第二十八圈〕
+ * 把豁免撤掉的時候就過期了，`SKIP` 現在只有 `docs/REVIEW-LOG.md`。
+ * 順序要先報問題的理由沒變，過期的是理由裡舉的那個例子。）
  * 第 6 輪（第十五圈）第一版就是這樣把一個真的發現變成了「一個檔案都沒掃到」。
  */
 if (problems.length > 0) {

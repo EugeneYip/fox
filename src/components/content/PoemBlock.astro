@@ -140,18 +140,24 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
     </button>
   </header>
 
-  <div class="poem__scroll">
-    <div class="poem__original" lang="zh-Hant" style={`--poem-longest-line:${longestLine}`}>
-      {stanzas.map((lines) => (
-        <p class="poem__stanza">
-          {lines.map((line, i) => (
-            <>
-              {i > 0 && <br />}
-              <span class="poem__line">{line}</span>
-            </>
-          ))}
-        </p>
-      ))}
+  {/*
+    版框 —— 木刻本書葉四周的那圈框線。這一層只負責畫框，
+    捲動與遮罩仍然在裡面那一層（見 .poem__scroll 的說明）。
+  */}
+  <div class="poem__frame">
+    <div class="poem__scroll">
+      <div class="poem__original" lang="zh-Hant" style={`--poem-longest-line:${longestLine}`}>
+        {stanzas.map((lines) => (
+          <p class="poem__stanza">
+            {lines.map((line, i) => (
+              <>
+                {i > 0 && <br />}
+                <span class="poem__line">{line}</span>
+              </>
+            ))}
+          </p>
+        ))}
+      </div>
     </div>
   </div>
 
@@ -232,6 +238,43 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
 
   /* ── 原文 ───────────────────────────────────────── */
 
+  /*
+   * ── 版框：四周雙邊 ────────────────────────────────
+   *
+   * 木刻本的書葉四周有一圈框線，外粗內細的叫「四周雙邊」。
+   * 這一首詩是整頁的中心，而它本來是浮在頁面底色上的 ——
+   * 什麼都沒有托著它。框起來之後它讀起來才像**一葉書**。
+   *
+   * 角是方的（`border-radius: 0`）。這個站其他地方都是 --r-md 的圓角，
+   * 這裡刻意不是：刻版上的框線沒有圓角，而那正是它認得出來的地方。
+   *
+   * 框畫在外面這一層、捲動留在裡面那一層，是為了不去動
+   * `.poem__scroll` 的四層背景 —— 那組遮罩的顏色必須跟**框裡的底色**
+   * 一模一樣，差一點就會出現一條看得見的帶子。
+   * 框沒有自己的底色，所以那個前提還是成立。
+   */
+  .poem__frame {
+    border: 1px solid var(--c-rule-strong);
+    border-radius: 0;
+    /* 兩條框線之間的空隙 —— 刻本上那一道也是這麼窄 */
+    padding: 4px;
+    /*
+     * 框要**貼著詩**，不是貼著欄寬。
+     *
+     * 一葉書的框線圈住的是字，不是整張紙。用 fit-content 讓短詩的框
+     * 收到詩的大小（〈登鸛雀樓〉是一個小方塊、〈月夜〉是一個橫長方塊），
+     * 再用 max-inline-size 讓長到放不下的詩把框撐到滿版 ——
+     * 那時候捲動仍然發生在裡面那一層，遮罩與影也還在。
+     */
+    inline-size: fit-content;
+    max-inline-size: 100%;
+    margin-inline: auto;
+  }
+
+  .poem__frame > .poem__scroll {
+    border: 1px solid var(--c-rule);
+  }
+
   .poem__scroll {
     /* 直排時內容往左邊長出去，需要能橫向捲動 */
     overflow-x: auto;
@@ -268,6 +311,12 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
     background-repeat: no-repeat;
     background-attachment: local, local, scroll, scroll;
     padding-block: var(--s-4);
+    /*
+     * 左右也要留一點氣口，字不要貼著內框那條線。
+     * 遮罩與影的位置是對著 padding box 算的，所以加了內距它們仍然
+     * 蓋在內容區的兩端上 —— 窄螢幕捲動時實測過。
+     */
+    padding-inline: var(--s-4);
     scrollbar-width: thin;
     display: flex;
   }

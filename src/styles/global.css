@@ -278,6 +278,50 @@ input, textarea, select {
 }
 
 /* ─────────────────────────────────────────────────────
+ * 魚尾 —— 這個站的分節標記
+ *
+ * 線裝書每一頁對摺處那一條叫「版心」，版心上會刻一個像魚尾巴的黑色
+ * 楔形（單魚尾、雙魚尾），用來對準摺線、也用來分隔卷次與頁碼。
+ * 它是**版本學裡認得出來的東西**，不是隨手畫的裝飾 ——
+ * 對一個讀中文系的人來說，它說的是「這是一頁書」。
+ *
+ * 為什麼寫在 global.css 而不是各元件的 <style>：
+ * 元件的 <style> 會被內嵌，每多一個區塊就讓 63 頁**每一頁**多一個
+ * CSP 雜湊（現在 36／41）。global.css 是外部樣式表，加規則不花那格預算。
+ * 元件的 class 名字在這裡照樣配得到 —— Astro 的 scoped 只作用在
+ * 元件自己的 <style> 上，不會改寫別人的選擇器。
+ *
+ * 形狀：上緣平、下緣中間往上凹的燕尾。`currentColor` 讓每個使用點
+ * 自己決定顏色（分節標題用狐火，版心用髮絲線）。
+ * ───────────────────────────────────────────────────── */
+
+:is(
+  .section-heading > h2,
+  .section-heading > h3,
+  .poem__section-title,
+  .poem-page__section-title
+)::before {
+  content: "";
+  display: inline-block;
+  inline-size: 0.44em;
+  block-size: 0.8em;
+  margin-inline-end: 0.55em;
+  vertical-align: -0.02em;
+  background: var(--c-flame);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 58%, 0 100%);
+}
+
+/*
+ * 小字的那兩個（詩頁的分節標籤是 --t-xs）按比例會小到看不出形狀，
+ * 所以給它們一個下限：em 之外再撐一點。
+ */
+:is(.poem__section-title, .poem-page__section-title)::before {
+  inline-size: 0.5em;
+  block-size: 0.95em;
+  margin-inline-end: 0.6em;
+}
+
+/* ─────────────────────────────────────────────────────
  * 正文排版（文章內容）
  * ───────────────────────────────────────────────────── */
 

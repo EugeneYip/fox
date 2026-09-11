@@ -1,7 +1,6 @@
 ---
 import { site, footerNav, DEFAULT_LOCALE, type Locale } from '@config/site';
 import { useTranslations, localizePath, pick } from '@i18n/utils';
-import FoxSeal from '@components/fox/FoxSeal.astro';
 import { year } from '@lib/dates';
 
 interface Props { locale: Locale }
@@ -36,10 +35,6 @@ const penName = pick(site.penName, locale) ?? site.penName[DEFAULT_LOCALE];
 
 <footer class="site-footer">
   <div class="wrap site-footer__inner">
-    <div class="site-footer__mark">
-      <FoxSeal char="狐" size={40} />
-    </div>
-
     <div class="site-footer__body ui">
       <nav aria-label={t('footer.builtWith')}>
         <ul>
@@ -64,29 +59,72 @@ const penName = pick(site.penName, locale) ?? site.penName[DEFAULT_LOCALE];
 </footer>
 
 <style>
+  /*
+   * ── 頁尾：拿掉「狐」印，改成版心的魚尾 ──────────────
+   *
+   * 站主 2026-09-11 說最下方不需要用「狐」代表。原本那裡是一方
+   * 40px 的朱文印章，等於在每一頁的底部再擺一次 logo。
+   *
+   * 換成線裝書的版心標記：一條界線從中間垂下來，末端是一個魚尾。
+   * 書葉對摺之後，版心就在紙的最外緣 —— 一頁的盡頭本來就長這樣。
+   * 它不是誰的代表，它是「這一葉到這裡為止」。
+   *
+   * 用 ::before／::after 畫，不加任何元素，也不加標記 ——
+   * 純裝飾的東西不該進到無障礙樹裡。
+   */
   .site-footer {
+    position: relative;
     border-block-start: var(--border-thin);
-    padding-block: var(--s-6) var(--s-7);
+    padding-block: var(--s-7) var(--s-7);
     margin-block-start: auto;
   }
 
-  .site-footer__inner {
-    display: flex;
-    gap: var(--s-5);
-    align-items: flex-start;
+  /* 從那條分隔線垂下來的一小段界線 */
+  .site-footer::before {
+    content: "";
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 50%;
+    translate: -50% 0;
+    inline-size: 1px;
+    block-size: var(--s-5);
+    background: var(--c-rule-strong);
   }
 
-  .site-footer__mark { flex: none; }
+  /* 界線末端的魚尾 */
+  .site-footer::after {
+    content: "";
+    position: absolute;
+    inset-block-start: var(--s-5);
+    inset-inline-start: 50%;
+    translate: -50% 0;
+    inline-size: 0.6rem;
+    block-size: 0.85rem;
+    background: var(--c-flame);
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 58%, 0 100%);
+  }
+
+  /*
+   * 印章拿掉之後，頁尾剩下兩行字靠在左邊，而版心的魚尾在正中間 ——
+   * 兩個重心。改成整個置中：魚尾、連結、版權一條軸線下來，
+   * 讀起來是「一卷到此為止」，不是「左下角還有東西」。
+   */
+  .site-footer__inner {
+    display: flex;
+    justify-content: center;
+  }
 
   .site-footer__body {
     display: flex;
     flex-direction: column;
+    align-items: center;
     gap: var(--s-3);
   }
 
   .site-footer nav ul {
     display: flex;
     flex-wrap: wrap;
+    justify-content: center;
     gap: var(--s-2) var(--s-4);
     list-style: none;
     margin: 0;
@@ -131,7 +169,4 @@ const penName = pick(site.penName, locale) ?? site.penName[DEFAULT_LOCALE];
     font-size: var(--t-xs);
   }
 
-  @media (max-width: 34rem) {
-    .site-footer__inner { flex-direction: column; }
-  }
 </style>

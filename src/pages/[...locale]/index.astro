@@ -150,13 +150,30 @@ const gloss = pick(site.epigraph.gloss, locale) ?? '';
   }
 
   .hero__epigraph {
-    margin: var(--s-5) 0 0;
+    margin: var(--s-6) 0 0;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--s-2);
+    gap: var(--s-4);
   }
 
+  /*
+   * ── 題辭改成直排 ──────────────────────────────────
+   *
+   * 《子衿》這兩句本來就是直著寫的。橫排的時候它跟底下的標語、
+   * 上面的標題排成同一個方向，整個首頁只有一種軸 ——
+   * 而這是一個直排詩詞的站，首頁卻沒有一個字是直的。
+   *
+   * `max-inline-size` 在 `vertical-rl` 底下是**一行的長度（高度）**，
+   * 所以 6.4em 的意思是「一列放得下五個字」——「青青子衿，」剛好五格
+   * （全形逗號佔一格，而它照行首禁則不會被丟到下一列的開頭），
+   * 「悠悠我心」自己成為左邊那一列。兩列由右往左，跟古書一樣。
+   *
+   * 換別的句子也不會壞，只是換個地方折 —— 這裡沒有寫死字數。
+   *
+   * `margin-inline-end` 那一行不用改：它補的是 letter-spacing 在
+   * **行末**多出來的那一格，而邏輯屬性在直排時自己就指到下方了。
+   */
   .hero__epigraph blockquote {
     border: 0;
     padding: 0;
@@ -164,6 +181,10 @@ const gloss = pick(site.epigraph.gloss, locale) ?? '';
     color: var(--c-ink);
     letter-spacing: 0.2em;
     margin-inline-end: -0.2em;
+    writing-mode: vertical-rl;
+    max-inline-size: 6.4em;
+    /* 兩列之間留一點氣口，不要黏在一起 */
+    line-height: 2;
   }
 
   .hero__epigraph figcaption {

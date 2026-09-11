@@ -392,6 +392,41 @@ const CASES = {
       'dist/en/index.html': html('<p>Loading... please wait.</p>'),
     },
   },
+
+  /*
+   * ── 大陸用語：詞那一支 ──────────────────────────────
+   *
+   * 兩支要分開測。`taiwan-tai` 的教訓（第 6 輪〔第八圈〕）：一個 hit
+   * 同時含兩支的違規時，砍掉其中一支那一格照樣綠 —— 證明不了被砍的
+   * 那一支還活著。這裡也一樣，所以詞與字形各一格。
+   *
+   * miss 那幾句是這條規則**最容易冤枉的好人**，而且每一句都過得了
+   * subject（有漢字），所以它們真的被判斷過：
+   *   質量  物理的 mass
+   *   用戶  用戶名稱
+   *   水平  水平方向
+   *   刷新  刷新紀錄
+   *   菜單  餐廳的菜單
+   *   牀    〈靜夜思〉的異文
+   * 把清單放寬到把這些收進去的話，這一格會當場紅。
+   */
+  'mainland-wording（詞）': {
+    expect: 'mainland-wording',
+    hit: { 'dist/index.html': html('<p>把視頻上傳到網絡上，默認是公開的。</p>') },
+    miss: {
+      'dist/index.html': html(
+        '<p>質量是物理量，用戶名稱要填，水平方向沒有溢出，刷新紀錄的那一天，' +
+          '餐廳的菜單，〈靜夜思〉有一種版本寫「牀前明月光」。</p>',
+      ),
+    },
+  },
+
+  /* 字形那一支：臺灣用「裡、為、著、麼」 */
+  'mainland-wording（字形）': {
+    expect: 'mainland-wording',
+    hit: { 'dist/index.html': html('<p>他站在那裏，爲了看着月亮。</p>') },
+    miss: { 'dist/index.html': html('<p>他站在那裡，為了看著月亮。</p>') },
+  },
 };
 
 let failed = 0;
