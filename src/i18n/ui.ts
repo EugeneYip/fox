@@ -26,6 +26,14 @@ export const ui = {
     en: '(no version of this page; goes to the home page)',
   },
   /*
+   * 上面那一句是唸給螢幕閱讀器聽的 —— 它沒有版面的限制，
+   * 而且聽的人看不到選單長什麼樣，所以要把話說完。
+   *
+   * 這一個是給眼睛看的同一件事：兩個字，跟在「English」後面。
+   * 兩句不是重複 —— 一句在補脈絡，一句在標目的地，長度的預算差很多。
+   */
+  'nav.languageToHome': { 'zh-TW': '首頁', en: 'home' },
+  /*
    * 上下篇導覽的名稱。
    * 原本跟主選單共用 'nav.menu'，結果同一頁出現兩個都叫「選單」的
    * navigation 地標 —— 螢幕閱讀器的地標清單裡分不出哪個是哪個。

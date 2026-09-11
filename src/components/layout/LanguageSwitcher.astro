@@ -61,7 +61,23 @@ const localeHome = (l: Locale) => localizePath('/', l);
             說「這一頁沒有中文版」在中文頁上是錯的。
           */}
           {l !== locale && !available.includes(l) && (
-            <span class="sr-only" lang={locale}>{' ' + t('nav.languageNoPage')}</span>
+            <>
+              {/*
+                看得見的那一半。第 1 輪（第五十二圈）只補了 sr-only，
+                於是**只有聽的人知道這件事**：畫面上仍然只有「English」，
+                按下去仍然會離開這一頁（19 個中文頁 ＋ 404）。
+                `docs/TODO.md` 把它記成「文案與版面的決定」，2026-09-11 決定了。
+
+                `aria-hidden` 是必要的：這兩個字跟底下那句 sr-only 講的是
+                同一件事，兩個都進可及名稱的話會唸成
+                「English 首頁 （這一頁沒有這個語言的版本，會到首頁）」。
+                眼睛看短的，耳朵聽完整的。
+              */}
+              <span class="lang__to-home faint" lang={locale} aria-hidden="true">
+                {t('nav.languageToHome')}
+              </span>
+              <span class="sr-only" lang={locale}>{' ' + t('nav.languageNoPage')}</span>
+            </>
           )}
         </a>
       </li>
@@ -111,12 +127,21 @@ const localeHome = (l: Locale) => localizePath('/', l);
   .lang__menu li { margin: 0; }
 
   .lang__menu a {
-    display: block;
+    /* flex 而不是 block：右邊要放得下「首頁」那個標記，而且要推到最右 */
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--s-4);
     padding: var(--s-2) var(--s-3);
     font-size: var(--t-sm);
     text-decoration: none;
     border-radius: var(--r-sm);
     white-space: nowrap;
+  }
+
+  /* 「會到首頁」那兩個字 —— 淡、小，不跟語言的名字搶 */
+  .lang__to-home {
+    font-size: var(--t-xs);
   }
 
   .lang__menu a:hover { background: var(--c-bg-sunken); }
