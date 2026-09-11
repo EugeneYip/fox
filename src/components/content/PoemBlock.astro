@@ -305,7 +305,13 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
     flex: none;
 
     font-size: var(--t-lg);
-    line-height: 2.1;
+    /*
+     * 接回 token。`check:contrast` 的「未使用」那一段一直在說這件事：
+     * 「--lh-loose（值 `2.1` 直接寫在 PoemBlock.astro 的 line-height）」，
+     * 而它自己也寫了判準 ——「token 沒有當成唯一來源：改了 tokens.css，
+     * 那邊不會跟著動」。第 8 輪（第五十四圈）照著做了。
+     */
+    line-height: var(--lh-loose);
     letter-spacing: 0.14em;
 
     /*
@@ -469,11 +475,16 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
     color: var(--c-flame-ink);
   }
 
+  /*
+   * 注的解釋是散文，不是標題 —— 用內文的行距。
+   * 第 8 輪（第五十四圈）量到：13.2px 的字配 19.1px 的行框，
+   * 兩行中文之間只剩 5.9px，而同一頁的白話有 15.4px。
+   */
   .poem__annotation dd {
     margin: 0;
     color: var(--c-ink-soft);
     font-size: var(--t-sm);
-    line-height: var(--lh-snug);
+    line-height: var(--lh-body);
   }
 
   .poem__plain {

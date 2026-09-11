@@ -16,7 +16,7 @@
  * 在 CI（Ubuntu）上可能缺中文字型而變成豆腐格，所以這個腳本設計成
  * 手動在本機跑，不放進 GitHub Actions。
  */
-import { writeFile, mkdir } from 'node:fs/promises';
+import { writeFile, mkdir, readFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
@@ -47,17 +47,51 @@ import { FOX_HEAD, FOX_EYE_L, FOX_EYE_R, FOX_NOSE, FOX_VIEWBOX } from '../src/co
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC = resolve(ROOT, 'public');
 
-const PAPER = '#faf6ee';
-const FLAME = '#d2622a';
-const INK = '#1f1c18';
-const SOFT = '#55504a';
+/*
+ * ── 顏色也從 tokens.css 讀，不再手抄 ──────────────────
+ *
+ * 站名與狐狸的幾何已經各自收攏過（上面兩段註解），顏色是最後一份複本：
+ * 六個值 —— 紙、狐火、墨、次要墨，加上深色的紙與狐火 —— 在這裡寫死，
+ * 而它們就是 `tokens.css` 的 --c-bg／--c-flame／--c-ink／--c-ink-soft。
+ * 第 6 輪（第五十三圈）收字串的時候沒有一起收，理由是「要從 CSS 剖析變數
+ * 比 import 一個 .ts 麻煩」—— 但這支腳本本來就吃 --experimental-strip-types，
+ * 而 tokens.css 的寫法規律到只要一行正則。
+ *
+ * 分享圖是**二進位**：改了 tokens.css 而這裡沒跟上，站上的顏色會換、
+ * 社群卡片上的不會，而掃字串的檢查一個字都看不進去。
+ *
+ * 找不到 token 就直接拋 —— 安靜地退回一個預設色，正是這段要防的事。
+ */
+const TOKENS = await readFile(resolve(ROOT, 'src/styles/tokens.css'), 'utf8');
+
+/**
+ * 從 tokens.css 取一個顏色 token 的淺色與深色值。
+ *
+ * 認的是 `--name: light-dark(淺, 深);` 那一行（每個 token 上面還有一行
+ * 單值 fallback，那一行只有淺色，所以一律讀 light-dark 這一行）。
+ *
+ * @param {string} name 例如 `--c-bg`
+ * @returns {{ light: string, dark: string }}
+ */
+function token(name) {
+  const m = new RegExp(
+    `${name}:\\s*light-dark\\(\\s*(#[0-9a-fA-F]{3,8})\\s*,\\s*(#[0-9a-fA-F]{3,8})\\s*\\)`
+  ).exec(TOKENS);
+  if (!m) throw new Error(`tokens.css 裡找不到 ${name} 的 light-dark() 宣告`);
+  return { light: m[1], dark: m[2] };
+}
+
+const PAPER = token('--c-bg').light;
+const FLAME = token('--c-flame').light;
+const INK = token('--c-ink').light;
+const SOFT = token('--c-ink-soft').light;
 
 const FOX_PATH = FOX_HEAD;
 const EYE_L = FOX_EYE_L;
 const EYE_R = FOX_EYE_R;
 const NOSE = FOX_NOSE;
-const INK_DARK = '#14120f';
-const FLAME_DARK = '#e8834a';
+const INK_DARK = token('--c-bg').dark;
+const FLAME_DARK = token('--c-flame').dark;
 
 /**
  * public/favicon.svg —— 分頁上的那一個。

@@ -110,7 +110,18 @@ const itemLang = (item: (typeof items)[number]) =>
   .synd__title {
     font-size: var(--t-md);
     font-weight: 600;
-    line-height: var(--lh-snug);
+    /*
+     * 1.65 是刻意夾在 --lh-snug（1.45）與 --lh-body（1.85）中間的。
+     *
+     * 這是全站唯一一個**不是為這個站寫的**標題 —— 字是她在 YouTube 上
+     * 打的，站上沒有任何地方編輯它。第 8 輪（第五十四圈）在 390px 上量到
+     * 五筆各佔 4、5、3、3、4 行：它結構上是 <h3>，讀起來卻是一段文字。
+     *
+     * 1.45 讓那四五行黏成一塊深色的磚；1.85 則讓它散開，不再像一個標題
+     *（兩種都在瀏覽器裡看過才選的）。而它底下的摘要是 1.85 ——
+     * 最長的一段配最擠的行距，順序本來是反的。
+     */
+    line-height: 1.65;
     transition: color var(--dur-fast) var(--ease);
     /*
      * 這裡曾經是 `-webkit-line-clamp: 2`，理由是「外站標題常常是一整段文案，
@@ -129,7 +140,8 @@ const itemLang = (item: (typeof items)[number]) =>
      */
   }
 
-  .synd__link:hover .synd__title { color: var(--c-flame-ink); }
+  .synd__link:hover .synd__title,
+  .synd__link:focus-visible .synd__title { color: var(--c-flame-ink); }
 
   /* 外連的箭頭放在標題後面，跟站內文章區分開 */
   .synd__link .synd__title::after {
@@ -151,15 +163,16 @@ const itemLang = (item: (typeof items)[number]) =>
 
   .synd__why {
     font-size: var(--t-sm);
-    line-height: var(--lh-snug);
+    line-height: var(--lh-body);
     color: var(--c-ink-soft);
     padding-inline-start: var(--s-3);
     border-inline-start: 2px solid var(--c-moss);
     max-inline-size: 62ch;
   }
 
+  /* 摘要換行（390px 下 5 筆全部兩行），所以是段落的行距，不是標題的 */
   .synd__summary {
-    line-height: var(--lh-snug);
+    line-height: var(--lh-body);
     max-inline-size: 62ch;
     display: -webkit-box;
     -webkit-line-clamp: 2;

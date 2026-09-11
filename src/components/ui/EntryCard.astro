@@ -130,8 +130,9 @@ const subtitle = poem ? `${poem.author}${poem.dynasty ? `・${poem.dynasty}` : '
     color: var(--c-ink-faint);
   }
 
+  /* 摘要是會換行的中文段落（390px 下 6 段有 5 段換行），所以用 --lh-body */
   .entry__desc {
     max-inline-size: 62ch;
-    line-height: var(--lh-snug);
+    line-height: var(--lh-body);
   }
 </style>

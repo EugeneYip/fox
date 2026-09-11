@@ -68,7 +68,7 @@ const decorative = !title;
      *
      * 這個 rotate 轉的是整個 `<svg>` 元素，不是 viewBox 裡的內容，
      * 所以跟格子裡留多少邊界無關 —— 真正要小心的是**祖先有沒有
-     * `overflow: hidden`**。頁首那條捲動帶是第 8 輪（第五十四圈）拿掉的，
+     * `overflow: hidden`**。頁首那條橫向捲動帶是第 1 輪（第五十四圈）拿掉的，
      * 現在沒有人會裁到它；哪天又有人加回去，先量一次再說。
      *
      * 靜止的傾斜不是動效，所以 prefers-reduced-motion 不用關掉它 ——
@@ -77,6 +77,18 @@ const decorative = !title;
      */
     transform: rotate(-5deg);
     transition: transform var(--dur) var(--ease);
+  }
+
+  /*
+   * 挺起來的那一下：滑鼠有，鍵盤也要有。
+   *
+   * `:hover` 那一半包在 `@media (hover: hover)` 裡是對的（觸控裝置上
+   * hover 會黏住），但 `:focus-visible` 不受那個限制 —— 鍵盤在哪種裝置上
+   * 都可能接上去，所以寫在外面。
+   */
+  :global(a:focus-visible) > .fox-mark,
+  :global(button:focus-visible) > .fox-mark {
+    transform: rotate(0deg) scale(1.06);
   }
 
   @media (hover: hover) {

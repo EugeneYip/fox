@@ -184,10 +184,11 @@ const strings = JSON.stringify({
     margin-block-start: var(--s-1);
   }
 
+  /* 摘要會換行（六筆結果有五筆兩行），所以用段落的行距 */
   .search__results :global(.res__snippet) {
     font-size: var(--t-sm);
     color: var(--c-ink-soft);
-    line-height: var(--lh-snug);
+    line-height: var(--lh-body);
     margin-block-start: var(--s-2);
   }
 

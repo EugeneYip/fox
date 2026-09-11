@@ -117,7 +117,13 @@ const t = useTranslations(locale);
     opacity: 0.75;
   }
 
-  .pgrid__cell:hover { border-color: var(--c-rule-strong); }
+  /*
+   * `:focus-within` 跟 `:hover` 一起寫 —— 第 8 輪（第五十三圈）
+   * 把 `.entry` 與 `.arc__item` 改成整列有回應時定下的規矩，
+   * 而這一格當時漏了：滑鼠移過去邊框會變深，Tab 進去卻什麼都沒有。
+   */
+  .pgrid__cell:hover,
+  .pgrid__cell:focus-within { border-color: var(--c-rule-strong); }
 
   .pgrid__head {
     display: flex;

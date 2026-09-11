@@ -163,10 +163,17 @@ const t = useTranslations(locale);
     font-size: var(--t-xs);
   }
 
+  /*
+   * 行距跟內文一樣（--lh-body），不是 --lh-snug。
+   *
+   * 第 8 輪（第五十四圈）在瀏覽器裡量到：導言與它底下的 `.prose p`
+   * **同樣是 18.2px**，而行高是 26.3 對 33.6 —— 同一欄、同一個字級，
+   * 上面那一段卻擠 28%。導言本來就是一段會換行的中文，不是標題。
+   */
   .article__lead {
     font-size: var(--t-md);
     color: var(--c-ink-soft);
-    line-height: var(--lh-snug);
+    line-height: var(--lh-body);
   }
 
   .article__foot {
