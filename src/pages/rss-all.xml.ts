@@ -7,11 +7,33 @@ import rss from '@astrojs/rss';
 import type { APIRoute } from 'astro';
 import { site, DEFAULT_LOCALE, type Locale } from '@config/site';
 import { getAllWriting, entryUrl } from '@lib/content';
-import { getSyndication } from '@lib/syndication';
+import { getSyndication, externalKey } from '@lib/syndication';
 import { localizePath, useTranslations } from '@i18n/utils';
 
 export const GET: APIRoute = async (context) => {
   const base = context.site ?? new URL(site.url);
+
+  /*
+   * ── 站上已經有的那一篇，外站那一筆就不要再放一次 ──────────
+   *
+   * 九首詩接了她的 YouTube 短片，而 syndication 那一半也有同樣九支。
+   * 2026-09-09 把詩頁的日期改成跟影片一致之後，兩筆在這份 feed 裡變成
+   * **貼在一起**的：
+   *
+   *   Wed, 23 Oct 2024  杜甫〈月夜〉「今夜鄜州月⋯」（YouTube）
+   *   Wed, 23 Oct 2024  〈月夜〉杜甫                （站內）
+   *
+   * 同一件作品、同一天、兩筆。訂閱的人看到的是重複。
+   * 站內那一頁有原文、白話、注解、讀音，而且影片就嵌在上面 —— 它是比較完整的
+   * 那一個，所以留它。（搜尋索引做的是同一件事，只是那邊還把影片的字併進去。）
+   *
+   * 認不出來的（`externalKey` 回 null）一律留著 —— 寧可多一筆。
+   */
+  const claimed = new Set<string>();
+  for (const { entry } of await getAllWriting()) {
+    const key = 'videoUrl' in entry.data ? externalKey(entry.data.videoUrl) : null;
+    if (key) claimed.add(key);
+  }
 
   const own = (await getAllWriting()).map(({ collection, entry }) => {
     const lang = entry.data.lang as Locale;
@@ -43,6 +65,10 @@ export const GET: APIRoute = async (context) => {
    */
   const elsewhere = (await getSyndication())
     .filter((item) => item.publishedAt)
+    .filter((item) => {
+      const key = externalKey(item.url);
+      return !(key && claimed.has(key));
+    })
     .map((item) => ({
       title: `${item.title}（${item.platform.name['zh-TW']}）`,
       link: item.url,

@@ -6,6 +6,7 @@ import { getEntries, getNeighbors, getTranslations } from '@lib/content';
 import { useTranslations, localizePath } from '@i18n/utils';
 import { formatDate, isoDate } from '@lib/dates';
 import { privacy } from '@config/privacy';
+import { youtubeId } from '@lib/syndication';
 import type { Locale } from '@config/site';
 import CoverImage from '@components/content/CoverImage.astro';
 import PoemBlock from '@components/content/PoemBlock.astro';
@@ -37,19 +38,11 @@ const related = (
   await Promise.all(entry.data.related.map((ref) => getEntry(ref)))
 ).filter((r): r is CollectionEntry<'poems'> => Boolean(r));
 
-/** 從 YouTube 網址取出影片 ID，支援 watch / youtu.be / shorts 三種形式 */
-function youtubeId(url: string | undefined): string | undefined {
-  if (!url) return undefined;
-  try {
-    const u = new URL(url);
-    if (u.hostname === 'youtu.be') return u.pathname.slice(1) || undefined;
-    if (u.pathname.startsWith('/shorts/')) return u.pathname.split('/')[2] || undefined;
-    return u.searchParams.get('v') ?? undefined;
-  } catch {
-    return undefined;
-  }
-}
-
+/*
+ * 取影片 ID 的那一段 2026-09-11 搬到 `@lib/syndication` 了 ——
+ * 搜尋索引與合併 feed 也要用同一個判斷（「站上已經有這支影片了嗎」），
+ * 三個地方各寫一份的話，多支援一種網址形式就會只改到一個。
+ */
 const videoId = youtubeId(entry.data.videoUrl);
 const description =
   entry.data.description ??

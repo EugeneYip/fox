@@ -10,7 +10,7 @@
  */
 import type { APIRoute } from 'astro';
 import { getAllWriting, entryUrl } from '@lib/content';
-import { getSyndication } from '@lib/syndication';
+import { getSyndication, externalKey } from '@lib/syndication';
 import { localizePath } from '@i18n/utils';
 import type { Locale } from '@config/site';
 
@@ -39,9 +39,37 @@ interface IndexItem {
 export const GET: APIRoute = async () => {
   const items: IndexItem[] = [];
 
+  /*
+   * ── 同一首詩不要在搜尋裡出現兩次 ────────────────────
+   *
+   * 站上九首詩接了她的 YouTube 短片（`videoUrl`），而 syndication 那一半
+   * 也把同樣九支影片放進索引。2026-09-08 之後搜「出塞」會拿到**兩筆**：
+   * 站內的詩頁，以及一條把人送去 YouTube 的連結 ——
+   * 而站主要的正好是「不要跳轉出去」。
+   *
+   * 做法不是把影片那一筆刪掉，是**併進詩頁那一筆**：
+   * 影片的標題與說明（她在 YouTube 上打的字）接到詩頁的可搜尋內容後面。
+   * 這樣用影片裡的句子（「你是否也曾在月下想起遠方的家？」）照樣找得到，
+   * 但只會有一個結果，而且那個結果留在站內。
+   *
+   * 刪掉的話那些字就變成搜不到了；那是無謂的損失。
+   */
+  const claimed = new Map<string, { title: string; summary: string }>();
+  for (const item of await getSyndication()) {
+    const key = externalKey(item.url);
+    if (key) claimed.set(key, { title: item.title, summary: item.summary });
+  }
+  /** 真的被某一篇認領走的鑰匙 —— 只有這些才從 syndication 那一半拿掉 */
+  const taken = new Set<string>();
+
   for (const { collection, entry } of await getAllWriting()) {
     const lang = entry.data.lang as Locale;
     const poem = 'poem' in entry.data ? entry.data.poem : undefined;
+
+    /* 這一篇認領了哪一支外站作品（今天只有詩詞的 `videoUrl`） */
+    const key = 'videoUrl' in entry.data ? externalKey(entry.data.videoUrl) : null;
+    const mine = key ? claimed.get(key) : undefined;
+    if (key && mine) taken.add(key);
 
     items.push({
       t: poem ? `${poem.title}・${poem.author}` : entry.data.title,
@@ -61,11 +89,20 @@ export const GET: APIRoute = async () => {
         .replace(/[#*`>_\[\]()]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim()
-        .slice(0, 600),
+        .slice(0, 600)
+        /*
+         * 影片的字接在後面、自己切 300 —— 不跟詩的正文搶那 600。
+         * 兩段分開切，長詩（琵琶行）才不會把影片的字整段擠掉。
+         */
+        .concat(mine ? ' ' + `${mine.title} ${mine.summary}`.replace(/\s+/g, ' ').trim().slice(0, 300) : ''),
     });
   }
 
   for (const item of await getSyndication()) {
+    /* 已經併進某一篇詩頁了，這裡就不要再放一次 */
+    const key = externalKey(item.url);
+    if (key && taken.has(key)) continue;
+
     items.push({
       t: item.title,
       u: item.url,

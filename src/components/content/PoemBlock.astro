@@ -236,6 +236,37 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
     /* 直排時內容往左邊長出去，需要能橫向捲動 */
     overflow-x: auto;
     overflow-y: hidden;
+
+    /*
+     * ── 捲得動的時候，邊緣浮出一道很淡的影 ────────────────
+     *
+     * 2026-09-09 給橫排補上「一句不能折」的下限之後，字級夠大時整塊會超出
+     * 容器、改由這裡橫向捲。實測 360px 視窗：200% 字級要捲 25px、
+     * 250% 要捲 122px。**而畫面上沒有任何東西說得出「還有」**
+     * （`scrollbar-width: thin` 在手機上根本不顯示）。
+     *
+     * 做法是四層背景，不是 JavaScript —— 內嵌 JS 那條預算只剩 89 B，
+     * 而且這件事本來就不需要腳本。
+     *
+     *   前兩層「遮罩」：`local`，跟著**內容**走
+     *   後兩層「影」：  `scroll`，釘在**容器**上
+     *
+     * 捲到最左邊時，左邊的遮罩正好蓋住左邊的影 —— 看不見。
+     * 一往右捲，遮罩跟著內容離開，影就露出來了。右邊同理。
+     * **完全不會溢出的時候兩邊都被蓋住**，所以不用去偵測「捲不捲得動」。
+     *
+     * 遮罩用 `--c-bg`（詩塊底下就是頁面底色），影用 `--c-rule`（髮絲線那個色）
+     * —— 兩個都是 light-dark() 的 token，深淺兩套各自對。
+     */
+    background-image:
+      linear-gradient(to right, var(--c-bg), transparent),
+      linear-gradient(to left, var(--c-bg), transparent),
+      linear-gradient(to right, var(--c-rule), transparent),
+      linear-gradient(to left, var(--c-rule), transparent);
+    background-position: left center, right center, left center, right center;
+    background-size: 2rem 100%, 2rem 100%, 0.75rem 100%, 0.75rem 100%;
+    background-repeat: no-repeat;
+    background-attachment: local, local, scroll, scroll;
     padding-block: var(--s-4);
     scrollbar-width: thin;
     display: flex;
@@ -396,7 +427,11 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
       min-inline-size: 0 !important;
     }
 
-    .poem__scroll { overflow: visible; }
+    .poem__scroll {
+      overflow: visible;
+      /* 紙上不會捲，那道影會變成兩條永遠在的髒東西 */
+      background-image: none;
+    }
   }
 
   /* ── 注與白話 ────────────────────────────────────── */

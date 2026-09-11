@@ -58,6 +58,42 @@ export interface SyndicatedItem {
   why?: string;
 }
 
+/**
+ * 從 YouTube 網址取出影片 ID —— watch / youtu.be / shorts / embed 四種形式。
+ *
+ * 本來住在詩頁的 frontmatter 裡（只有那一頁用得到）。2026-09-11 搬到這裡，
+ * 因為搜尋索引也要用同一個判斷：**站上已經有這支影片的詩頁了嗎**。
+ * 兩邊各寫一份的話，哪天多支援一種網址形式就會只改一邊。
+ *
+ * （`scripts/check-content.mjs` 的 `external-date-drift` 還有第三份 ——
+ * 那一支是 `node` 直接跑的 `.mjs`，沒有 `--experimental-strip-types`，
+ * import 不了這個 `.ts`。記在 docs/TODO.md。）
+ */
+export function youtubeId(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const u = new URL(url);
+    if (u.hostname === 'youtu.be') return u.pathname.slice(1) || undefined;
+    if (u.pathname.startsWith('/shorts/') || u.pathname.startsWith('/embed/')) {
+      return u.pathname.split('/')[2] || undefined;
+    }
+    return u.searchParams.get('v') ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * 把外站網址正規化成「同一篇就同一把鑰匙」。
+ *
+ * 用來認出「這一筆 syndication 其實就是站上那一頁」。認不出來的回 `null`，
+ * 也就是**不當成重複** —— 寧可多一筆，不要把不相干的東西吃掉。
+ */
+export function externalKey(url: string | undefined): string | null {
+  const id = youtubeId(url);
+  return id ? `youtube:${id}` : null;
+}
+
 export interface SourceStatus {
   status: 'ok' | 'error';
   platform: string;
