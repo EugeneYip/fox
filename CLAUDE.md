@@ -126,6 +126,14 @@ ALLOWLIST 裡 —— 唯一含有個資的檔案，剛好豁免於自己的檢�
 - **HTTP header 的值只能是 Latin-1。** User-Agent 裡放了一個全形破折號，
   結果 `fetch` 在送出前就拋 ByteString 錯誤，整個同步流程從來沒成功過，
   而錯誤訊息看起來卻像網路問題。header 一律用純 ASCII。
+- **站上的 CSP 會擋掉 JS 注入的 `<style>`。** 2026-09-11 量隱私頁時踩到：
+  用 `document.head.appendChild(style)` 想暫時蓋掉某條規則來做實驗，
+  **整段被 CSP 擋下、完全沒生效**，而畫面看起來就像「那條規則本來就沒作用」。
+  `style-src` 只放行帶雜湊的那幾塊，注入的沒有雜湊。
+  要做「暫時改一條 CSS 看看」的實驗，用 `npm run mutate` 改原始碼再建置，
+  不要在頁面裡注入樣式 —— 那個做法在這個站上量到的東西一律是假的。
+  （元素的 `style` 屬性不受影響：`style-src-attr` 是 `'unsafe-inline'`。）
+
 - **`base` 必須是 `/`。** repo 叫 `fox`，但綁了自訂網域，網站在網域根目錄。
   改成 `/fox` 會讓所有樣式和連結壞掉。
 - **`public/CNAME` 不能刪。** 少了它 GitHub 會取消自訂網域。

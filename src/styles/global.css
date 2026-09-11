@@ -335,6 +335,112 @@ pre code {
   overflow-wrap: normal;
 }
 
+/*
+ * ── 牌記 ────────────────────────────────────────────
+ *
+ * 線裝書末尾（或卷首）那一方框，印著誰刻的、什麼時候刻的，
+ * 以及「翻刻必究」那一類的宣告。**一份隱私聲明正是現代的牌記** ——
+ * 這本書對讀者的宣告。所以 `/privacy` 開頭那三行放進一方框裡。
+ *
+ * 框線沿用版框的做法：外粗內細、角是方的（圓角是網頁的習慣，
+ * 刻本上的框沒有）。寫在這裡而不是那一頁的 `<style>` ——
+ * 外部樣式表不花 CSP 雜湊，跟魚尾同一個理由。
+ * ──────────────────────────────────────────────────── */
+.mark {
+  border: 1px solid var(--c-rule-strong);
+  border-radius: 0;
+  padding: 4px;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  margin: var(--s-6) auto var(--s-8);
+}
+
+.mark__inner {
+  margin: 0;
+  border: 1px solid var(--c-rule);
+  padding: var(--s-5) var(--s-6);
+  font-family: var(--f-serif);
+  font-size: var(--t-md);
+  line-height: var(--lh-loose);
+  text-align: center;
+  text-wrap: balance;
+}
+
+/*
+ * ── 摺起來的零件 ────────────────────────────────────
+ *
+ * 規矩寫在 `privacy.astro` 的 `Section.detail` 上，這裡只管長相：
+ * **承諾留在外面，代號與機制收進去。**
+ *
+ * 三角形用 `clip-path` 畫，跟魚尾同一個手法但不是同一個形狀 ——
+ * 魚尾是分節的標記，這個是「還有東西」的標記，兩件事不要混。
+ * 轉場走 `--dur-fast`／`--ease`，跟站上其他回饋一致。
+ *
+ * **選擇器一定要是 `.prose details`，不能只寫 `details`。**
+ * 2026-09-11 第一版寫成元素選擇器，結果打到頁首的語言切換鈕 ——
+ * 那個鈕也是原生的 `<details>`（刻意的：沒有 JS 也能用）。
+ * 截圖上它長出了一條左邊界、一段內距，跟一個狐火色的三角形。
+ * 這是「Astro 的 scoped style 不會穿進子元件」的**反面**：
+ * 寫在 global.css 的元素選擇器會穿進**每一個**元件。
+ */
+.prose details {
+  margin-block: var(--s-4);
+  border-inline-start: 2px solid var(--c-rule-strong);
+  padding-inline-start: var(--s-4);
+}
+
+.prose details > summary {
+  cursor: pointer;
+  font-family: var(--f-sans);
+  font-size: var(--t-sm);
+  color: var(--c-ink-soft);
+  /* 拿掉瀏覽器自己的三角形，換成下面那個 */
+  list-style: none;
+}
+
+.prose details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.prose details > summary::before {
+  content: "";
+  display: inline-block;
+  inline-size: 0.5em;
+  block-size: 0.5em;
+  margin-inline-end: 0.6em;
+  background: var(--c-flame);
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+  /*
+   * **`rotate: 0deg` 要寫出來。** 它的初始值是 `none`，而 `none → 90deg`
+   * 在 WebKit 上不會內插 —— 展開時三角形**完全不轉**（截圖上仍然朝右）。
+   * 寫成 `0deg → 90deg` 才是兩個角度之間的轉場。
+   */
+  rotate: 0deg;
+  transition: rotate var(--dur-fast) var(--ease);
+  /*
+   * 展開時轉 90 度（下面那條 `[open]` 規則）。**驗法要記一下**：
+   * 探針的視窗擺在螢幕外，那裡 transition 不會前進 —— 截圖上三角形
+   * 永遠停在起點，跟「規則沒生效」長得一模一樣。
+   * 把這一行的 transition 暫時拿掉再拍，三角形就朝下了，
+   * 所以規則是對的，看不到的是動畫本身。
+   *（瀏覽器窗格隱藏時也有同一個毛病，先前已經記過一次。）
+   */
+}
+
+.prose details[open] > summary::before {
+  rotate: 90deg;
+}
+
+/* 鍵盤那一半 —— 這個站的規矩是 :hover 有的 :focus-visible 也要有 */
+.prose details > summary:hover,
+.prose details > summary:focus-visible {
+  color: var(--c-flame-ink);
+}
+
+.prose details > :not(summary) {
+  font-size: var(--t-sm);
+}
+
 blockquote {
   border-inline-start: 2px solid var(--c-flame);
   padding-inline-start: var(--s-4);

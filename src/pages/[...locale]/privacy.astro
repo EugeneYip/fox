@@ -12,7 +12,7 @@
 import Base from '@layouts/Base.astro';
 import PageHeader from '@components/layout/PageHeader.astro';
 import { localePaths } from '@i18n/paths';
-import { privacy } from '@config/privacy';
+import { privacy, externalLinkRel } from '@config/privacy';
 import { pick } from '@i18n/utils';
 import { site } from '@config/site';
 import type { Locale } from '@config/site';
@@ -40,6 +40,20 @@ interface Section {
   /** 段落。`code` 標記的字串會被包成 <code> */
   paragraphs?: string[];
   items?: string[];
+  /**
+   * 摺起來的那一段：**機制與代號**，不是承諾。
+   *
+   * 站主 2026-09-11 要這一頁「有創意及文學氣息」，同一天也說
+   * 「關於本站」對一般讀者資訊太多。這兩件事指向同一個做法：
+   * **話留在外面，零件收進去。**
+   *
+   * 規則很硬：`summary` 只寫「要不要展開」，不承載任何承諾；
+   * 而任何**對讀者不利**的事實（伺服器紀錄、影片框的例外）
+   * 一律留在外面。摺起來的只有「它叫什麼」「它怎麼運作」。
+   */
+  detail?: { summary: string; paragraphs?: string[]; items?: string[] };
+  /** 這一節末尾掛一條站外連結（現在只有「不相信的話」那一節用） */
+  link?: { href: string; label: string };
 }
 
 const embedSentence = {
@@ -68,31 +82,63 @@ const exceptionSentence = {
     : 'The one exception is the YouTube frame that appears after you press play — you asked for that one, and it uses youtube-nocookie.com.',
 } as const;
 
-const CONTENT: Record<Locale, { lead: string; sections: Section[] }> = {
+/*
+ * ── 這一頁的形狀：牌記 ＋ 摺起來的零件 ──────────────────
+ *
+ * 站主 2026-09-11 要這一頁「排版、互動、內容、文字」都更有文學氣息。
+ *
+ * 借的是**牌記** —— 線裝書末尾（或卷首）那一方框，印著誰刻的、
+ * 什麼時候刻的，以及「翻刻必究」那一類的宣告。
+ * 一份隱私聲明正是現代的牌記：這本書對讀者的宣告。
+ * 所以開頭那三行放進一方版框裡，用站上既有的框線語彙，不另發明。
+ *
+ * 三行的寫法有一條界線：**不可以為了好聽而多說一點**。
+ * 最後一行「它沒有辦法認得你，不是選擇不認」是整頁的骨架 ——
+ * 那正是 CSP 那一節在講的事，也是這個站跟一句空承諾的差別。
+ */
+const REPO = 'https://github.com/EugeneYip/fox';
+
+const CONTENT: Record<Locale, { mark: string[]; lead: string; sections: Section[] }> = {
   'zh-TW': {
-    lead: '簡短版本：這個網站不收集你的任何資料。',
+    mark: [
+      '這個網站不認得你。',
+      '沒有帳號、沒有 cookie、沒有分析工具 ——',
+      '它沒有辦法認得你，不是選擇不認。',
+    ],
+    lead: '這個網站不收集你的任何資料。',
     sections: [
       {
-        heading: '我們不做的事',
+        heading: '沒有的東西',
         items: [
-          '不使用 cookie',
-          '不使用 Google Analytics 或任何分析服務',
-          '不使用外部字型、外部 CDN、外部圖片',
-          '不嵌入會自動載入的第三方內容',
-          '不設定帳號，因此不儲存任何個人資料',
+          'cookie',
+          'Google Analytics，以及任何其他分析服務',
+          '外部字型、外部 CDN、外部圖片',
+          '會自己載入的第三方內容',
+          '帳號 —— 所以也沒有個人資料可以存',
         ],
       },
       {
-        heading: '瀏覽器裡存了什麼',
-        paragraphs: ['只有兩個項目，都存在你自己的瀏覽器裡（localStorage），不會被送到任何地方：'],
-        items: ['fox-theme —— 你選的深色或淺色', 'fox-poem-orientation —— 你選的詩詞直排或橫排'],
+        heading: '留在你自己機器上的兩樣東西',
+        paragraphs: [
+          '這個站記得兩件事：你選的深淺，以及詩要直著讀還是橫著讀。兩個都存在你自己的瀏覽器裡，不會被送到任何地方 —— 換一臺機器，它就不認得了。',
+        ],
+        detail: {
+          summary: '它們叫什麼',
+          items: ['fox-theme —— 你選的深色或淺色', 'fox-poem-orientation —— 你選的詩詞直排或橫排'],
+        },
       },
       {
-        heading: '這個網站怎麼保證上面那些',
+        heading: '為什麼不必只靠相信',
         paragraphs: [
-          '光是「我們不做」是一句話，所以另外加了一道由瀏覽器執行的規則（Content Security Policy）：這個網站宣告了它只會載入自己網域的資源。萬一哪天有人不小心放進一段外部腳本，你的瀏覽器會直接拒絕它，而不是安靜地送出請求。',
+          '「不做」只是一句話。所以這個網站另外交給你的瀏覽器一道規則，由它替你擋：萬一哪天有人不小心放進一段外部腳本，你的瀏覽器會直接拒絕它，而不是安靜地送出請求。',
           exceptionSentence['zh-TW'],
         ],
+        detail: {
+          summary: '那道規則是什麼',
+          paragraphs: [
+            '是 Content Security Policy。這個網站在每一頁上宣告「只載入自己網域的東西」，而執行的是你的瀏覽器，不是網站自己 —— 那正是它跟一句承諾不一樣的地方。',
+          ],
+        },
       },
       {
         heading: '影片',
@@ -128,50 +174,69 @@ const CONTENT: Record<Locale, { lead: string; sections: Section[] }> = {
         ],
       },
       {
-        heading: '伺服器',
+        heading: '有一段不在我們手上',
         paragraphs: [
-          '網站託管在 GitHub Pages 上。GitHub 會保有伺服器層級的存取紀錄（IP 位址等），這部分依 GitHub 自己的隱私政策處理，我們既看不到也管不到。',
+          `網站放在 GitHub Pages 上。GitHub 會保有伺服器層級的存取紀錄（IP 位址那一類），依它自己的隱私政策處理。我們既看不到，也關不掉 —— 上面那些「沒有」是這個站做得到的部分，這一段不是。`,
         ],
       },
       {
-        heading: '有問題的話',
-        paragraphs: ['這個網站的原始碼是公開的，包括所有隱私相關的設定。如果你不相信上面寫的，可以自己去看。'],
+        heading: '不相信的話',
+        paragraphs: [
+          '這一頁說的每一件事都寫在原始碼裡，包括那幾個開關。整份是公開的 —— 你不必相信我們，可以自己去看。',
+        ],
+        link: { href: REPO, label: '原始碼' },
       },
     ],
   },
   en: {
-    lead: 'The short version: this site collects nothing about you.',
+    mark: [
+      'This site does not know who you are.',
+      'No accounts, no cookies, no analytics —',
+      'it has no way to know you, which is not the same as choosing not to.',
+    ],
+    lead: 'This site collects nothing about you.',
     sections: [
       {
-        heading: 'What this site does not do',
+        heading: 'What is not here',
         items: [
-          'No cookies',
-          'No Google Analytics, and no other analytics service',
-          'No external fonts, no CDNs, no remote images',
-          'No third-party content that loads on its own',
-          'No accounts, so no personal data to store',
+          'Cookies',
+          'Google Analytics, or any other analytics service',
+          'External fonts, CDNs, remote images',
+          'Third-party content that loads on its own',
+          'Accounts — so there is no personal data to store',
         ],
       },
       {
-        heading: 'What is kept in your browser',
-        paragraphs: ['Two things, both in your own browser (localStorage), neither of which is sent anywhere:'],
-        items: [
-          'fox-theme — whether you chose light or dark',
-          'fox-poem-orientation — whether you chose vertical or horizontal for poems',
-        ],
-      },
-      {
-        heading: 'How the site keeps those promises',
+        heading: 'Two things that stay on your own machine',
         paragraphs: [
-          'Saying "we do not do that" is just a sentence, so there is also a rule your browser enforces (a Content Security Policy): this site declares that it will only load resources from its own domain. If someone ever slips in an outside script by mistake, your browser refuses it outright instead of quietly making the request.',
+          'This site remembers two things: whether you chose light or dark, and whether you read poems in columns or across. Both live in your own browser and are sent nowhere — open the site on another machine and it will not know you.',
+        ],
+        detail: {
+          summary: 'What they are called',
+          items: [
+            'fox-theme — whether you chose light or dark',
+            'fox-poem-orientation — whether you chose vertical or horizontal for poems',
+          ],
+        },
+      },
+      {
+        heading: 'Why you do not have to take our word for it',
+        paragraphs: [
+          'Saying "we do not" is only a sentence. So the site also hands your browser a rule and lets it do the refusing: if someone ever slips in an outside script by mistake, your browser rejects it outright instead of quietly making the request.',
           exceptionSentence.en,
         ],
+        detail: {
+          summary: 'What that rule is',
+          paragraphs: [
+            'A Content Security Policy. Every page declares that it will only load things from its own domain, and it is your browser that enforces it, not the site — which is exactly what makes it different from a promise.',
+          ],
+        },
       },
       {
         heading: 'Video',
         paragraphs: [
           embedSentence.en,
-          `Once you press play, YouTube’s own privacy policy takes over. That frame does tell YouTube you came from ${host} — the domain only, not which page. The rule under “Outbound links” below is about links, not about this.`,
+          `Once you press play, YouTube's own privacy policy takes over. That frame does tell YouTube you came from ${host} — the domain only, not which page. The rule under "Outbound links" below is about links, not about this.`,
         ],
       },
       {
@@ -183,22 +248,23 @@ const CONTENT: Record<Locale, { lead: string; sections: Section[] }> = {
         ],
       },
       {
-        heading: 'The server',
+        heading: 'One part is not ours to hold',
         paragraphs: [
-          'The site is hosted on GitHub Pages. GitHub keeps server-level access logs (IP addresses and the like) under its own privacy policy. We can neither see them nor turn them off.',
+          'The site is hosted on GitHub Pages. GitHub keeps server-level access logs (IP addresses and the like) under its own privacy policy. We can neither see them nor turn them off — everything above is what this site can do; this part is not.',
         ],
       },
       {
         heading: 'If you would rather check than trust',
         paragraphs: [
-          'The source of this site is public, including every privacy setting described above. You do not have to take our word for it.',
+          'Everything on this page is written down in the source, including the switches. All of it is public — you do not have to take our word for it.',
         ],
+        link: { href: REPO, label: 'the source' },
       },
     ],
   },
 };
 
-const { lead, sections } = CONTENT[locale];
+const { mark, lead, sections } = CONTENT[locale];
 
 /** 把 key 名與屬性名包成 <code>，其餘照原樣輸出 */
 /* `rel="noopener"` 也要進來 —— 開關關掉時那一段講的是它（見上面「對外連結」） */
@@ -209,9 +275,19 @@ const withCode = (text: string) => text.replace(CODEY, '<code>$1</code>');
 <Base locale={locale} title={title} description={lead} class="wrap--prose">
   <PageHeader title={title} />
 
-  <div class="prose">
-    <p><strong>{lead}</strong></p>
+  {/* 牌記 —— 為什麼是這個形狀，見上面 CONTENT 前面那一段 */}
+  <div class="mark">
+    <p class="mark__inner">
+      {mark.map((line, i) => (
+        <>
+          {i > 0 && <br />}
+          {line}
+        </>
+      ))}
+    </p>
+  </div>
 
+  <div class="prose">
     {sections.map((section) => (
       <>
         <h2>{section.heading}</h2>
@@ -220,6 +296,22 @@ const withCode = (text: string) => text.replace(CODEY, '<code>$1</code>');
           <ul>
             {section.items.map((item) => <li set:html={withCode(item)} />)}
           </ul>
+        )}
+        {section.detail && (
+          <details>
+            <summary>{section.detail.summary}</summary>
+            {section.detail.paragraphs?.map((p) => <p set:html={withCode(p)} />)}
+            {section.detail.items && (
+              <ul>
+                {section.detail.items.map((item) => <li set:html={withCode(item)} />)}
+              </ul>
+            )}
+          </details>
+        )}
+        {section.link && (
+          <p>
+            <a href={section.link.href} target="_blank" rel={externalLinkRel}>{section.link.label}</a>
+          </p>
         )}
       </>
     ))}
