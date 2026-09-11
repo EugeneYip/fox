@@ -58,7 +58,12 @@ const count =
     : t('list.count', { n: page.totalItems });
 ---
 
-<Base locale={locale} title={name} class="wrap--content">
+<Base
+  locale={locale}
+  title={name}
+  description={t('meta.platform', { platform: name, n: all.length })}
+  class="wrap--content"
+>
   <Fragment slot="head">
     {page.nextUrl && <link rel="next" href={abs(page.nextUrl)} />}
   </Fragment>

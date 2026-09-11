@@ -45,7 +45,12 @@ const spread = Math.log(max) || 1; // 只有一個標籤時 log(1) = 0，別除�
 const scale = (n: number) => 0.9 + (Math.log(n) / spread) * 0.85;
 ---
 
-<Base locale={locale} title={t('tags.title')} class="wrap--content">
+<Base
+  locale={locale}
+  title={t('tags.title')}
+  description={tags.length > 0 ? t('meta.tags', { n: tags.length }) : t('meta.empty')}
+  class="wrap--content"
+>
   <PageHeader title={t('tags.title')} count={t('tags.count', { n: tags.length })} />
 
   {tags.length > 0 ? (

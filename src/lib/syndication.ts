@@ -34,6 +34,7 @@
  * 而 `check:copy` 會掃到那些標題（第 3 輪〔第三十六圈〕記過：
  * 在 YouTube 標題裡打一個「台」，這個 repo 的關卡會紅，而那行字在這裡改不掉）。
  */
+import { sourceHealth } from '../../scripts/lib/sync-health.mjs';
 import { getCollection } from 'astro:content';
 import { platformOrFallback, type MediaKind, type Platform } from '@config/platforms';
 import { sources as sourceList } from '@config/sources.mjs';
@@ -205,15 +206,60 @@ export async function getActivePlatforms(): Promise<
   return [...seen.values()].sort((a, b) => b.count - a.count);
 }
 
+/**
+ * 「上次同步」給讀者看的時間 —— **最後一次真的拿到資料**，不是最後一次跑。
+ *
+ * `generatedAt` 是這個檔案被寫出來的時刻，而失敗的那一次**也會寫檔**
+ * （沿用快取、把 status 記成 error）。拿它當「上次同步」等於誇大新鮮度：
+ * 2026-09-11 普查時，最後一次跑是當天 04:18（失敗），而最後一次真的
+ * 抓到東西是前一天 16:15 —— 畫面上卻寫著今天。
+ *
+ * 兩個方向要一起修才誠實：這一行不要說得比實際新，
+ * 而底下的來源狀態也不要因為一次沒跑成就喊失火（見 `syncHealth`）。
+ *
+ * 所有來源都沒有成功紀錄時退回 `generatedAt` —— 那是「跑過但從來沒成功」，
+ * 總比什麼都不顯示好。
+ */
 export function lastSyncedAt(): Date | null {
+  const successes = Object.values(cache.sources)
+    .map((s) => toDate(s.lastSuccessAt))
+    .filter((d): d is Date => d !== null);
+  if (successes.length > 0) {
+    return new Date(Math.max(...successes.map((d) => d.getTime())));
+  }
   return toDate(cache.generatedAt);
 }
 
-/** 同步是否有來源失敗 —— 顯示在 /colophon，讓維護者知道要修 */
+/**
+ * 同步來源的健康狀況 —— 顯示在 /colophon。
+ *
+ * ## 為什麼不看 `status`
+ *
+ * `status` 是**最後一次跑的結果**。而 YouTube 的 RSS 端點會一陣一陣地壞掉
+ * （CLAUDE.md 記著實測：一分鐘內連打三次是 404、500、404），所以單獨一次
+ * 沒跑成，完全不代表這個來源出事了。
+ *
+ * 2026-09-11 普查時量到的現場：
+ *
+ *     最後一次跑   2026-09-11 04:18  status = error（RSS 404，試了 7 次）
+ *     最後一次成功 2026-09-10 16:15  ← 十二小時前
+ *     站上的條目   9 筆，沿用快取，完全正常
+ *
+ * 而這一頁當時對**每一個讀者**寫著「0 healthy, 1 failing」。
+ * 內容好好的，畫面上卻在喊失火。
+ *
+ * ## 現在跟誰共用同一個判準
+ *
+ * 改成問 `scripts/lib/sync-health.mjs` 的 `sourceHealth()` ——
+ * 也就是 `npm run sync:health` 與 `check:content` 用的同一支。
+ * 判準是「上一次真的拿到資料是多久以前」，超過 `SYNC_STALE_DAYS`（3 天，
+ * 排程一天兩次 ＝ 連續六次沒跑成）才算冷掉。
+ *
+ * 那個模組的標頭自己就寫著「門檻只有一個常數，兩邊共用 ——
+ * 不要變成『同一件事寫在兩個地方』」。這裡本來就是那第二個地方，
+ * 而且是唯一一個讀者看得到的。
+ */
 export function syncHealth(): { ok: number; failed: string[] } {
-  const entries = Object.entries(cache.sources);
-  return {
-    ok: entries.filter(([, s]) => s.status === 'ok').length,
-    failed: entries.filter(([, s]) => s.status === 'error').map(([id]) => id),
-  };
+  const { total, cold } = sourceHealth({ sources: cache.sources });
+  return { ok: total - cold.length, failed: cold.map((c) => c.id) };
 }

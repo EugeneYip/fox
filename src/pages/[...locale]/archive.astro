@@ -25,7 +25,12 @@ const otherTotal =
     : 0;
 ---
 
-<Base locale={locale} title={t('archive.title')} class="wrap--content">
+<Base
+  locale={locale}
+  title={t('archive.title')}
+  description={total > 0 ? t('meta.archive', { n: total }) : t('meta.empty')}
+  class="wrap--content"
+>
   <PageHeader title={t('archive.title')} count={t('list.count', { n: total })} />
 
   {/*

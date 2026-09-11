@@ -217,6 +217,41 @@ export const ui = {
    * 「共 14 篇」，而站上只有 5 篇 —— 14 是標籤數。讀者會把它讀成文章數。
    */
   'tags.count': { 'zh-TW': '共 {n} 個標籤', en: '{n} tags' },
+
+  /*
+   * ── 列表頁的 <meta description> ────────────────────
+   *
+   * 2026-09-11 普查量到：61 頁裡有 **37 頁**用的是全站預設那一句
+   * （「朗誦經典詩詞曲⋯」），其中 24 頁是標籤頁 —— 也就是說搜尋結果上
+   * 或分享出去的時候，`/tags/李白` 跟 `/tags/送別` 長得一模一樣。
+   *
+   * 首頁用預設是對的（那句話本來就是在描述這個站）；有自己內容的頁
+   * 本來就都有自己的描述。缺的是這幾種「由清單組成」的頁。
+   */
+  'meta.tag': {
+    'zh-TW': '站上標記為「{tag}」的 {n} 篇。',
+    en: '{n} entries tagged {tag} on this site.',
+  },
+  'meta.tags': { 'zh-TW': '站上用過的標籤，共 {n} 個。', en: 'Every tag used on this site — {n} of them.' },
+  /*
+   * 這個語言一篇都沒有的時候用這一句。
+   *
+   * 直接套上面那兩句會變成「All 0 entries, by year」與「0 of them」——
+   * 數字是誠實的，但那是**空狀態**，不是一份有零筆的清單。
+   * 搜尋結果上看到「All 0 entries」只會讓人以為站壞了。
+   */
+  'meta.empty': {
+    'zh-TW': '這個語言還沒有內容 —— 這個站目前是用中文寫的。',
+    en: 'Nothing here in English yet — this site is written in Chinese.',
+  },
+  'meta.archive': {
+    'zh-TW': '站上全部 {n} 篇，依年份排。詩詞、文章與短札都在這裡。',
+    en: 'All {n} entries, by year — poems, writing and notes.',
+  },
+  'meta.platform': {
+    'zh-TW': '狐狸在 {platform} 上的 {n} 篇，收在這裡。',
+    en: '{n} entries published on {platform}.',
+  },
   'tags.count_one': { 'zh-TW': '共 {n} 個標籤', en: '{n} tag' },
   'list.count_one': { 'zh-TW': '共 {n} 篇', en: '{n} entry' },
   'list.readingTime': { 'zh-TW': '約 {n} 分鐘', en: '{n} min read' },

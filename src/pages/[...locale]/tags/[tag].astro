@@ -68,7 +68,13 @@ const count =
     : t('list.count', { n: page.totalItems });
 ---
 
-<Base locale={locale} availableLocales={availableLocales} title={t('tags.taggedWith', { tag })} class="wrap--content">
+<Base
+  locale={locale}
+  availableLocales={availableLocales}
+  title={t('tags.taggedWith', { tag })}
+  description={t('meta.tag', { tag, n: matches.length })}
+  class="wrap--content"
+>
   <Fragment slot="head">
     {page.nextUrl && <link rel="next" href={abs(page.nextUrl)} />}
   </Fragment>
