@@ -127,17 +127,6 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
       改成跟主題切換鈕同一個做法：動態 aria-label 說清楚，並拿掉 aria-pressed
       （這是模式切換，不是開關，pressed 的語意本來就套不上）。
     */}
-    <button
-      class="poem__toggle ui"
-      type="button"
-      data-poem-toggle
-      aria-label={vertical ? t('poem.nowVertical') : t('poem.nowHorizontal')}
-      data-label-vertical={t('poem.nowVertical')}
-      data-label-horizontal={t('poem.nowHorizontal')}
-    >
-      <span aria-hidden="true" data-when="vertical">{t('poem.toHorizontal')}</span>
-      <span aria-hidden="true" data-when="horizontal">{t('poem.toVertical')}</span>
-    </button>
   </header>
 
   {/*
@@ -162,6 +151,30 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
   </div>
 
   {poem.source && <p class="poem__source faint ui">{poem.source}</p>}
+
+  {/*
+    ── 切換鈕放在出處底下 ──────────────────────────────
+
+    本來在標題與版框之間。站主 2026-09-11 說那裡「影響視覺美感」——
+    一顆帶框的按鈕夾在詩名與那一葉書中間，是整頁唯一打斷閱讀的東西。
+
+    挪到出處（《全唐詩・卷二二四》）底下：讀者先讀完詩、看到出處，
+    才看到「要換個方向讀嗎」。那是這個動作真正該出現的時機。
+
+    DOM 順序改了，Tab 的順序也跟著改 —— 那是對的，
+    按鈕本來就該在它作用的東西後面。
+  */}
+  <button
+    class="poem__toggle ui"
+    type="button"
+    data-poem-toggle
+    aria-label={vertical ? t('poem.nowVertical') : t('poem.nowHorizontal')}
+    data-label-vertical={t('poem.nowVertical')}
+    data-label-horizontal={t('poem.nowHorizontal')}
+  >
+    <span aria-hidden="true" data-when="vertical">{t('poem.toHorizontal')}</span>
+    <span aria-hidden="true" data-when="horizontal">{t('poem.toVertical')}</span>
+  </button>
 
   {annotations.length > 0 && (
     <div class="poem__section">
@@ -226,7 +239,10 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
    * 全域的焦點框，拿不到這顆按鈕自己的那一份。
    */
   .poem__toggle {
-    margin-block-start: var(--s-2);
+    /* 不在 .poem__head 那個置中的 flex 裡了，自己置中 */
+    display: block;
+    margin-inline: auto;
+    margin-block-start: var(--s-4);
     font-size: var(--t-xs);
     color: var(--c-ink-soft);
     /* 這是按鈕，邊界要看得出來 */
@@ -342,27 +358,27 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
     text-orientation: mixed;
 
     /*
-     * 直排時軸向會反過來，這裡很容易寫錯：
-     *   inline 軸是「垂直」的 —— 字往下流，所以 inline-size 是一行的「長度」（高度）
+     * ── 直排時軸向是反的 ────────────────────────────
+     *   inline 軸是「垂直」的 —— 字往下流，所以 inline-size 是一行的長度（高度）
      *   block  軸是「水平」的 —— 新的一行往左疊，所以 block-size 是整體的寬度
      *
-     * 因此限制的是 max-inline-size：一行最多寫這麼長，超過就自動折到左邊。
-     * 水平方向不設限，讓〈長恨歌〉這種長詩能一路往左長，由外層橫向捲動。
+     * **這裡本來有一條 `max-inline-size` 的上限，2026-09-11 拿掉了。**
      *
-     * 下限是第 8 輪（第十二圈）加的：52vh 在橫放的手機上只有 195px，
-     * 而一句七言要 199px，於是每一句都被折成兩截（量測與理由寫在
-     * frontmatter 的 longestLine 旁邊）。下限從詩自己最長的一句算出來，
-     * 不是猜一個數字 —— 換一首字數不同的詩會自己跟著變。
-     * 0.5em 是留給字型度量與四捨五入的餘裕（七言實測只差 4px 就折了）。
+     * 那條是 `min(21rem, max(52vh, calc(N * 1.14em + 0.5em)))` ——
+     * 用來「限制一行最多多長」，而下限那一半是用來保證一句詩折不斷。
+     * 現在折不斷這件事由 `.poem__line { white-space: nowrap }` 保證
+     *（見上面那段），不再靠算式。
      *
-     * 外層仍然是 min(21rem, …)：21rem ÷ 最大字級 28px ≈ 12 個字，
-     * 也就是**超過 12 字的句子在任何螢幕上都還是會折**。
-     * 目前站上最長的一句是 7 字，碰不到；記在待辦裡。
+     * 而留著那條上限會把失敗模式換成**更糟的一種**：一句詩如果比上限長，
+     * `nowrap` 之下它不會折，會直接超出去，而 `.poem__scroll` 是
+     * `overflow-y: hidden` —— **字會被裁掉，而且沒有人看得出來**。
+     * 折斷至少還看得到全部的字。
+     *
+     * 拿掉之後方塊的高度就是最長那一句的長度。今天站上最長 7 字，
+     * 量過：拿掉前後每一首的方塊尺寸**逐一相同**（上限本來就沒有咬到）。
+     * 哪天真的有一句 30 字的，那一欄就會很長 —— 那是對的，
+     * 一本直排的書本來就是那樣，讀者往下捲就是了。
      */
-    max-inline-size: min(
-      21rem,
-      max(52vh, calc(var(--poem-longest-line, 7) * 1.14em + 0.5em))
-    );
 
     /* 在 flex 容器裡用 auto margin 置中：內容短的時候置中，
        長到超出容器時兩邊都還捲得到（用 justify-content: center 會捲不到開頭） */
@@ -405,6 +421,34 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
    * 而字距（letter-spacing）只影響行**內**，不影響行距。
    * 所以這個數字不是量出來的，是算出來的 —— 改 --lh-loose 它自己跟著走。
    */
+  /*
+   * ══ 一句詩永遠不會被折成兩截 ══════════════════════════
+   *
+   * 這件事**壞過三次**：第 8 輪（第十二圈）直排那次、2026-09-09 橫排那次、
+   * 2026-09-11 站主又看到一次（「舉頭望明／月　低頭思故／鄉」）。
+   *
+   * 前兩次的修法都是**算出一個夠寬的下限**：
+   * `calc(var(--poem-longest-line) * 1.14em + 0.5em)` ——
+   * 1em 是一個全形字、0.14em 是字距、0.5em 是留給四捨五入的餘裕。
+   *
+   * 那個算式的前提是「中文字剛好 1em 寬」。**前提不成立就整條垮掉**：
+   * 換一套 CJK 字型（系統字型清單在不同機器上挑出來的不一樣）、
+   * 字距被改動、或者哪個瀏覽器的捨入差一點點 —— 每一次都會再折一次，
+   * 而每一次都只有人眼看得出來。
+   *
+   * 所以這次不再算：**直接規定一句詩不能斷**。
+   * `white-space: nowrap` 之下沒有任何字型或視窗尺寸折得動它，
+   * 放不下就交給外層的 `.poem__scroll` 橫向捲（那條路本來就在，
+   * 而且 2026-09-11 才幫它加了「捲得動」的視覺提示）。
+   *
+   * 上面那個 `min-inline-size` 沒有拿掉 —— 它現在不是保證，是**版面**：
+   * 讓方塊至少有一句那麼寬，短詩才不會縮成一條。
+   * ══════════════════════════════════════════════════
+   */
+  .poem__line {
+    white-space: nowrap;
+  }
+
   .poem__stanza {
     margin: 0;
     background-image: repeating-linear-gradient(

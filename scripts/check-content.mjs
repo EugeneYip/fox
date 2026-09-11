@@ -1710,22 +1710,50 @@ servedCss += dedupedInlineStyles(built.filter((b) => b.path.endsWith('.html')).m
         horizontalBlocks += 1;
         if (!hasGuard(blockAt(at))) unguarded.push(sel.trim().slice(0, 80));
       }
+      /*
+       * ── 真正的保證是 `nowrap`，不是那個算式 ──────────────
+       *
+       * 這條規則本來只看 `min-inline-size`：算出「一句有多寬」再把容器撐到
+       * 那麼寬。2026-09-11 第三次折斷之後換了做法 ——
+       * `.poem__line { white-space: nowrap }` 讓一句詩**結構上**斷不了，
+       * 不管字型多寬、視窗多窄。
+       *
+       * 所以這裡也跟著改：`nowrap` 不見了才是真的失守（那是無條件的保證），
+       * `min-inline-size` 不見了是版面退步（方塊會縮成一條）——
+       * 兩件都要說，但要說清楚哪一件比較嚴重。
+       */
+      const lineNowrap = (() => {
+        for (const m of servedCss.matchAll(/white-space\s*:\s*nowrap/g)) {
+          const sel = selectorAt(servedCss, m.index ?? 0);
+          if (/poem__line/.test(sel)) return true;
+        }
+        return false;
+      })();
+
       const guarded = horizontalBlocks > 0 && unguarded.length === 0;
       if (horizontalBlocks === 0) {
         notes.push('詩句會不會被折斷沒有檢查：CSS 裡找不到打在 .poem__original 上的橫排規則。');
-      } else       if (!guarded) {
+      } else if (!lineNowrap || !guarded) {
         problems.push({
           file: 'dist/（全站 CSS）',
           id: 'linebreak-lost',
           msg:
-            `站上有 ${poems} 首詩，而 ${unguarded.length}／${horizontalBlocks} 個把詩設成橫排的 ` +
-            'CSS 區塊沒有非 0 的 `min-inline-size`：\n' +
-            unguarded.map((sel) => `        ${sel}`).join('\n') + '\n' +
-            '      沒有它，橫排時一句詩會在容器不夠寬時被折成兩截 ——\n' +
-            '      實測 320px 視窗 ＋ 175% 字級，四句七言每一句都折。\n' +
-            '      折出來是「秦時明月漢／時關」，那是讀錯不是難看。\n' +
-            '      改法：看 src/components/content/PoemBlock.astro 橫排那兩段 ——\n' +
-            '      `min-inline-size: calc(var(--poem-longest-line) * 1.14em + 0.5em)` 是不是被拿掉了。',
+            (lineNowrap
+              ? ''
+              : '**`.poem__line` 沒有 `white-space: nowrap`** —— 一句詩折不折得斷，' +
+                '現在就只剩算式在擋了。\n') +
+            (guarded
+              ? ''
+              : `站上有 ${poems} 首詩，而 ${unguarded.length}／${horizontalBlocks} 個把詩設成橫排的 ` +
+                'CSS 區塊沒有非 0 的 `min-inline-size`：\n' +
+                unguarded.map((sel) => `        ${sel}`).join('\n') + '\n') +
+            '      一句詩被折成兩截是**讀錯**，不是難看：「秦時明月漢／時關」\n' +
+            '      讀起來像另一種格律。這件事壞過三次（第 8 輪〔第十二圈〕直排、\n' +
+            '      2026-09-09 橫排、2026-09-11 站主又看到「舉頭望明／月」）——\n' +
+            '      前兩次都是修那個算式，第三次才改成結構上不可能。\n' +
+            '      改法：看 src/components/content/PoemBlock.astro ——\n' +
+            '      `.poem__line { white-space: nowrap }` 是**保證**（無條件），\n' +
+            '      `min-inline-size: calc(...)` 是**版面**（讓方塊至少一句寬）。',
         });
       }
     }

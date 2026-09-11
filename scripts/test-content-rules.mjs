@@ -599,6 +599,27 @@ const CASES = {
         '@media (max-width:48rem){.poem__original{writing-mode:horizontal-tb!important}}\n',
     },
   },
+  /*
+   * ── 少了 `nowrap` 也要報 ──────────────────────────
+   *
+   * 2026-09-11 之後，一句詩折不折得斷的**保證**是
+   * `.poem__line { white-space: nowrap }`，不再是那個算式
+   *（算式的前提「一個中文字剛好 1em」換一套字型就可能不成立，
+   * 這件事壞過三次）。所以那一行不見了要當場說。
+   *
+   * 這一格的 CSS 兩段橫排的下限都在、只少了 nowrap ——
+   * 沒有這一格的話，把新加的那半條件刪掉測試照樣全綠。
+   */
+  'linebreak-lost（少了 nowrap）': {
+    expect: 'linebreak-lost',
+    content: { 'poems/wu-yi-xiang.md': poem() },
+    dist: {
+      'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
+      '_astro/x.css':
+        '.poem__original{writing-mode:vertical-rl}' +
+        '@media (max-width:48rem){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}\n',
+    },
+  },
   /* 反向：下限還在就不該報。少了這一格，把規則改成「一律報」也會全綠 */
   'linebreak-lost（下限還在就不報）': {
     expect: 'no-title',
@@ -610,14 +631,17 @@ const CASES = {
       'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
       '_astro/x.css':
         '.poem__original{writing-mode:vertical-rl;max-inline-size:min(21rem,max(52vh,calc(var(--poem-longest-line,7)*1.14em + 0.5em)))}' +
-        '@media (max-width:48rem){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}\n',
+        '@media (max-width:48rem){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}' +
+        '.poem__line{white-space:nowrap}\n',
     },
   },
   'vertical-lost': {
     content: { 'poems/wu-yi-xiang.md': poem() },
     dist: {
       'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
-      '_astro/x.css': '.poem__original{writing-mode:horizontal-tb;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}\n',
+      '_astro/x.css':
+        '.poem__original{writing-mode:horizontal-tb;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}' +
+        '.poem__line{white-space:nowrap}\n',
     },
   },
   /* 反向：CSS 裡還有那條宣告就不該報 */
@@ -649,7 +673,8 @@ const CASES = {
       'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
       '_astro/x.css':
         '.poem__original{writing-mode:vertical-rl}' +
-        '@media (width>=0){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}\n',
+        '@media (width>=0){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}' +
+        '.poem__line{white-space:nowrap}\n',
     },
   },
 
@@ -668,7 +693,8 @@ const CASES = {
       'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
       '_astro/x.css':
         '.poem__original{writing-mode:vertical-rl}' +
-        '@media (width<=48rem){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}\n',
+        '@media (width<=48rem){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}' +
+        '.poem__line{white-space:nowrap}\n',
     },
   },
 
@@ -703,7 +729,9 @@ const CASES = {
     },
     dist: {
       'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
-      '_astro/x.css': '.poem__original{writing-mode:horizontal-tb;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}\n',
+      '_astro/x.css':
+        '.poem__original{writing-mode:horizontal-tb;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}' +
+        '.poem__line{white-space:nowrap}\n',
     },
   },
 
@@ -966,7 +994,8 @@ const CLEAN = {
      */
     '_astro/x.css':
       '.poem__original{writing-mode:vertical-rl;max-inline-size:min(21rem,max(52vh,calc(var(--poem-longest-line,7)*1.14em + 0.5em)))}' +
-      '@media (max-width:48rem){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}\n',
+      '@media (max-width:48rem){.poem__original{writing-mode:horizontal-tb!important;min-inline-size:calc(var(--poem-longest-line,7)*1.14em + 0.5em)}}' +
+        '.poem__line{white-space:nowrap}\n',
     /*
      * 反向的兩半，都放在 CLEAN 裡：
      *
