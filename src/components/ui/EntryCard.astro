@@ -90,8 +90,14 @@ const subtitle = poem ? `${poem.author}${poem.dynasty ? `・${poem.dynasty}` : '
 
   .entry__link { text-decoration: none; }
 
+  /*
+   * `--t-lg` 不是 `--t-md`：2026-09-11 量過整站的字級分布，
+   * 60 次用量擠在最小的兩級，而這個標題（20px）跟頁面引言、跟頁首的站名
+   * **一樣大** —— 一頁 11 列長得完全一樣，要點的那個東西沒有領先。
+   * 數字與整段推導在 docs/VISUAL.md。
+   */
   .entry__title {
-    font-size: var(--t-md);
+    font-size: var(--t-lg);
     font-weight: 600;
     line-height: var(--lh-snug);
     transition: color var(--dur-fast) var(--ease);

@@ -135,7 +135,7 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
   */}
   <div class="poem__frame">
     <div class="poem__scroll">
-      <div class="poem__original" lang="zh-Hant" style={`--poem-longest-line:${longestLine}`}>
+      <div class="poem__original" lang="zh-Hant" style={`--poem-longest-line:${longestLine};--poem-lines:${lineCount};--poem-stanzas:${stanzas.length}`}>
         {stanzas.map((lines) => (
           <p class="poem__stanza">
             {lines.map((line, i) => (
@@ -201,6 +201,12 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
 <style>
   .poem {
     --poem-orientation: vertical;
+    /*
+     * 讓底下的 `100cqi` 量得到「這首詩可以用多寬」。
+     * 不能量 `.poem__frame`（它是 fit-content，寬度由內容決定，會循環）。
+     * 這一層沒有任何 `position: absolute` 的子孫，所以 `contain: layout` 不影響誰。
+     */
+    container-type: inline-size;
   }
 
   .poem__head {
@@ -397,7 +403,52 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
     margin: auto;
     flex: none;
 
-    font-size: var(--t-lg);
+    /*
+     * ── 詩在「放得下」的前提下盡量大 ──────────────────
+     *
+     * 2026-09-11 量到詩頁上**最大的字是 96px 的「狐」浮水印**（空影片框裡的
+     * 裝飾），而這一頁的主角 —— 詩 —— 只有 28px，連標題（40px）都壓過它。
+     *
+     * 第一版只是把 `--t-lg` 換成 `--t-xl`（28 → 40px）。**那一版是錯的**，
+     * 而且是看了截圖才發現的：〈琵琶行〉10 句，40px 之下超出容器 212px，
+     * 於是要橫捲 —— 而直排是**從右邊開始讀**，捲軸停在左邊，
+     * 一進站看到的是第一句被切掉一半。「放大」換來「讀不到開頭」不划算。
+     *
+     * 所以改成用容器寬度反推：一欄佔 `font-size × 2.1`（`--lh-loose`），
+     * 扣掉版框與捲動層的內距約 3rem，剩下的除以句數就是「剛好放得下」的字級。
+     * 上限 `--t-xl`（短詩不必無限放大），下限 `--t-lg`（真的很長的詩
+     * 到這裡就停，讓它捲 —— 那時候捲是唯一的選項）。
+     *
+     * 式子裡的三個減項都是量出來才補上的：
+     *
+     *   3rem              版框的內距與四道框線（4px×2 ＋ 1px×4）
+     *                     加上捲動層的 `padding-inline`（1rem×2）
+     *   詩節之間的 gap    第一版漏了這個，〈琵琶行〉**還是溢出 52px** ——
+     *                     它有三節，`gap: var(--s-6)` 兩個 ＝ 64px
+     *   句數 × 2.1        直排時一欄的推進距離就是 `--lh-loose`
+     *
+     * 橫排時這個式子算的不是對的維度（橫排受限於「一句幾個字」而不是句數），
+     * 但兩個方向的值都落在安全範圍內，所以沒有另外分支。
+     *
+     * **是 `cqw` 不是 `cqi`** —— 這裡踩過一次。直排的軸向是反的
+     *（CLAUDE.md 已經記著這件事，但記的是 `inline-size`），
+     * 容器單位也一樣：`.poem` 是橫排、寬 736px，而在 `vertical-rl` 的
+     * `.poem__original` 上量到 **`100cqi` ＝ 900px**（視窗的高），
+     * `100cqw` 才是 736px。也就是 `cqi` 跟的是**元素自己**的行向，
+     * 不是容器的。用實際的寬 (`cqw`) 就不必管誰是直排。
+     *
+     * 第一版用 `cqi` 的症狀很難看出來：字級算出來是 40px ——
+     * 剛好等於 clamp 的上限，跟「沒有生效」長得一模一樣。
+     * 是拿 `calc(100cqi / 10)` 印出 90px 才知道它量到的是 900。
+     */
+    font-size: clamp(
+      var(--t-lg),
+      calc(
+        (100cqw - 3rem - (var(--poem-stanzas, 1) - 1) * var(--s-6)) /
+          (var(--poem-lines, 4) * 2.1)
+      ),
+      var(--t-xl)
+    );
     /*
      * 接回 token。`check:contrast` 的「未使用」那一段一直在說這件事：
      * 「--lh-loose（值 `2.1` 直接寫在 PoemBlock.astro 的 line-height）」，

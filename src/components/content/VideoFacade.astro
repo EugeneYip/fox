@@ -141,7 +141,13 @@ const ids = { play: `facade-${videoId}-play`, title: `facade-${videoId}-title` }
 
   .facade__glyph {
     font-family: var(--f-serif);
-    font-size: clamp(3rem, 12vw, 6rem);
+    /*
+     * 上限從 6rem 收到 2.5rem：2026-09-11 量到 96px 的它是**詩頁上最大的字**，
+     * 而它只是一個空影片框裡的浮水印。上限訂在 2.5rem 是因為詩本身是
+     * `--t-xl`（桌機 40px ＝ 2.5rem）—— 裝飾**不高於**內容，不是差不多就好。
+     * （這個框整塊還要重做，見 docs/VISUAL.md 的 F。）
+     */
+    font-size: clamp(2rem, 6vw, 2.5rem);
     color: var(--c-flame);
     opacity: 0.28;
     user-select: none;
