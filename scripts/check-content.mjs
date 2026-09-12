@@ -266,9 +266,28 @@ for await (const f of walk(CONTENT)) {
       });
     }
   }
-  // 原文的第一行也一定會出現在頁面上
-  const firstLine = md.match(/^\s*original:\s*\|\s*\n\s+(.+)$/m)?.[1]?.trim();
-  if (firstLine) needles.push(firstLine);
+  /*
+   * 原文的每一行都會出現在詩頁上。
+   *
+   * 原本只取第一行，理由是「第一行一定看得到」—— 夠用，但很脆。
+   * 2026-09-11 起〈子衿〉的草稿時撞到：它的第一句是「青青子衿」，
+   * 而那正是首頁的題辭，於是唯一那根針被下面「別人也有」的排除濾掉，
+   * 整篇變成掃不了的。同一首詩的「青青子佩」「挑兮達兮」「在城闕兮」
+   * 都是它獨有的 —— 針多幾根，這種撞題就不會讓整篇失去檢查。
+   *
+   * 縮排比 `original:` 深的才算，回到同一層就是區塊結束 ——
+   * 不寫死幾個空格，因為 `original:` 自己的縮排跟著 `poem:` 走。
+   */
+  const originalAt = md.match(/^([ \t]*)original:[ \t]*\|[-+]?[ \t]*$/m);
+  if (originalAt?.index !== undefined) {
+    const indent = originalAt[1].length;
+    const rest = md.slice(originalAt.index + originalAt[0].length).split('\n').slice(1);
+    for (const raw of rest) {
+      if (!raw.trim()) continue; // 分章的空行
+      if (raw.length - raw.trimStart().length <= indent) break;
+      needles.push(raw.trim());
+    }
+  }
 
   const parts = relative(CONTENT, f).split('/');
   entries.push({
@@ -449,6 +468,36 @@ const pagePath = (/** @type {typeof entries[number]} */ e) => {
   return join(localePrefix, prefix, e.slug.toLowerCase(), 'index.html');
 };
 
+/*
+ * ── 「別人也有」不只是別篇內容，站台自己的原始碼也算 ──────
+ *
+ * 第 3 輪（第十六圈）把 draft-leaked 改成「別人也有的字串就不拿來掃」，
+ * 但那時的「別人」只有**其他內容檔**。2026-09-11 起了一篇〈子衿〉的草稿，
+ * 它的第一句是「青青子衿」—— 而那正是首頁題辭（`site.epigraph.text`，
+ * 寫在 `src/config/site.ts`）。於是這條規則報「草稿洩漏到 index.html、
+ * en/index.html」，而產出裡那句話是首頁自己的引文，跟草稿無關。
+ * 同一種冤枉，換了一個來源。
+ *
+ * 所以「別人」要涵蓋**產出裡的字還可能從哪來**：內容檔以外，
+ * `src/` 底下的設定、版面、元件都算。範圍取寬是刻意的 ——
+ * 兩次撞到的都是誤報，而真正的洩漏另有 draft-page 在守（它不比對字串，
+ * 標題多短都攔得住）。寬的代價是「草稿的句子剛好跟某段註解撞到」時
+ * 會少掃一根針；窄的代價是把作者送去找一個不存在的 bug。
+ *
+ * 副檔名只收 .astro／.ts／.mjs：內容的 .md／.mdx 在 entries 裡另外算，
+ * 那邊分得出草稿（別的草稿也有的字串**不能**當成免死金牌）。
+ *
+ * `*.local.*` 要跳過 —— `src/config/identity.local.ts` 在 .gitignore 裡，
+ * 本機有、CI 沒有。讀它會讓同一份內容在兩邊得到不同的結果，
+ * 而「本機看到的跟線上跑的不一樣」是這個 repo 反覆踩過的坑。
+ */
+let siteSource = '';
+for await (const f of walk(SRC)) {
+  if (!/\.(astro|ts|mjs)$/.test(f)) continue;
+  if (/\.local\.[^.]*$/.test(f)) continue;
+  siteSource += (await readFile(f, 'utf8')) + '\n';
+}
+
 // ── 1. 草稿不能出現在產出裡 ──────────────────────────
 for (const e of entries.filter((x) => x.draft)) {
   for (const id of ['draft-page', 'draft-unscannable', 'draft-leaked']) saw(id, 1);
@@ -477,7 +526,8 @@ for (const e of entries.filter((x) => x.draft)) {
    * 而不是報一個假的洩漏。頁面層級的 draft-page 仍然守著最重要的那種洩漏。
    */
   const usable = e.needles.filter(
-    (n) => !entries.some((o) => o !== e && !o.draft && o.text.includes(n)),
+    (n) =>
+      !entries.some((o) => o !== e && !o.draft && o.text.includes(n)) && !siteSource.includes(n),
   );
   const shared = e.needles.length - usable.length;
 
@@ -523,7 +573,8 @@ for (const e of entries.filter((x) => x.draft)) {
     });
   } else if (usable.length === 0) {
     notes.push(
-      `${e.rel}：這篇草稿可以拿來掃的 ${e.needles.length} 個字串，別篇已發佈的內容也有 ——` +
+      `${e.rel}：這篇草稿可以拿來掃的 ${e.needles.length} 個字串，站上別的地方也有` +
+        '（別篇已發佈的內容，或 src/ 底下的設定與版面）——' +
         '\n    在產出裡找到它們證明不了是這一篇洩漏的，所以這次沒有用字串比對。' +
         '\n    頁面層級的 draft-page 仍然有守。',
     );
@@ -536,7 +587,7 @@ for (const e of entries.filter((x) => x.draft)) {
       id: 'draft-leaked',
       msg:
         `這是草稿（draft: true），但它的內容出現在 ${hits.length} 個產出檔案裡` +
-        (shared > 0 ? `（比對用的 ${usable.length} 個字串，另外 ${shared} 個別篇也有、已排除）` : '') +
+        (shared > 0 ? `（比對用的 ${usable.length} 個字串，另外 ${shared} 個站上別處也有、已排除）` : '') +
         '：' +
         hits.slice(0, 4).map((h) => h.path).join('、') +
         '。　改法：先確認 dist/ 是這次 build 出來的；還在的話，' +

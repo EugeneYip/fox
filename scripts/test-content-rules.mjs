@@ -1493,7 +1493,7 @@ try {
     const out = await check(dir);
     const ok =
       !out.includes('[draft-leaked]') &&
-      out.includes('別篇已發佈的內容也有') &&
+      out.includes('站上別的地方也有') &&
       out.includes('沒有發現問題');
     if (!ok) failed++;
     console.log(`  ${ok ? '✓' : 'X'} 草稿的字串別篇也有：不報洩漏、說出來、不擋`);
@@ -1520,6 +1520,98 @@ try {
     if (!ok) failed++;
     console.log(`  ${ok ? '✓' : 'X'} 草稿的字串是獨有的：洩漏照樣抓得到`);
     if (!ok) console.log(out.split('\n').filter(Boolean).slice(-6).map((l) => '        ' + l).join('\n'));
+  }
+
+  /*
+   * ── 誤報：草稿的字串是**站台設定**裡的話 ──────────────
+   *
+   * 2026-09-11 站主起〈子衿〉的草稿時踩到的：那首詩的第一句「青青子衿」
+   * 正好是首頁的題辭（`src/config/site.ts` 的 `site.epigraph.text`）。
+   * 上面那一格的排除只看**別篇內容**，看不到 src/ 底下的設定 ——
+   * 於是 draft-leaked 報「洩漏到 index.html、en/index.html」，
+   * 而產出裡那句話是首頁自己的引文，跟草稿一點關係都沒有。
+   *
+   * 同一種冤枉，換了一個來源。兩格一起放：
+   *   · 設定裡有那句話 —— 不報洩漏（這一格是上面那個 bug 的迴歸測試）
+   *   · 設定裡沒有       —— 照樣抓得到（不然「一律不比對」也會通過）
+   * 兩格只差 site.ts 裡有沒有那一句，其餘完全相同。
+   */
+  {
+    /** 一份只有題辭的假 site.ts。`epigraph` 有沒有那句話是這兩格唯一的差別 */
+    const fakeSite = (/** @type {string} */ epigraph) =>
+      `export const site = {\n  name: { 'zh-TW': '狐說八道', en: 'Fox Says' },\n` +
+      `  epigraph: { text: '${epigraph}' },\n};\n`;
+
+    /**
+     * @param {string} name
+     * @param {string} epigraph 假 site.ts 裡那句題辭
+     */
+    const withSite = async (name, epigraph) => {
+      const dir = await build(name, {
+        content: {
+          'poems/wu-yi-xiang.md': poem(),
+          /* 詩題「子衿」只有兩個字，濾得掉 —— 真正的針是原文那一句 */
+          'poems/zi-jin.md': poem({ title: '子衿', first: '青青子衿', draft: true }),
+        },
+        dist: {
+          'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
+          /* 首頁印的是題辭，不是草稿 */
+          'index.html': page('青青子衿，悠悠我心 —— 《詩經・鄭風・子衿》'),
+        },
+        extra: { 'src/config/site.ts': fakeSite(epigraph) },
+      });
+      const out = await check(dir, [`--src=${join(dir, 'src')}`]);
+      await rm(dir, { recursive: true, force: true });
+      return out;
+    };
+
+    const quiet = await withSite('draft-needle-in-config', '青青子衿，悠悠我心');
+    /*
+     * 不只要「沒報洩漏」—— 還要證明它**真的走到**那條排除路上。
+     * 只看沒報的話，整支腳本提早爆掉也會通過。
+     */
+    const okQuiet = !quiet.includes('[draft-leaked]') && quiet.includes('站上別的地方也有');
+    if (!okQuiet) failed++;
+    console.log(`  ${okQuiet ? '✓' : 'X'} 草稿的句子是站台設定裡的題辭：不報洩漏，但說出來`);
+    if (!okQuiet) console.log(quiet.split('\n').filter(Boolean).slice(-6).map((l) => '        ' + l).join('\n'));
+
+    const loud = await withSite('draft-needle-not-in-config', '床前明月光');
+    const okLoud = loud.includes('[draft-leaked]');
+    if (!okLoud) failed++;
+    console.log(`  ${okLoud ? '✓' : 'X'} 同一份產出，設定裡沒那句話：洩漏照樣抓得到`);
+    if (!okLoud) console.log(loud.split('\n').filter(Boolean).slice(-6).map((l) => '        ' + l).join('\n'));
+  
+    /*
+     * ── 第三格：第一句被排除掉之後，還剩不剩下針 ──────────
+     *
+     * 針原本只取原文的**第一行**。〈子衿〉的第一行就是題辭，
+     * 被上面那條排除濾掉之後，整篇會變成「沒有字串可以掃」——
+     * 真的洩漏了也不會有人說話（只剩 draft-page 在守）。
+     *
+     * 所以原文的每一行都當針。這一格就是那個情境的縮影：
+     * 第一句在設定裡（排除），第二句是它獨有的，而產出裡有第二句。
+     */
+    const deeper = await build('draft-needle-second-line', {
+      content: {
+        'poems/wu-yi-xiang.md': poem(),
+        'poems/zi-jin.md':
+          '---\ntitle: 子衿\nlang: zh-TW\ndraft: true\npoem:\n  title: 子衿\n' +
+          '  author: 佚名\n  original: |\n    青青子衿\n    青青子佩\n---\n還沒寫完。\n',
+      },
+      dist: {
+        'poems/wu-yi-xiang/index.html': page('烏衣巷 — 朱雀橋邊野草花'),
+        'index.html': page('青青子衿，悠悠我心 —— 《詩經・鄭風・子衿》'),
+        /* 洩漏的是第二句，不是題辭那一句 */
+        'poems/zi-jin/index.html': page('子衿 — 青青子佩'),
+      },
+      extra: { 'src/config/site.ts': fakeSite('青青子衿，悠悠我心') },
+    });
+    const out3 = await check(deeper, [`--src=${join(deeper, 'src')}`]);
+    await rm(deeper, { recursive: true, force: true });
+    const okDeeper = out3.includes('[draft-leaked]');
+    if (!okDeeper) failed++;
+    console.log(`  ${okDeeper ? '✓' : 'X'} 第一句被排除，第二句仍然抓得到洩漏`);
+    if (!okDeeper) console.log(out3.split('\n').filter(Boolean).slice(-6).map((l) => '        ' + l).join('\n'));
   }
 
   /*
