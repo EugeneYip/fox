@@ -10,7 +10,7 @@
  * 使用者也可以手動切換，選擇會被記住。
  */
 import { useTranslations } from '@i18n/utils';
-import { poemMarks, wrapMarks, annotationId } from '@lib/content';
+import { poemMarks, wrapMarks, annotationId, type MarkedPart } from '@lib/content';
 import type { Locale } from '@config/site';
 
 interface Annotation { term: string; gloss: string }
@@ -26,8 +26,20 @@ interface Props {
   };
   plain?: string;
   annotations?: Annotation[];
-  /** 只拿來在詩上圈點；「讀音」那一區是頁面自己畫的 */
-  readings?: readonly { char: string }[];
+  /**
+   * 圈點要用，夾注卡也要用。
+   *
+   * 2026-09-12 之前這裡只宣告 `char` —— 那時它真的只拿來圈點，
+   * 底下那句註解寫著「『讀音』那一區是頁面自己畫的」。
+   * 夾注卡要把注音印在字旁邊，所以整條都要。
+   * （頁尾那一區仍然是頁面自己畫的，那句話那一半還算數。）
+   */
+  readings?: readonly {
+    char: string;
+    zhuyin: string;
+    pinyin: string;
+    homophone?: string;
+  }[];
   vertical?: boolean;
   locale: Locale;
   /**
@@ -99,6 +111,55 @@ const titleParts = wrapMarks(poem.title, marks, usedMarks);
 /* 先把每一句包好，才數得出「有幾行帶圈點」—— 那個數字要餵給底下的字級算式 */
 const wrappedStanzas = stanzas.map((lines) => lines.map((line) => wrapMarks(line, marks, usedMarks)));
 const markedLines = wrappedStanzas.flat().filter((parts) => parts.some((x) => x.href)).length;
+
+/*
+ * ── 夾注：注就出現在字的旁邊 ────────────────────────
+ *
+ * 在這之前，圈點是一條指向頁尾清單的連結。2026-09-12 量了實際的距離
+ * （〈出塞〉，真 WebKit）：
+ *
+ *   圈點      指向    距離        注在畫面內
+ *   不教      注      623px       否
+ *   龍城飛將  注      464px       是
+ *   還        讀音    1,592px     **永遠不在**（390px 寬時 2,414px）
+ *
+ * 讀音最糟：為了看一個字怎麼唸，要跑到整頁最底下再回來。
+ *
+ * 所以每個圈點多一張卡片，用 CSS 錨點定位讓它跟圈點**上緣對齊**。
+ * 卡片一張一個圈點（不是一條注一張）—— 「舉頭 / 低頭」那種一條注圈兩處的，
+ * 兩處各自有卡，不然兩個圈點搶同一個 `anchor-name` 會只剩一個位置對。
+ *
+ * 頁尾那兩份清單原封不動：卡片是捷徑，不是取代。
+ */
+type Jia = { id: string; term: string; body: string; kind: 'zhu' | 'yin' };
+const jiaOf = (href: string): Omit<Jia, 'id'> | undefined => {
+  const m = /^#(zhu|yin)-(\d+)$/.exec(href);
+  if (!m) return undefined;
+  const i = Number(m[2]);
+  if (m[1] === 'zhu') {
+    const a = annotations[i];
+    return a && { term: a.term, body: a.gloss, kind: 'zhu' };
+  }
+  const r = readings[i];
+  if (!r) return undefined;
+  /* 同音字是選填的，沒有就不要寫出「同音：」三個字 */
+  const parts = [r.zhuyin, r.pinyin, r.homophone && `同「${r.homophone}」`].filter(Boolean);
+  return { term: r.char, body: parts.join('　'), kind: 'yin' };
+};
+/* 依算繪順序編號：先詩題，再一句一句 —— 跟 usedMarks 的順序一致 */
+let jiaSeq = 0;
+const jias: Jia[] = [];
+const withJia = (parts: MarkedPart[]) =>
+  parts.map((part) => {
+    if (!part.href) return part;
+    const found = jiaOf(part.href);
+    if (!found) return part;
+    const id = `jia-${jiaSeq++}`;
+    jias.push({ id, ...found });
+    return { ...part, href: `#${id}` };
+  });
+const titlePartsJia = withJia(titleParts);
+const stanzasJia = wrappedStanzas.map((lines) => lines.map(withJia));
 const printOverflows = lineCount > PRINT_VERTICAL_MAX_LINES;
 
 /*
@@ -132,8 +193,17 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
     <h1
       class="poem__title"
       style={transitionName ? `view-transition-name:${transitionName}` : undefined}
-    >〈{titleParts.map((part) =>
-      part.href ? <a class="poem__mark" href={part.href}>{part.text}</a> : part.text,
+    >〈{titlePartsJia.map((part) =>
+      part.href ? (
+        <a
+          class="poem__mark"
+          id={`m-${part.href.slice(1)}`}
+          href={part.href}
+          style={`anchor-name:--${part.href.slice(1)}`}
+        >{part.text}</a>
+      ) : (
+        part.text
+      ),
     )}〉</h1>
     <p class="poem__byline ui">
       {poem.dynasty && <span>{poem.dynasty}</span>}
@@ -178,14 +248,23 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
   <div class="poem__frame">
     <div class="poem__scroll">
       <div class="poem__original" lang="zh-Hant" style={`--poem-longest-line:${longestLine};--poem-lines:${lineCount};--poem-stanzas:${stanzas.length};--poem-marked:${markedLines}`}>
-        {wrappedStanzas.map((lines) => (
+        {stanzasJia.map((lines) => (
           <p class="poem__stanza">
             {lines.map((parts, i) => (
               <>
                 {i > 0 && <br />}
                 <span class="poem__line">
                   {parts.map((part) =>
-                    part.href ? <a class="poem__mark" href={part.href}>{part.text}</a> : part.text,
+                    part.href ? (
+                      <a
+                        class="poem__mark"
+                        id={`m-${part.href.slice(1)}`}
+                        href={part.href}
+                        style={`anchor-name:--${part.href.slice(1)}`}
+                      >{part.text}</a>
+                    ) : (
+                      part.text
+                    ),
                   )}
                 </span>
               </>
@@ -221,6 +300,31 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
     <span aria-hidden="true" data-when="vertical">{t('poem.toHorizontal')}</span>
     <span aria-hidden="true" data-when="horizontal">{t('poem.toVertical')}</span>
   </button>
+
+    {/*
+      夾注卡 —— 放在版框**外面**、`.poem__main` 裡面。
+      在外面是必要的：塞進 `.poem__original` 會改到欄長，
+      而整首詩的字級是從欄數與欄長算出來的（見上面那條 clamp）。
+
+      用 `:target` 不用 `popover`：popover 一開就進頂層，containing block
+      變成視窗，於是沒辦法寫「貼著 .poem__main 的左外緣」這種相對位置，
+      只能靠錨點定位算水平位置 —— 而**直排底下水平那一軸的錨點定位不可信**
+      （2026-09-12 實測，理由寫在 docs/ARCHITECTURE.md）。
+      `:target` 是純 CSS、零 JS（詩詞頁只剩 89 B，本來也加不了），
+      而且關掉 CSS 只是變成詩後面的一串小字，不會壞。
+    */}
+    {jias.map((j) => (
+      <aside class="poem__jia" id={j.id} style={`position-anchor:--${j.id}`} lang="zh-Hant">
+        <b class="poem__jia-term">{j.term}</b>
+        <span class="poem__jia-body">{j.body}</span>
+        {/*
+          關閉是一條指回那個字的連結，不是按鈕 —— 按鈕要 JS，而詩詞頁
+          的內嵌 JS 只剩 89 B。指回去之後 `:target` 換人，卡片就收起來，
+          而且畫面會回到剛才在讀的那個字，不是跳到頁首。
+        */}
+        <a class="poem__jia-close" href={`#m-${j.id}`} aria-label={t('poem.jiaClose')}>×</a>
+      </aside>
+    ))}
     </div>
 
     {annotations.length > 0 && (
@@ -593,6 +697,119 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
   .poem__mark:hover,
   .poem__mark:focus-visible {
     text-emphasis-color: var(--c-flame);
+  }
+
+  /*
+   * ── 夾注卡 ────────────────────────────────────────
+   *
+   * 上緣跟著圈點走，靠的是 CSS 錨點定位：`inset-block-start: anchor(top)`。
+   * 那一軸 2026-09-12 在真 WebKit 量過，四個圈點、三種視窗寬度，
+   * 誤差都是 0–1px。
+   *
+   * **水平那一軸刻意不用錨點定位。** 同一次實測裡，直排底下
+   * `position-area` 與 `anchor(left/right)` 會在「錨的」旋轉軸上解析 ——
+   * `position-area: left` 把卡片放到圈點的**右邊**，`anchor(right)` 算出來的
+   * 位置是以版框中線鏡射過的。所以水平改用普通的 `inset-inline-end: 100%`
+   * （貼著 `.poem__main` 的左外緣），那是 containing block 的算術，不經過錨點。
+   *
+   * 這是「直排軸向」那一家的第四個成員，前三個記在 CLAUDE.md。
+   */
+  .poem__main { position: relative; }
+
+  .poem__jia {
+    position: absolute;
+    inset-block-start: anchor(top);
+    inset-inline-end: 100%;
+    margin-inline-end: var(--s-4);
+    /* 定寬 —— 注長注短不該讓卡片忽寬忽窄 */
+    inline-size: 14rem;
+    /*
+     * ── 這一行不是裝飾，少了它整頁會橫向溢出 ──────────
+     *
+     * 全站的 `body` 是 `word-break: keep-all`（中文只在標點處斷），
+     * 而 global.css 裡有一份「退回 normal」的名單（`.prose`、`.poem__plain`、
+     * `.poem__annotation dd`⋯）。卡片是新的，本來不在那份名單上。
+     *
+     * 2026-09-12 量到的：〈出塞〉「龍城飛將」那條注在卡片裡**整句不折**，
+     * `scrollWidth` 930 對 `clientWidth` 190，文字一路伸到 x=1006.3 ——
+     * 而整頁的 `scrollWidth` 剛好就是 1006（視窗 1000）。
+     * 卡片的外框明明只有 59–283，所以掃「哪個元素超出畫面」是抓不到的，
+     * 要去看**文字節點**的範圍才看得見。
+     *
+     * 頁尾那份注（`.poem__annotation dd`）早就在名單上了，這裡是同一件事。
+     */
+    word-break: normal;
+    /* 詩是直排，注不是 —— 注要能好好讀 */
+    writing-mode: horizontal-tb;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-1);
+    /* 右邊多留一點：關閉的 × 貼在右上角，不留的話第一行會壓到它底下 */
+    padding: var(--s-3) var(--s-5) var(--s-3) var(--s-4);
+    background: var(--c-bg);
+    border: var(--border-thin);
+    border-radius: var(--r-sm);
+    font-size: var(--t-sm);
+    text-align: start;
+    visibility: hidden;
+    opacity: 0;
+    /*
+     * `:target` 會讓瀏覽器捲到這張卡，而頁首是 sticky 的（66px、z-index 20）——
+     * 沒有這一行，卡片的上緣會停在視窗 48px 處，被頁首蓋掉一截。
+     * 2026-09-12 實測到的，不是預防性的。
+     */
+    scroll-margin-block-start: 5rem;
+    transition: opacity var(--dur-fast) var(--ease), visibility var(--dur-fast) var(--ease);
+  }
+
+  .poem__jia:target {
+    visibility: visible;
+    opacity: 1;
+  }
+
+  .poem__jia-term {
+    font-weight: 600;
+    /* 圈點用的是同一個狐火色，卡片上呼應一下，讀者看得出是同一件事 */
+    color: var(--c-flame-ink);
+  }
+
+  .poem__jia-body { color: var(--c-ink-soft); }
+
+  .poem__jia-close {
+    position: absolute;
+    inset-block-start: var(--s-1);
+    inset-inline-end: var(--s-2);
+    line-height: 1;
+    font-size: var(--t-sm);
+    color: var(--c-ink-faint);
+    text-decoration: none;
+  }
+
+  .poem__jia-close:hover,
+  .poem__jia-close:focus-visible { color: var(--c-flame-ink); }
+
+  /*
+   * 窄螢幕沒有左邊那條邊界可以放卡片（390px 時 `.poem__main` 只有 198px 寬、
+   * 左邊只剩 96px），所以改成貼在畫面底下的一張卡。
+   *
+   * 斷點是量出來的，不是挑的：見底下那條註解。
+   */
+  @media (max-width: 60rem) {
+    .poem__jia {
+      position: fixed;
+      inset-block-start: auto;
+      inset-block-end: var(--s-4);
+      inset-inline: var(--gutter);
+      margin-inline-end: 0;
+      inline-size: auto;
+      max-inline-size: none;
+      /* 頁首是 20，這張卡要蓋得過它 */
+      z-index: 30;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .poem__jia { transition: none; }
   }
 
   /*

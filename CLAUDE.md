@@ -106,6 +106,18 @@ ALLOWLIST 裡 —— 唯一含有個資的檔案，剛好豁免於自己的檢�
   內容要 259.6px，加了 24px 的 margin 之後 `inline-size` 變成 **235.6px**，
   於是明明還有 474px 可用，字卻折成兩欄、還溢出框外 33px。
   **內距要寫在容器上**（`padding`），不要寫在交錯的那個子元素上。
+
+  **CSS 錨點定位也一樣，而且只壞一半。** 2026-09-12 做夾注卡時實測
+  （真 WebKit、〈出塞〉四個圈點、三種視窗寬度）：
+
+  - `inset-block-start: anchor(top)` —— **準的**，誤差 0–1px，每一格都對。
+  - `position-area` 與 `anchor(left)`／`anchor(right)` —— **不能信**。
+    `position-area: left` 會把卡片放到圈點的**右邊**（1280px 時圈點在 458，
+    卡片跑到 543）；`anchor(right)` 算出來的位置是以版框中線**鏡射**過的。
+    那一軸是在**錨的**旋轉座標裡解析的，屬性名字上的 left／right 不算數。
+
+  所以直排裡要貼著某個字，**垂直那一軸用錨點定位，水平那一軸用普通的
+  containing block 算術**（`.poem__jia` 就是 `inset-inline-end: 100%`）。
 - **YouTube 的 RSS 會間歇性掛掉，但沒有停用。**
   2026-09-02 上午實測 `youtube.com/feeds/videos.xml` 對所有頻道都回 404
   （連 Google 自家頻道都是），同日中午再測就恢復 200。

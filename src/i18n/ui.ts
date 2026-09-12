@@ -113,6 +113,7 @@ export const ui = {
   'poem.toHorizontal': { 'zh-TW': '橫讀', en: 'Read across' },
   'poem.listen': { 'zh-TW': '聽朗讀', en: 'Listen' },
   'poem.readings': { 'zh-TW': '讀音', en: 'How to read it' },
+  'poem.jiaClose': { 'zh-TW': '關上這條注', en: 'Close this note' },
   /*
    * 相關的詩（frontmatter 的 related，例如同一組唱和）。
    *
