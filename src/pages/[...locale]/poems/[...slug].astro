@@ -44,9 +44,18 @@ const related = (
  * 三個地方各寫一份的話，多支援一種網址形式就會只改到一個。
  */
 const videoId = youtubeId(entry.data.videoUrl);
-const description =
-  entry.data.description ??
-  `${entry.data.poem.author}〈${entry.data.poem.title}〉—— ${entry.data.plain?.slice(0, 60) ?? ''}`;
+/*
+ * 沒有寫 description 時的退路：「作者〈詩題〉—— 白話的開頭」。
+ *
+ * **白話也空著的時候不能接那個破折號。** 2026-09-11 讓〈子衿〉先上線時
+ * 踩到：它兩格都還沒填，於是 `<meta name="description">`（連同分享卡）
+ * 變成「佚名〈子衿〉—— 」，尾巴掛著一個沒有下文的破折號。
+ * 在這之前站上每一首都有白話，所以這條路一次都沒有人走過 ——
+ * 一篇「只有原文」的詩是新的情況。
+ */
+const poemLabel = `${entry.data.poem.author}〈${entry.data.poem.title}〉`;
+const plainHead = entry.data.plain?.slice(0, 60);
+const description = entry.data.description ?? (plainHead ? `${poemLabel}—— ${plainHead}` : poemLabel);
 ---
 
 <Base
