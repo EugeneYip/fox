@@ -237,7 +237,61 @@ const isCurrent = (href: string) => {
     .site-header__inner { gap: var(--s-4); }
   }
 
-  @media (max-width: 34rem) {
+  /*
+   * ── 頁首在這裡開始收緊間距 ────────────────────────
+   *
+   * 站主 2026-09-11 回報：「在一些螢幕寬度，英文 header 會被變成 2 行，
+   * 長期佔用過多視覺空間。」他用 Safari，所以底下的數字是在真的 WebKit
+   * 裡量的（離屏 WKWebView，不是開發用的瀏覽器窗格 —— 兩者的字寬差 5.5px，
+   * 窗格量到的斷點比 Safari 早 10px，照窗格改會修不好）。
+   *
+   * 量到的是一段 **545–611px 的壞帶**，而且**只有英文**：
+   *
+   *   視窗      英文            中文
+   *   620px     1 行　66px      1 行　66px
+   *   611px     2 行　115px     1 行　65px
+   *   571px     2 行　113px     1 行　65px
+   *   545px     2 行　115px     1 行　65px
+   *   544px     以下換成下面那個兩列版面（nav 自己一列）
+   *
+   * 頁首從 66px 變成 115px（**＋74%**），而它是 sticky 的 —— 那 49px
+   * 在每一頁、每一次捲動都佔著。571px 的實況是「About」自己掉到第二行。
+   *
+   * 原因不是 bug，是算術：英文五項合計 234.4px，中文只有 137.8px ——
+   * **英文寬 96.6px**。一列要放得下的是
+   * 字標 112.2 ＋ 間距 16 ＋ 導覽 330.4 ＋ 間距 16 ＋ 工具 75.2 ＝ 549.8px，
+   * 而可用寬度是 `100vw` 扣掉兩側 `--gutter`（這一段是 5vw），也就是 0.9×視窗。
+   * 549.8 ÷ 0.9 ＝ 611 —— 量到的斷點就是這個數。
+   *
+   * 所以收緊三處間距（合計省 60px，需要的寬度降到 489.8px、
+   * 斷點降到 545px），再把下面那個兩列版面的斷點從 34rem 抬到 35rem，
+   * 讓兩種版面**接在一起、而且有餘裕**（561px 時多出 15.1px）。
+   * 只收緊間距而不抬斷點的話，545px 只剩 0.7px 餘裕 —— 那不是修好，
+   * 那是剛好卡在邊上。
+   *
+   * 代價：中文在 545–560px 這 16px 的區間會提早換成兩列版面。
+   * 那一段本來就緊鄰手機版，換的是同一個版面、只是早 16px，
+   * 不是新的壞掉。
+   */
+  @media (max-width: 40rem) {
+    .brand { gap: var(--s-2); }
+    .site-header__inner { gap: var(--s-3); }
+    /*
+     * 置中是為了**把餘裕分到兩邊**，不是為了置中好看。
+     *
+     * `.site-nav` 是 `flex: 1`，所以它的盒子從字標一路撐到工具列，
+     * 而 ul 靠左 —— 於是剩下的空間**全部堆在最後一項與語言鈕之間**。
+     * 571px 實測：「Fox Says」與「Poems」之間只有 12px，
+     * 「About」與「EN」之間卻有 24px 以上的空隙，看起來像字標黏著導覽列。
+     * 置中之後同樣的餘裕平均分到兩側，寬度一點都沒有多用。
+     *
+     * 只在這一段置中：下面 35rem 那一段導覽列自己佔一整列，
+     * 靠左才對得上版框的邊，所以那裡會改回 flex-start。
+     */
+    .site-nav ul { column-gap: var(--s-3); justify-content: center; }
+  }
+
+  @media (max-width: 35rem) {
     .site-header__inner {
       flex-wrap: wrap;
       row-gap: var(--s-2);
@@ -300,6 +354,8 @@ const isCurrent = (href: string) => {
     .site-nav ul {
       padding-inline: var(--gutter);
       min-inline-size: 100%;
+      /* 自己佔一整列時靠左，對齊版框的左緣（上面那段置中只適用於同列的情況） */
+      justify-content: flex-start;
     }
     .site-header__tools { margin-inline-start: auto; }
   }
