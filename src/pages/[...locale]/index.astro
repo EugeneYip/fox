@@ -3,7 +3,7 @@ import Base from '@layouts/Base.astro';
 import { localePaths } from '@i18n/paths';
 import { site, DEFAULT_LOCALE, type Locale } from '@config/site';
 import { useTranslations, localizePath, pick } from '@i18n/utils';
-import { getAllWriting } from '@lib/content';
+import { getAllWriting, getEntries, entryUrl } from '@lib/content';
 import { getSyndication, getActivePlatforms } from '@lib/syndication';
 import FoxMark from '@components/fox/FoxMark.astro';
 import Foxfire from '@components/fox/Foxfire.astro';
@@ -43,6 +43,25 @@ const gloss = pick(site.epigraph.gloss, locale) ?? '';
  */
 const epigraphLines = (text: string) =>
   text.split(/(?<=，)/).map((line) => line.trim()).filter(Boolean);
+
+/*
+ * 題辭的出處連到站上那一首（`site.epigraph.poem`）。
+ *
+ * 起〈子衿〉那一篇的理由就是這個：站上天天有人看到那兩句，
+ * 卻沒有一頁在講它。現在有了，出處就該是一扇門。
+ *
+ * **用查的，不是寫死一條網址。** `getEntries` 已經濾掉草稿，所以
+ * 那一篇被改回 `draft: true` 或改了檔名的時候，這裡會查不到，
+ * 出處就退回純文字 —— 不會在首頁留一個 404。
+ *
+ * 不加語言前綴是對的：那一篇是 `lang: zh-TW`，只存在於 `/poems/zi-jin`。
+ * 英文首頁也連同一個網址（出處那一行本來就永遠是中文），
+ * 所以 `<a>` 上標了 `hreflang` 說明「按下去會換成中文」。
+ */
+const epigraphPoem = site.epigraph.poem
+  ? (await getEntries('poems')).find((e) => e.id === site.epigraph.poem)
+  : undefined;
+const epigraphHref = epigraphPoem ? entryUrl('poems', epigraphPoem) : undefined;
 ---
 
 <Base locale={locale} bare>
@@ -107,7 +126,13 @@ const epigraphLines = (text: string) =>
           </details>
         </blockquote>
         <figcaption>
-          <span class="hero__source" lang="zh-Hant">{site.epigraph.source}</span>
+          {epigraphHref ? (
+            <a class="hero__source" href={epigraphHref} lang="zh-Hant" hreflang="zh-Hant-TW">
+              {site.epigraph.source}
+            </a>
+          ) : (
+            <span class="hero__source" lang="zh-Hant">{site.epigraph.source}</span>
+          )}
           {locale !== 'zh-TW' && <span class="hero__gloss faint">{gloss}</span>}
         </figcaption>
       </figure>
