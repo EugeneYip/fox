@@ -330,6 +330,20 @@ export const ui = {
 
   // ── 標籤與彙整 ─────────────────────────────────────
   'tags.title': { 'zh-TW': '標籤', en: 'Tags' },
+  /*
+   * 索引頁本來只有 /tags 與 /archive 兩頁沒有一句話說明這裡是什麼
+   * （2026-09-12 數的：詩詞、文章、短札、搜尋、各處都有）。
+   * 標籤那一句要講**畫面上看得到的事實** —— 那份雲是按篇數加權的，
+   * 字大就是用得多，但沒有人告訴讀者這件事。
+   */
+  'tags.lead': {
+    'zh-TW': '字大的用得多。點一個，看看底下有哪幾篇。',
+    en: 'The bigger the tag, the more it is used. Pick one and see what is under it.',
+  },
+  'archive.lead': {
+    'zh-TW': '站上所有的東西，照年份排一遍。',
+    en: 'Everything on the site, laid out by year.',
+  },
   'tags.taggedWith': { 'zh-TW': '標記為「{tag}」', en: 'Tagged “{tag}”' },
   'archive.title': { 'zh-TW': '彙整', en: 'Archive' },
 

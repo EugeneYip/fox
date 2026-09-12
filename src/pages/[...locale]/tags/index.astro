@@ -51,7 +51,7 @@ const scale = (n: number) => 0.9 + (Math.log(n) / spread) * 0.85;
   description={tags.length > 0 ? t('meta.tags', { n: tags.length }) : t('meta.empty')}
   class="wrap--content"
 >
-  <PageHeader title={t('tags.title')} count={t('tags.count', { n: tags.length })} />
+  <PageHeader title={t('tags.title')} lead={t('tags.lead')} count={t('tags.count', { n: tags.length })} />
 
   {tags.length > 0 ? (
     <ul class="cloud ui">

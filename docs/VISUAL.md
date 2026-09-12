@@ -545,7 +545,7 @@ inline 軸上的 margin 是從**它自己的內容尺寸**裡扣，不是從可�
 | `interpolate-size`／`calc-size()` | ❌ **兩個都不支援** → 做不出 `height: auto` 的手風琴展開 |
 | `@starting-style`／`transition-behavior` | ✅ → 淡入、位移的展開做得出來 |
 | 捲動驅動動畫 | ✅ `animation-timeline` 保留為 `scroll(root)` |
-| `text-wrap: pretty`／`balance` | ✅ |
+| `text-wrap: pretty`／`balance` | ✅ 支援，但**這個站用不到**。2026-09-12 做 A／B：四頁、34 個段落與標題，只有 **1 個**有變化，而且是把末行變**短**（304 → 142px），看不出是改善。跟 `text-autospace` 同一類 —— 支援不等於需要。**沒有採用** |
 | `:has()` | ✅（第一次測成 false，那是**測法錯** —— `CSS.supports('selector(…)')` 只吃一個參數。站上本來就在用） |
 
 **量之前以為要做、量完發現早就做了的兩件**：`/tags` 已經是按篇數加權的

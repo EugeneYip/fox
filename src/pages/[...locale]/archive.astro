@@ -31,7 +31,7 @@ const otherTotal =
   description={total > 0 ? t('meta.archive', { n: total }) : t('meta.empty')}
   class="wrap--content"
 >
-  <PageHeader title={t('archive.title')} count={t('list.count', { n: total })} />
+  <PageHeader title={t('archive.title')} lead={t('archive.lead')} count={t('list.count', { n: total })} />
 
   {/*
     每年用 div 而不是 section：一年一個地標太吵，
