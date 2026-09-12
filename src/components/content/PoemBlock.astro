@@ -131,7 +131,7 @@ const markedLines = wrappedStanzas.flat().filter((parts) => parts.some((x) => x.
  *
  * 頁尾那兩份清單原封不動：卡片是捷徑，不是取代。
  */
-type Jia = { id: string; term: string; body: string; kind: 'zhu' | 'yin' };
+type Jia = { id: string; term: string; body: string; kind: 'zhu' | 'yin'; zhuyin?: string };
 const jiaOf = (href: string): Omit<Jia, 'id'> | undefined => {
   const m = /^#(zhu|yin)-(\d+)$/.exec(href);
   if (!m) return undefined;
@@ -144,12 +144,12 @@ const jiaOf = (href: string): Omit<Jia, 'id'> | undefined => {
   if (!r) return undefined;
   /* 同音字是選填的，沒有就不要寫出「同音：」三個字 */
   const parts = [r.zhuyin, r.pinyin, r.homophone && `同「${r.homophone}」`].filter(Boolean);
-  return { term: r.char, body: parts.join('　'), kind: 'yin' };
+  return { term: r.char, body: parts.join('　'), kind: 'yin', zhuyin: r.zhuyin };
 };
 /* 依算繪順序編號：先詩題，再一句一句 —— 跟 usedMarks 的順序一致 */
 let jiaSeq = 0;
 const jias: Jia[] = [];
-const withJia = (parts: MarkedPart[]) =>
+const withJia = (parts: MarkedPart[]): MarkedPart[] =>
   parts.map((part) => {
     if (!part.href) return part;
     const found = jiaOf(part.href);
@@ -158,8 +158,71 @@ const withJia = (parts: MarkedPart[]) =>
     jias.push({ id, ...found });
     return { ...part, href: `#${id}` };
   });
-const titlePartsJia = withJia(titleParts);
-const stanzasJia = wrappedStanzas.map((lines) => lines.map(withJia));
+
+/*
+ * ── 注音長回字上 ──────────────────────────────────
+ *
+ * 讀音本來只在整頁最底下那一區。2026-09-12 在真 WebKit 量過直排的 ruby：
+ * 基字 40px 時 `rt` 落在字的**右側**、上緣齊平，下一個字只被推 0.5px ——
+ * 也就是它不佔行內空間，只把那一欄變寬（40px 字時 56px → 78px）。
+ * 那正是傳統直排該有的樣子，所以注音直接印在字旁邊，不必等人去點。
+ *
+ * ## 注音**不走圈點那一套**
+ *
+ * 第一版是「讀音的圈點順便包成 ruby」，結果全站只長出 4 個注音 ——
+ * 因為 `wrapMarks` 是**注優先、讀音補位**：〈出塞〉的「教」被注「不教」蓋住、
+ * 「將」被「龍城飛將」蓋住，兩個讀音都沒有圈點，於是也沒有注音。
+ * 16 條讀音只有 4 條看得到，等於這個功能沒有做到。
+ *
+ * 圈點要避開重疊是因為**連結不能相套**；注音只是排版，套在注的連結裡面
+ * 完全沒問題。所以注音自己一套：照文件順序掃過詩題與每一句，
+ * 每個讀音在**第一次出現**的地方長出來，跟那個字有沒有圈點無關。
+ * （「只算第一次」是沿用站主對圈點定的規矩。）
+ *
+ * ## 字級的算式**不必**為注音加一項（量過才知道）
+ *
+ * 本來照 `--poem-marked` 的樣子加了 `--poem-ruby * 0.55`，理由是
+ * 「ruby 會把欄變寬」。**那個理由是錯的。** 把係數歸零重量，
+ * 五首詩 × 四種視窗寬度，橫向溢出與版框內捲動**全部是 0**，
+ * 而字級反而變大（〈月夜〉1280px：33.5 → 36.4px，
+ * 〈琵琶行〉：24.9 → 26.6px）。
+ *
+ * 原因是兩件事抵銷掉了：直排的 ruby 主要是把那一欄**變長**（欄長 319 → 360），
+ * 不是變寬；而帶注音的字同時**拿掉了著重號**（見底下 `.poem__original ruby`），
+ * 圈點原本就掛在欄的側邊，拿掉之後欄反而窄了 14px。
+ *
+ * 所以那一項只會讓字白白變小。留著一個量不出作用的係數，
+ * 下一個人會以為它在守什麼。已經拿掉。
+ */
+type Frag = { text: string; zhuyin?: string };
+/** 同一個字在 readings 裡列兩次的話，以第一條為準 */
+const readingOf = new Map<string, { i: number; zhuyin: string }>();
+readings.forEach((r, i) => {
+  if (!readingOf.has(r.char)) readingOf.set(r.char, { i, zhuyin: r.zhuyin });
+});
+const usedReadings = new Set<number>();
+const rubyify = (text: string): Frag[] => {
+  const out: Frag[] = [];
+  let buf = '';
+  for (const ch of text) {
+    const r = readingOf.get(ch);
+    if (!r || usedReadings.has(r.i)) {
+      buf += ch;
+      continue;
+    }
+    usedReadings.add(r.i);
+    if (buf) out.push({ text: buf });
+    buf = '';
+    out.push({ text: ch, zhuyin: r.zhuyin });
+  }
+  if (buf) out.push({ text: buf });
+  return out;
+};
+/** 圈點切好之後，再把每一段裡的讀音字包起來。順序＝詩題、第一句、第二句⋯ */
+const withRuby = (parts: MarkedPart[]) => parts.map((p) => ({ ...p, frags: rubyify(p.text) }));
+const titlePartsJia = withRuby(withJia(titleParts));
+const stanzasJia = wrappedStanzas.map((lines) => lines.map((parts) => withRuby(withJia(parts))));
+
 const printOverflows = lineCount > PRINT_VERTICAL_MAX_LINES;
 
 /*
@@ -200,9 +263,9 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
           id={`m-${part.href.slice(1)}`}
           href={part.href}
           style={`anchor-name:--${part.href.slice(1)}`}
-        >{part.text}</a>
+        >{part.frags.map((f) => (f.zhuyin ? <ruby>{f.text}<rt>{f.zhuyin}</rt></ruby> : f.text))}</a>
       ) : (
-        part.text
+        part.frags.map((f) => (f.zhuyin ? <ruby>{f.text}<rt>{f.zhuyin}</rt></ruby> : f.text))
       ),
     )}〉</h1>
     <p class="poem__byline ui">
@@ -261,9 +324,13 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
                         id={`m-${part.href.slice(1)}`}
                         href={part.href}
                         style={`anchor-name:--${part.href.slice(1)}`}
-                      >{part.text}</a>
+                      >{part.frags.map((f) =>
+                        f.zhuyin ? <ruby>{f.text}<rt>{f.zhuyin}</rt></ruby> : f.text,
+                      )}</a>
                     ) : (
-                      part.text
+                      part.frags.map((f) =>
+                        f.zhuyin ? <ruby>{f.text}<rt>{f.zhuyin}</rt></ruby> : f.text,
+                      )
                     ),
                   )}
                 </span>
@@ -697,6 +764,38 @@ const longestLine = Math.max(...stanzas.flat().map((line) => [...line].length));
   .poem__mark:hover,
   .poem__mark:focus-visible {
     text-emphasis-color: var(--c-flame);
+  }
+
+  /*
+   * ── 注音 ──────────────────────────────────────────
+   *
+   * 直排底下 `rt` 會落在基字的右側、上緣齊平，而且**不佔行內空間**
+   * （2026-09-12 實測：基字 40px 時下一個字只被推 0.5px）。
+   *
+   * 在一個字上量，它讓那一欄從 56px 變成 78px；但**整首詩量下來不是那樣**——
+   * 版框反而窄了 14px、長了 41px。字級的算式為什麼沒有為它加一項，
+   * 理由與數字寫在上面 frontmatter 那段註解裡。
+   *
+   * `0.4em` 是注音對基字的比例。再小在 390px 上會糊，再大欄會變太寬。
+   */
+  .poem__original rt {
+    font-size: 0.4em;
+    color: var(--c-ink-soft);
+    /* 注音是一串，不要被拆開 */
+    white-space: nowrap;
+  }
+
+  /*
+   * 帶注音的那個**字**上面不要再加圈點。
+   *
+   * 直排底下 `text-emphasis` 與 ruby 都掛在基字的右側，兩個疊在一起
+   * 會擠成一團，而且意思重複 —— 注音本身就是「這個字有話要說」的記號。
+   *
+   * 關的是 `ruby` 這一個字，不是整段圈點：「不教」的「教」有注音，
+   * 但「不教」整段是一條注，它的圈點要留著。
+   */
+  .poem__original ruby {
+    text-emphasis: none;
   }
 
   /*

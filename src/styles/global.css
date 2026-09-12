@@ -383,6 +383,46 @@ pre code {
  * 這是「Astro 的 scoped style 不會穿進子元件」的**反面**：
  * 寫在 global.css 的元素選擇器會穿進**每一個**元件。
  */
+/*
+ * ── 展開的時候給它一個動作 ────────────────────────
+ *
+ * `::details-content` 摸得到 `<summary>` 以外那一塊。2026-09-12 在真 WebKit
+ * 驗過它**真的控制得到**：同一份內容，關 31px → 開 71px（規則把它夾在 40px），
+ * 而沒有規則的對照組是 111px。
+ *
+ * **做不到高度展開。** `interpolate-size: allow-keywords` 與 `calc-size()`
+ * 同一次實測**兩個都不支援**，所以 0 → auto 的手風琴在這個瀏覽器上沒有辦法。
+ * 能做的是淡入。那也比較像這個站 —— 紙不會彈，紙是翻開。
+ *
+ * 只動 `opacity`，不動位移：題辭那一個是直排的，位移要選軸，
+ * 而直排的軸向是這個專案踩過四次的地方。不值得為了 4px 的位移再賭一次。
+ *
+ * `content-visibility` 要帶 `allow-discrete`，不然收起來的時候內容會在
+ * 轉場開始之前就整塊消失 —— 變成開有動作、關沒有。
+ *
+ * 選擇器一樣**不能只寫 `details`**：頁首的語言切換鈕也是原生的 `<details>`，
+ * 理由見下面那一段。
+ */
+.prose details::details-content,
+.epi::details-content {
+  opacity: 0;
+  transition:
+    opacity var(--dur) var(--ease),
+    content-visibility var(--dur) allow-discrete;
+}
+
+.prose details[open]::details-content,
+.epi[open]::details-content {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prose details::details-content,
+  .epi::details-content {
+    transition: none;
+  }
+}
+
 .prose details {
   margin-block: var(--s-4);
   border-inline-start: 2px solid var(--c-rule-strong);
