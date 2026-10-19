@@ -1,13 +1,13 @@
 {
   "$schema": "./syndication.schema.json",
-  "generatedAt": "2026-10-19T04:20:18.288Z",
+  "generatedAt": "2026-10-19T18:38:47.562Z",
   "itemCount": 9,
   "sources": {
     "youtube-foxpoetry": {
       "status": "ok",
       "platform": "youtube",
       "itemCount": 9,
-      "lastSuccessAt": "2026-10-19T04:20:18.288Z",
+      "lastSuccessAt": "2026-10-19T18:38:47.561Z",
       "message": null
     }
   },
